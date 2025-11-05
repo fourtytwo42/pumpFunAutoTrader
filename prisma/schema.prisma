@@ -1,0 +1,212 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin
+  power_user
+  user
+}
+
+model User {
+  id            String    @id @default(uuid())
+  username      String    @unique
+  passwordHash  String    @map("password_hash")
+  role          UserRole  @default(user)
+  isActive      Boolean   @default(true) @map("is_active")
+  isAiAgent     Boolean   @default(false) @map("is_ai_agent")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  createdById   String?   @map("created_by_id")
+  createdBy     User?     @relation("UserCreatedBy", fields: [createdById], references: [id])
+  createdUsers  User[]    @relation("UserCreatedBy")
+
+  // Relations
+  apiKeys       UserApiKey[]
+  portfolios    UserPortfolio[]
+  trades        UserTrade[]
+  session       UserSession?
+  aiLogs        AiTraderLog[]
+  aiConfig      AiTraderConfig?
+  createdAiConfigs AiTraderConfig[] @relation("AiConfigCreatedBy")
+
+  @@index([role, isActive])
+  @@index([createdAt])
+  @@map("users")
+}
+
+model UserApiKey {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apiKeyHash  String    @unique @map("api_key_hash")
+  name        String
+  lastUsedAt  DateTime? @map("last_used_at")
+  expiresAt   DateTime? @map("expires_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([apiKeyHash])
+  @@index([userId])
+  @@map("user_api_keys")
+}
+
+model Token {
+  id              String    @id @default(uuid())
+  mintAddress     String    @unique @map("mint_address")
+  symbol          String
+  name            String
+  imageUri        String?   @map("image_uri")
+  twitter         String?
+  telegram        String?
+  createdAt       BigInt    @map("created_timestamp")
+  creatorAddress  String    @map("creator_address")
+  totalSupply     Decimal   @map("total_supply") @db.Decimal(30, 9)
+
+  // Relations
+  trades          Trade[]
+  candles         Candle[]
+  price           TokenPrice?
+  portfolios      UserPortfolio[]
+  userTrades      UserTrade[]
+
+  @@index([mintAddress])
+  @@index([symbol])
+  @@index([createdAt])
+  @@map("tokens")
+}
+
+model TokenPrice {
+  tokenId           String    @id
+  token             Token     @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  priceSol          Decimal   @map("price_sol") @db.Decimal(30, 18)
+  priceUsd          Decimal   @map("price_usd") @db.Decimal(20, 2)
+  lastTradeTimestamp BigInt   @map("last_trade_timestamp")
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@index([updatedAt])
+  @@map("token_prices")
+}
+
+model Trade {
+  id          BigInt   @id @default(autoincrement())
+  tokenId     String   @map("token_id")
+  token       Token    @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  txSignature String   @unique @map("tx_signature")
+  userAddress String   @map("user_address")
+  type        Int      // 1=buy, 2=sell
+  amountSol   Decimal  @map("amount_sol") @db.Decimal(20, 9)
+  amountUsd   Decimal  @map("amount_usd") @db.Decimal(20, 2)
+  baseAmount  Decimal  @map("base_amount") @db.Decimal(30, 9)
+  priceSol    Decimal  @map("price_sol") @db.Decimal(30, 18)
+  timestamp   BigInt
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([tokenId, timestamp(sort: Desc)])
+  @@index([timestamp(sort: Desc)])
+  @@index([userAddress, timestamp(sort: Desc)])
+  @@map("trades")
+}
+
+model Candle {
+  id        BigInt   @id @default(autoincrement())
+  tokenId   String   @map("token_id")
+  token     Token    @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  interval  Int      // minutes
+  timestamp BigInt
+  open      Decimal  @db.Decimal(30, 18)
+  high      Decimal  @db.Decimal(30, 18)
+  low       Decimal  @db.Decimal(30, 18)
+  close     Decimal  @db.Decimal(30, 18)
+  volume    Decimal  @db.Decimal(30, 9)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([tokenId, interval, timestamp])
+  @@index([tokenId, interval, timestamp(sort: Desc)])
+  @@map("candles")
+}
+
+model UserPortfolio {
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenId     String   @map("token_id")
+  token       Token    @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  amount      Decimal  @db.Decimal(30, 9)
+  avgBuyPrice Decimal  @map("avg_buy_price") @db.Decimal(30, 18)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@id([userId, tokenId])
+  @@index([userId])
+  @@map("user_portfolios")
+}
+
+model UserTrade {
+  id                BigInt   @id @default(autoincrement())
+  userId            String   @map("user_id")
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenId           String   @map("token_id")
+  token             Token    @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  type              Int      // 1=buy, 2=sell
+  amountSol         Decimal  @map("amount_sol") @db.Decimal(20, 9)
+  amountTokens      Decimal  @map("amount_tokens") @db.Decimal(30, 9)
+  priceSol          Decimal  @map("price_sol") @db.Decimal(30, 18)
+  simulatedTimestamp BigInt  @map("simulated_timestamp")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([userId, simulatedTimestamp(sort: Desc)])
+  @@index([tokenId, simulatedTimestamp(sort: Desc)])
+  @@map("user_trades")
+}
+
+model UserSession {
+  userId            String   @id @map("user_id")
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startTimestamp    BigInt   @map("start_timestamp")
+  currentTimestamp  BigInt   @map("current_timestamp")
+  playbackSpeed     Decimal  @map("playback_speed") @db.Decimal(4, 2)
+  solBalanceStart   Decimal  @map("sol_balance_start") @db.Decimal(20, 9)
+  isActive          Boolean  @default(true) @map("is_active")
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([isActive, currentTimestamp])
+  @@map("user_sessions")
+}
+
+model AiTraderLog {
+  id        BigInt   @id @default(autoincrement())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logType   Int      @map("log_type") // 1=thought, 2=trade, 3=error, 4=decision
+  message   String   @db.Text
+  metadata  Json?
+  timestamp BigInt
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, timestamp(sort: Desc)])
+  @@index([logType, timestamp(sort: Desc)])
+  @@map("ai_trader_logs")
+}
+
+model AiTraderConfig {
+  userId          String   @id @map("user_id")
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  configName      String   @map("config_name")
+  strategyType    String   @map("strategy_type")
+  configJson      Json     @map("config_json")
+  isRunning       Boolean  @default(false) @map("is_running")
+  startedAt       DateTime? @map("started_at")
+  lastActivityAt  DateTime? @map("last_activity_at")
+  createdById     String   @map("created_by_id")
+  createdBy       User     @relation("AiConfigCreatedBy", fields: [createdById], references: [id])
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([isRunning, lastActivityAt])
+  @@map("ai_trader_configs")
+}
+
