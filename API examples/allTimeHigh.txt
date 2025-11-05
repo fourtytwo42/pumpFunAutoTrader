@@ -1,0 +1,98 @@
+Request URL
+https://swap-api.pump.fun/v1/pools/2YE4FgqCFkAKokaE3ENGFrS7CGkjB1xBRXCn2rUgj4Au/ath?currency=USD
+Request Method
+GET
+Status Code
+304 Not Modified
+Remote Address
+172.64.153.234:443
+Referrer Policy
+same-origin
+access-control-allow-credentials
+true
+access-control-allow-origin
+https://pump.fun
+cf-cache-status
+DYNAMIC
+cf-ray
+999f779838f31b66-ORD
+date
+Wed, 05 Nov 2025 21:33:02 GMT
+etag
+W/"22-VT+u7F+MOnQ6fdArzFNFww/rRvk"
+expect-ct
+max-age=86400, enforce
+referrer-policy
+same-origin
+server
+cloudflare
+set-cookie
+__cf_bm=QfkwiZB2n5SK8kaDy2Zdo8orw1G.2yiJD4jqE04yGEk-1762378382-1.0.1.1-DhwAk.UJ4qGFlwQLrZ7xdfzrUh6dbERqnWu59ImbnE.SvKNn1V_Mpp9N27JU9UX4DLl_UKbKno8FXImbh_o1j3jOgOv9FIfkOi_10hdR.jU; path=/; expires=Wed, 05-Nov-25 22:03:02 GMT; domain=.pump.fun; HttpOnly; Secure; SameSite=None
+set-cookie
+_cfuvid=lvgD3IBANjeaDxCAYZogOjPR0EIehGd9CCIpu7Css00-1762378382205-0.0.1.1-604800000; path=/; domain=.pump.fun; HttpOnly; Secure; SameSite=None
+strict-transport-security
+max-age=15552000; includeSubDomains
+vary
+Origin
+x-content-type-options
+nosniff
+x-frame-options
+SAMEORIGIN
+x-ratelimit-limit
+100
+x-ratelimit-remaining
+84
+x-ratelimit-reset
+29
+x-xss-protection
+1; mode=block
+:authority
+swap-api.pump.fun
+:method
+GET
+:path
+/v1/pools/2YE4FgqCFkAKokaE3ENGFrS7CGkjB1xBRXCn2rUgj4Au/ath?currency=USD
+:scheme
+https
+accept
+*/*
+accept-encoding
+gzip, deflate, br, zstd
+accept-language
+en-US,en;q=0.9
+if-none-match
+W/"22-VT+u7F+MOnQ6fdArzFNFww/rRvk"
+origin
+https://pump.fun
+priority
+u=1, i
+sec-ch-ua
+"Google Chrome";v="141", "Not?A_Brand";v="8", "Chromium";v="141"
+sec-ch-ua-mobile
+?0
+sec-ch-ua-platform
+"Windows"
+sec-fetch-dest
+empty
+sec-fetch-mode
+cors
+sec-fetch-site
+same-site
+user-agent
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36
+Chrome DevTools (MCP) for your AI agent
+With the newly launched Chrome DevTools MCP server, AI coding assistants can now debug web pages directly in Chrome, and benefit from DevTools debugging capabilities and performance insights.
+
+Debug the network dependency tree with Gemini
+In Performance > Insights > Network dependency tree, click the corresponding AI button to discuss and debug said tree with Gemini in the 'AI assistance' panel.
+
+Export your chats with Gemini
+You can now export your current chat with Gemini or copy its response to clipboard with a click of a button.
+
+Filter IP protected network requests
+In the Network panel, you can now filter requests sent to IP Protection proxies.
+
+{athMarketCap: 398775.5065977007}
+athMarketCap
+: 
+398775.5065977007

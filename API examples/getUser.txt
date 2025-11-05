@@ -1,0 +1,99 @@
+Request URL
+https://frontend-api-v3.pump.fun/users/52K6pXGoKFvWE64vyXxVFrYhCcz2jtWPmKTaczXRAgau
+Request Method
+GET
+Status Code
+304 Not Modified
+Remote Address
+104.18.34.22:443
+Referrer Policy
+same-origin
+access-control-allow-credentials
+true
+access-control-allow-origin
+https://pump.fun
+cf-cache-status
+DYNAMIC
+cf-ray
+999f77981aa4a465-ORD
+date
+Wed, 05 Nov 2025 21:33:02 GMT
+etag
+W/"177-58Hq9+v6VylATxxtkRMERS+70P8"
+expect-ct
+max-age=86400, enforce
+referrer-policy
+same-origin
+server
+cloudflare
+set-cookie
+__cf_bm=wPcWfINMr831GZSLibeej63Z6YaAJELm.814Gt_usv0-1762378382-1.0.1.1-AWib3OOSVDq9SxDdF0ONMDjs9EtNV4XfsIgyj1Hr19ZVEfTttzisxpXUH7AS0flQKYcllwXvzgUCPu9q9TmyTijff0o6UuGVqISpXRJT5kw; path=/; expires=Wed, 05-Nov-25 22:03:02 GMT; domain=.pump.fun; HttpOnly; Secure; SameSite=None
+set-cookie
+_cfuvid=Mhc_DnFT1uUPDBR5oh9rMJpUDUlAmyi3hyVAhv8oeGA-1762378382221-0.0.1.1-604800000; path=/; domain=.pump.fun; HttpOnly; Secure; SameSite=None
+
+strict-transport-security
+max-age=15552000; includeSubDomains
+vary
+Origin
+x-content-type-options
+nosniff
+x-frame-options
+SAMEORIGIN
+x-ratelimit-limit
+30
+x-ratelimit-remaining
+29
+x-ratelimit-reset
+60
+x-xss-protection
+1; mode=block
+:authority
+frontend-api-v3.pump.fun
+:method
+GET
+:path
+/users/52K6pXGoKFvWE64vyXxVFrYhCcz2jtWPmKTaczXRAgau
+:scheme
+https
+accept
+*/*
+accept-encoding
+gzip, deflate, br, zstd
+accept-language
+en-US,en;q=0.9
+if-none-match
+W/"177-58Hq9+v6VylATxxtkRMERS+70P8"
+origin
+https://pump.fun
+priority
+u=1, i
+sec-ch-ua
+"Google Chrome";v="141", "Not?A_Brand";v="8", "Chromium";v="141"
+sec-ch-ua-mobile
+?0
+sec-ch-ua-platform
+"Windows"
+sec-fetch-dest
+empty
+sec-fetch-mode
+cors
+sec-fetch-site
+same-site
+user-agent
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36
+
+
+{
+    "address": "52K6pXGoKFvWE64vyXxVFrYhCcz2jtWPmKTaczXRAgau",
+    "likes_received": 7,
+    "unread_notifs_count": 2,
+    "mentions_received": 1,
+    "username": "botmechanic",
+    "profile_image": "https://ipfs.io/ipfs/QmePewYE6wRXnjwnCM6wXYGVJ4wQt8Yp8WzTgJkEisDZbi",
+    "last_username_update_timestamp": 1762231012236,
+    "following": 0,
+    "followers": 24,
+    "bio": "Hacker Researcher Engineer",
+    "x_username": null,
+    "x_id": null
+}

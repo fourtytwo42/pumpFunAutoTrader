@@ -1,0 +1,295 @@
+Request URL
+https://pump-fe.helius-rpc.com/?api-key=1b8db865-a5a1-4535-9aec-01061440523b
+Request Method
+POST
+Status Code
+200 OK
+Remote Address
+104.18.36.169:443
+Referrer Policy
+same-origin
+access-control-allow-headers
+*
+access-control-allow-methods
+GET, HEAD, POST, PUT, OPTIONS
+access-control-allow-origin
+*
+alt-svc
+h3=":443"; ma=86400
+cf-cache-status
+DYNAMIC
+cf-ray
+999f7797adb0f83f-ORD
+content-encoding
+gzip
+content-type
+application/json; charset=utf-8
+date
+Wed, 05 Nov 2025 21:33:02 GMT
+helius-origin-latency
+28
+helius-request-type
+rpc
+helius-router-overhead
+0
+helius-total-latency
+28
+priority
+u=1,i
+server
+cloudflare
+server-timing
+cfExtPri
+vary
+Accept-Encoding
+x-via
+ewr3
+:authority
+pump-fe.helius-rpc.com
+:method
+POST
+:path
+/?api-key=1b8db865-a5a1-4535-9aec-01061440523b
+:scheme
+https
+accept
+*/*
+accept-encoding
+gzip, deflate, br, zstd
+accept-language
+en-US,en;q=0.9
+content-length
+387
+content-type
+application/json
+origin
+https://pump.fun
+priority
+u=1, i
+sec-ch-ua
+"Google Chrome";v="141", "Not?A_Brand";v="8", "Chromium";v="141"
+sec-ch-ua-mobile
+?0
+sec-ch-ua-platform
+"Windows"
+sec-fetch-dest
+empty
+sec-fetch-mode
+cors
+sec-fetch-site
+cross-site
+solana-client
+js/1.0.0-maintenance
+user-agent
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36
+Chrome DevTools (MCP) for your AI agent
+With the newly launched Chrome DevTools MCP server, AI coding assistants can now debug web pages directly in Chrome, and benefit from DevTools debugging capabilities and performance insights.
+
+Debug the network dependency tree with Gemini
+In Performance > Insights > Network dependency tree, click the corresponding AI button to discuss and debug said tree with Gemini in the 'AI assistance' panel.
+
+Export your chats with Gemini
+You can now export your current chat with Gemini or copy its response to clipboard with a click of a button.
+
+Filter IP protected network requests
+In the Network panel, you can now filter requests sent to IP Protection proxies.
+
+
+
+api-key
+1b8db865-a5a1-4535-9aec-01061440523b
+{method: "getMultipleAccounts", jsonrpc: "2.0",…}
+id
+: 
+"4c17d541-7b95-405d-8fbf-dfdf69d0bf54"
+jsonrpc
+: 
+"2.0"
+method
+: 
+"getMultipleAccounts"
+params
+: 
+[["EaEA9vrPJ1DmWZArQQa1RXCpL863NfbKNkee6LgyudA3", "2YE4FgqCFkAKokaE3ENGFrS7CGkjB1xBRXCn2rUgj4Au",…],…]
+Chrome DevTools (MCP) for your AI agent
+With the newly launched Chrome DevTools MCP server, AI coding assistants can now debug web pages directly in Chrome, and benefit from DevTools debugging capabilities and performance insights.
+
+Debug the network dependency tree with Gemini
+In Performance > Insights > Network dependency tree, click the corresponding AI button to discuss and debug said tree with Gemini in the 'AI assistance' panel.
+
+Export your chats with Gemini
+You can now export your current chat with Gemini or copy its response to clipboard with a click of a button.
+
+Filter IP protected network requests
+In the Network panel, you can now filter requests sent to IP Protection proxies.
+
+
+{jsonrpc: "2.0", id: "4c17d541-7b95-405d-8fbf-dfdf69d0bf54",…}
+id
+: 
+"4c17d541-7b95-405d-8fbf-dfdf69d0bf54"
+jsonrpc
+: 
+"2.0"
+result
+: 
+{context: {slot: 378163223, apiVersion: "2.2.7"},…}
+context
+: 
+{slot: 378163223, apiVersion: "2.2.7"}
+apiVersion
+: 
+"2.2.7"
+slot
+: 
+378163223
+value
+: 
+[{lamports: 1934880, data: [,…], owner: "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",…},…]
+0
+: 
+{lamports: 1934880, data: [,…], owner: "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",…}
+data
+: 
+[,…]
+0
+: 
+"F7f4N2DYrGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAxqR+jQMAATvEy2yqC64RYPi4886WyytnQkK9dtBz0H7O5hA8R/aSAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+1
+: 
+"base64"
+executable
+: 
+false
+lamports
+: 
+1934880
+owner
+: 
+"6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
+rentEpoch
+: 
+18446744073709552000
+space
+: 
+150
+1
+: 
+{lamports: 2978880, data: [,…], owner: "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",…}
+data
+: 
+[,…]
+0
+: 
+"8ZptBBGxbbz+AABo0cmGVHqSnJr1WSjaHBkyQzywoKch8rHoEFEUOshBzEuU/JdVaYg0RMhMQGkVbGaMl4sVJyt3DYJPD3Bw3VAvBpuIV/6rgYT7aH9jRhjANdrEOdwa6ztVmKDwAAAAAAENIR+adHzYtqcve6/DBqUdXHKOcCmNihXDTIavcqPFQ4rzOrnurTsi2ifKBUR9HSM6ABqTxzcp8KPaZwoImKN9KnshXoy47NwMV6UTmIq55vX54CXQSW2widmE7NUnxwoJZWtZ0AMAADvEy2yqC64RYPi4886WyytnQkK9dtBz0H7O5hA8R/aSAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+1
+: 
+"base64"
+executable
+: 
+false
+lamports
+: 
+2978880
+owner
+: 
+"pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"
+rentEpoch
+: 
+18446744073709552000
+space
+: 
+300
+2
+: 
+{lamports: 2039280, data: [,…], owner: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",…}
+data
+: 
+[,…]
+0
+: 
+"S5T8l1VpiDREyExAaRVsZoyXixUnK3cNgk8PcHDdUC8W23RfErAGH8kMF+TbirmCVpulXCBOuXwR2RoYxtm5SssLw73loAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+1
+: 
+"base64"
+executable
+: 
+false
+lamports
+: 
+2039280
+owner
+: 
+"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+rentEpoch
+: 
+18446744073709552000
+space
+: 
+165
+3
+: 
+{lamports: 109254948045, data: [,…], owner: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",…}
+data
+: 
+[,…]
+0
+: 
+"BpuIV/6rgYT7aH9jRhjANdrEOdwa6ztVmKDwAAAAAAEW23RfErAGH8kMF+TbirmCVpulXCBOuXwR2RoYxtm5St0W+28ZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQEAAADwHR8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+1
+: 
+"base64"
+executable
+: 
+false
+lamports
+: 
+109254948045
+owner
+: 
+"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+rentEpoch
+: 
+18446744073709552000
+space
+: 
+165
+4
+: 
+{lamports: 1461600, data: [,…], owner: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",…}
+data
+: 
+[,…]
+0
+: 
+"AAAAAAbFwc5jjSVn0mRosF65UdGijcxuEjSCtcZ1FJdw5ivy68bIWn6NAwAGAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+1
+: 
+"base64"
+executable
+: 
+false
+lamports
+: 
+1461600
+owner
+: 
+"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+rentEpoch
+: 
+18446744073709552000
+space
+: 
+82
+Chrome DevTools (MCP) for your AI agent
+With the newly launched Chrome DevTools MCP server, AI coding assistants can now debug web pages directly in Chrome, and benefit from DevTools debugging capabilities and performance insights.
+
+Debug the network dependency tree with Gemini
+In Performance > Insights > Network dependency tree, click the corresponding AI button to discuss and debug said tree with Gemini in the 'AI assistance' panel.
+
+Export your chats with Gemini
+You can now export your current chat with Gemini or copy its response to clipboard with a click of a button.
+
+Filter IP protected network requests
+In the Network panel, you can now filter requests sent to IP Protection proxies.
+

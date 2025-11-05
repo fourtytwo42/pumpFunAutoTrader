@@ -1,0 +1,62 @@
+Request URL
+https://pump.mypinata.cloud/ipfs/QmXeG5tTjC63hjTF7a4GcUyetE6yPcsR4rBzX7wb8mmpzg
+Request Method
+GET
+Status Code
+200 OK (from disk cache)
+Remote Address
+104.18.32.94:443
+Referrer Policy
+same-origin
+access-control-allow-headers
+*
+access-control-allow-methods
+*
+access-control-allow-origin
+*
+access-control-expose-headers
+Content-Range
+age
+13814
+cache-control
+public, max-age=29030400
+cf-cache-status
+HIT
+cf-placement
+local-ORD
+cf-ray
+999f4fd93d4770c4-ORD
+content-encoding
+gzip
+content-type
+application/json
+date
+Wed, 05 Nov 2025 21:05:54 GMT
+etag
+W/"QmXeG5tTjC63hjTF7a4GcUyetE6yPcsR4rBzX7wb8mmpzg"
+expires
+Wed, 07 Oct 2026 21:05:54 GMT
+pinata-gateway-version
+1.99.0
+server
+cloudflare
+vary
+Accept-Encoding
+referer
+sec-ch-ua
+"Google Chrome";v="141", "Not?A_Brand";v="8", "Chromium";v="141"
+sec-ch-ua-mobile
+?0
+sec-ch-ua-platform
+"Windows"
+user-agent
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36
+
+{
+    "name": "BaoBaoSol",
+    "symbol": "baos",
+    "description": "BaoBaoSol is the dedicated Panda memecoin on the Solana blockchain, uniquely crafted to showcase the charm and appeal of the beloved panda. As a tribute to this fantastic animal, BaobaoSol combines the playful spirit of memecoins with the innovative features of Solana, offering a fun and engaging way for the global community to connect with the world of cryptocurrencies while celebrating the enchanting allure of pandas.",
+    "image": "https://cf-ipfs.com/ipfs/QmbtHmmdYTpFsTAUH8h8mhErdikgyPhES6hNwwaNUtkpe9",
+    "twitter": "@baobaosol",
+    "telegram": "@baobaosol"
+}

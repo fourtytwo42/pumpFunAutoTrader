@@ -1,0 +1,196 @@
+Request URL
+wss://frontend-api-v3.pump.fun/socket.io/?EIO=4&transport=websocket
+Request Method
+GET
+Status Code
+101 Switching Protocols
+cf-cache-status
+DYNAMIC
+cf-ray
+999f53dd0b52e1e7-ORD
+connection
+upgrade
+date
+Wed, 05 Nov 2025 21:08:38 GMT
+expect-ct
+max-age=86400, enforce
+referrer-policy
+same-origin
+sec-websocket-accept
+oXcQdBGy3vOJR7BLOf32dW/Uc2c=
+server
+cloudflare
+strict-transport-security
+max-age=15552000; includeSubDomains
+upgrade
+websocket
+x-content-type-options
+nosniff
+x-frame-options
+SAMEORIGIN
+x-xss-protection
+1; mode=block
+accept-encoding
+gzip, deflate, br, zstd
+accept-language
+en-US,en;q=0.9
+cache-control
+no-cache
+connection
+Upgrade
+host
+frontend-api-v3.pump.fun
+origin
+https://pump.fun
+pragma
+no-cache
+sec-websocket-extensions
+permessage-deflate; client_max_window_bits
+sec-websocket-key
+CNKSrFrET5eqPR5Hlbjmow==
+sec-websocket-version
+13
+upgrade
+websocket
+user-agent
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36
+Chrome DevTools (MCP) for your AI agent
+With the newly launched Chrome DevTools MCP server, AI coding assistants can now debug web pages directly in Chrome, and benefit from DevTools debugging capabilities and performance insights.
+
+Debug the network dependency tree with Gemini
+In Performance > Insights > Network dependency tree, click the corresponding AI button to discuss and debug said tree with Gemini in the 'AI assistance' panel.
+
+Export your chats with Gemini
+You can now export your current chat with Gemini or copy its response to clipboard with a click of a button.
+
+Filter IP protected network requests
+In the Network panel, you can now filter requests sent to IP Protection proxies.
+
+
+42["tradeCreated", {,…}]
+0
+: 
+"tradeCreated"
+1
+: 
+{,…}
+associated_bonding_curve
+: 
+"GjShsD7gtz7YtziprZpXi8Vi7UCb9hhLGApRYEjvQGgQ"
+bonding_curve
+: 
+"GxtMotEeFFeJJWAz8xQWjtVoYTSfU9rHNNGEtgJvq2NZ"
+complete
+: 
+false
+created_timestamp
+: 
+1762377608802
+creator
+: 
+"4ytAp5CWJgFDL1DWXCprM6eJgquVcFuFjnxTPEVuXNNn"
+creator_profile_image
+: 
+null
+creator_username
+: 
+null
+description
+: 
+"THREE BLOCKCHAINS. THREE AI TRADERS. ONE QUESTION: WHICH CHAIN IS THE ULTIMATE MEME COIN ALPHA GENERATOR?"
+image_uri
+: 
+"https://gateway.pinata.cloud/ipfs/QmdCEfqNwEDpaKs9GAPGz8CfQvxFpdPvqThcUPiA3qsgmt"
+inverted
+: 
+null
+is_buy
+: 
+true
+is_currently_live
+: 
+false
+king_of_the_hill_timestamp
+: 
+null
+last_reply
+: 
+1762378206000
+last_trade_timestamp
+: 
+1762378305000
+market_cap
+: 
+94.524194742
+market_id
+: 
+null
+metadata_uri
+: 
+"https://gateway.pinata.cloud/ipfs/QmPv1WeGhMzrzTfDGKEaGMZVZU8Yaz1nDyRT7KJm25eUNH"
+mint
+: 
+"CFEVgXx58nHZy1Ttky8ViXfkG4ff4BHQndKNUpWopump"
+name
+: 
+"BattleChain"
+nsfw
+: 
+false
+raydium_pool
+: 
+null
+reply_count
+: 
+6
+show_name
+: 
+true
+signature
+: 
+"HSRiFG5JULzv8KRNxWVtCPQzNgMqn5VhEwPULGgnMJSNup89RuqLqrEPhUjnD8aXPnNsBsGeHPoXP8XELm4bcyh"
+slot
+: 
+378163037
+sol_amount
+: 
+338833883
+symbol
+: 
+"BCHAIN"
+telegram
+: 
+null
+timestamp
+: 
+1762378306
+token_amount
+: 
+3561744793403
+total_supply
+: 
+1000000000000000
+twitter
+: 
+"https://x.com/battlechainlive"
+tx_index
+: 
+1
+usd_market_cap
+: 
+15294.959951203022
+user
+: 
+"EhYxz9J32AxeangCs1optoGfmVpfP4EksiHmhPGezjxu"
+video_uri
+: 
+null
+virtual_sol_reserves
+: 
+55507554828
+virtual_token_reserves
+: 
+579921059974319
+website
+: 
+"https://www.battlechain.live/"

@@ -1,0 +1,360 @@
+Request URL
+https://advanced-api-v2.pump.fun/coins/top-holders-and-sol-balance/663LqBugCRHvg2P34t7qFQ4ZrZoBySTmVfLUsM6dpump
+Request Method
+GET
+Status Code
+304 Not Modified
+Remote Address
+104.18.34.22:443
+Referrer Policy
+same-origin
+access-control-allow-credentials
+true
+access-control-allow-origin
+https://pump.fun
+cf-cache-status
+DYNAMIC
+cf-ray
+999f7798d939f13a-ORD
+content-security-policy-report-only
+script-src 'none'; connect-src 'none'; report-uri https://csp-reporting.cloudflare.com/cdn-cgi/script_monitor/report?m=xoTLV6gzVOg7w7H6hpkSnT4Sel2h3.CM6pTEii_k5bw-1762378382-1.0.1.1-M4UOxF7tNVrcskN0ulz0be8mtSVfa24j.lcHmzXZzyOrsU9azNRIGpzhO6QkCDkNAyP98ewZlSvB4a8_vMpmFcguIqKxwyh6761T089Mi9rT7FQGRnyI2FvTjuMEfbtehbZxsIG6MTRPxXml1WQfWnh39mWyaMgSE7ZP1rJr2zGJJFO9NHF9OJ4mT7w1_H6w; report-to cf-csp-endpoint
+date
+Wed, 05 Nov 2025 21:33:02 GMT
+etag
+W/"8281-d45yfTGcohNe873CO4DPYPwOppo"
+expect-ct
+max-age=86400, enforce
+referrer-policy
+same-origin
+report-to
+{"endpoints":[{"url":"https:\/\/csp-reporting.cloudflare.com\/cdn-cgi\/script_monitor\/report?m=xoTLV6gzVOg7w7H6hpkSnT4Sel2h3.CM6pTEii_k5bw-1762378382-1.0.1.1-M4UOxF7tNVrcskN0ulz0be8mtSVfa24j.lcHmzXZzyOrsU9azNRIGpzhO6QkCDkNAyP98ewZlSvB4a8_vMpmFcguIqKxwyh6761T089Mi9rT7FQGRnyI2FvTjuMEfbtehbZxsIG6MTRPxXml1WQfWnh39mWyaMgSE7ZP1rJr2zGJJFO9NHF9OJ4mT7w1_H6w"}],"group":"cf-csp-endpoint","max_age":86400}
+server
+cloudflare
+set-cookie
+__cf_bm=j9TDQtfB4HRDB33W6bSrgLBG27oKt0Hcr74htfnT.10-1762378382-1.0.1.1-DTdocqvidlv3DbNvPV0Y4RdrULUYG7XzslIiRCNNX.g17Eql1yQMzPAU06L4h.BB1nnryWuNn8ky939zqZrDgcb7X4FR7QBIipilN00sKZ4; path=/; expires=Wed, 05-Nov-25 22:03:02 GMT; domain=.pump.fun; HttpOnly; Secure; SameSite=None
+set-cookie
+_cfuvid=tnJ.6SQACssHfXybuAVA5hGT77Sg64oPuzbWD4YwWGg-1762378382558-0.0.1.1-604800000; path=/; domain=.pump.fun; HttpOnly; Secure; SameSite=None
+strict-transport-security
+max-age=15552000; includeSubDomains
+vary
+Origin
+x-content-type-options
+nosniff
+x-frame-options
+SAMEORIGIN
+x-ratelimit-limit
+60
+x-ratelimit-remaining
+59
+x-ratelimit-reset
+60
+x-xss-protection
+1; mode=block
+:authority
+advanced-api-v2.pump.fun
+:method
+GET
+:path
+/coins/top-holders-and-sol-balance/663LqBugCRHvg2P34t7qFQ4ZrZoBySTmVfLUsM6dpump
+:scheme
+https
+accept
+*/*
+accept-encoding
+gzip, deflate, br, zstd
+accept-language
+en-US,en;q=0.9
+if-none-match
+W/"8281-d45yfTGcohNe873CO4DPYPwOppo"
+origin
+https://pump.fun
+priority
+u=1, i
+sec-ch-ua
+"Google Chrome";v="141", "Not?A_Brand";v="8", "Chromium";v="141"
+sec-ch-ua-mobile
+?0
+sec-ch-ua-platform
+"Windows"
+sec-fetch-dest
+empty
+sec-fetch-mode
+cors
+sec-fetch-site
+same-site
+user-agent
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36
+Chrome DevTools (MCP) for your AI agent
+With the newly launched Chrome DevTools MCP server, AI coding assistants can now debug web pages directly in Chrome, and benefit from DevTools debugging capabilities and performance insights.
+
+Debug the network dependency tree with Gemini
+In Performance > Insights > Network dependency tree, click the corresponding AI button to discuss and debug said tree with Gemini in the 'AI assistance' panel.
+
+Export your chats with Gemini
+You can now export your current chat with Gemini or copy its response to clipboard with a click of a button.
+
+Filter IP protected network requests
+In the Network panel, you can now filter requests sent to IP Protection proxies.
+
+
+{
+    "topHolders": [
+        {
+            "address": "2YE4FgqCFkAKokaE3ENGFrS7CGkjB1xBRXCn2rUgj4Au",
+            "amount": 176908591.631307,
+            "solBalance": 0.00297888
+        },
+        {
+            "address": "6bBEQghPcsJ6jvxpGEJgfYAM2bZpjn2DS1gv9JVngvPD",
+            "amount": 100000000,
+            "solBalance": 0.00203928
+        },
+        {
+            "address": "CakVxJWJ3mxfPnPW1FehieEvMpPfaZD6Rmb8T1Lo1YZG",
+            "amount": 33677799.152926,
+            "solBalance": 0.015664432
+        },
+        {
+            "address": "52K6pXGoKFvWE64vyXxVFrYhCcz2jtWPmKTaczXRAgau",
+            "amount": 26832898.57986,
+            "solBalance": 45.532265694
+        },
+        {
+            "address": "GoFcUtqesnWYiPkdaRgyfaripkMiHozUGBawot73L8Ci",
+            "amount": 26147454.249875,
+            "solBalance": 0.125967827
+        },
+        {
+            "address": "A5yFXnby9hcKstNcrFzUN293htfjsY8hPZvBAvjVz3RU",
+            "amount": 23597095.25839,
+            "solBalance": 0.012066839
+        },
+        {
+            "address": "4cjPSXrc9fwTwfRB9cYKg2oUsPPVWNu2tsodeuw7PvG2",
+            "amount": 22386143.726866,
+            "solBalance": 1.601594524
+        },
+        {
+            "address": "EMzbGnrfVXcoKAehte9VS9VyRdqm2hxHQx2jxyY7c1WK",
+            "amount": 20794372.474169,
+            "solBalance": 33.002095768
+        },
+        {
+            "address": "39xGf1UKra9jp5EwMCZC1NHdJ7XRyPtjXD1rrjAJpiTF",
+            "amount": 20266913.293769,
+            "solBalance": 0.410501534
+        },
+        {
+            "address": "BQ3179FTWy3mXduYejup7tvpV6CzjkcvvfY81CwXqFSZ",
+            "amount": 20182837.744511,
+            "solBalance": 5.715485831
+        },
+        {
+            "address": "BTWdJQ4h9NiQPY11RMn2rQ8E3NZLKqjNPYSACcHu7kmr",
+            "amount": 19498885.590116,
+            "solBalance": 0.045043287
+        },
+        {
+            "address": "5YTWZRFNVJ5ZpfnWNcq8NSUESMwQACAt9Z8U8JphB62r",
+            "amount": 18502438.681476,
+            "solBalance": 0.433010022
+        },
+        {
+            "address": "GCH3z9vuJMdLk3k15heFPxRFZBGVtJFhhZvVx9Xp4CnU",
+            "amount": 18206565.071477,
+            "solBalance": 0.034677694
+        },
+        {
+            "address": "ForQYxfhLMv3ieCWQYxMWwACZZTp16rBUe3r8cwRLnB5",
+            "amount": 17030076.581504,
+            "solBalance": 1.366564626
+        },
+        {
+            "address": "9SxprdBwH8kENnsrTemBGmjof6Lm3ktDHrEq92cPwNUT",
+            "amount": 16560697.605025,
+            "solBalance": 0.079280583
+        },
+        {
+            "address": "GtxDpQwhbr9ucCv8SWRZDsar9qrUtsGDCgvapBverCpX",
+            "amount": 15235788.972472,
+            "solBalance": 207.263447259
+        },
+        {
+            "address": "7cSCzv1fFYu4a9U1Wj3Q7XSJzyyTYhD9arSSnRgLE5H5",
+            "amount": 14300393.982893,
+            "solBalance": 0.015057625
+        },
+        {
+            "address": "F45cLNoFG97PwgperCk2oEMgETUQ4afXmXAGGLsSoKCu",
+            "amount": 14061190.452711,
+            "solBalance": 0.220543612
+        },
+        {
+            "address": "6iR3ov26BuKBN2omCc3URDau8WkZvBf7AHSBVEJAAckU",
+            "amount": 13084300.107914,
+            "solBalance": 8.771018273
+        },
+        {
+            "address": "AmNQzpASgNwvfFgPKbftF46hFgDJ1qgyF9YhPt9XAE1u",
+            "amount": 12321673.519596,
+            "solBalance": 420.362048326
+        },
+        {
+            "address": "Dn8h2pgFCbd6xobbyu97BBfd6GSg5cFodrZDch76H7pc",
+            "amount": 12149510.119223,
+            "solBalance": 23.905877962
+        },
+        {
+            "address": "5BZ5RqXVaPNQvjVn45NVkoVmJomLqyUXmXfGpYDAqf2R",
+            "amount": 11444685.878048,
+            "solBalance": 3.757215675
+        },
+        {
+            "address": "GrshsYJrKNFthcvTsfSTuzgyB9vpmbx27i49qxFJRp35",
+            "amount": 11259395.433711,
+            "solBalance": 0.593496325
+        },
+        {
+            "address": "BX1wTJKC6LC1shid4GiD7qVyGQmoce1ryfGRfU9tUegZ",
+            "amount": 10846170.507048,
+            "solBalance": 81.898926709
+        },
+        {
+            "address": "HfPDHKGDj3ap7W2sWTKFzatYEB9KFYNq7TXWCiXmHiG9",
+            "amount": 10051437.022184,
+            "solBalance": 14.08683842
+        },
+        {
+            "address": "AuZ9Gh957CBdJ9utzg4ogfQ8YZrFT8NLWkhnTcAvJx9i",
+            "amount": 9990000,
+            "solBalance": 0.113405087
+        },
+        {
+            "address": "6NDKQhw485oG7YsP7LqWZEgFH3f2PLZmXt41JM5fQStY",
+            "amount": 8698657.250052,
+            "solBalance": 1.130456524
+        },
+        {
+            "address": "Aadd4nXZrvjNgF1tpHM4xC6y6Cd9TyJDvNs1VbuRBPnf",
+            "amount": 8348189.495414,
+            "solBalance": 2.843776588
+        },
+        {
+            "address": "DRZnzkeQjEFhZex7H2Yaf99j4HSdW2UsWMdCzMzUc41v",
+            "amount": 7277085.207991,
+            "solBalance": 0.070373454
+        },
+        {
+            "address": "DvptarhVU1qhfv538TB8uHiSkBgmjsyJZYVnWorcQDzH",
+            "amount": 7192065.872826,
+            "solBalance": 2.976117249
+        },
+        {
+            "address": "FR2QX8EMcMbPirdMWn7pEKzCMoHxVeTQT8NiKvFhLF4u",
+            "amount": 6642085.228947,
+            "solBalance": 0.110824077
+        },
+        {
+            "address": "7UJ2oHGhHno2fNDbt4sjgc5fzcuTw4JtZuZg5BQ7MoHk",
+            "amount": 6350240.19551,
+            "solBalance": 1.616044146
+        },
+        {
+            "address": "FNtxiutEEivKEg37pb8C1axrkjxvQBrLGHus5Z4hETDx",
+            "amount": 6179000.614173,
+            "solBalance": 0.009986014
+        },
+        {
+            "address": "FLTQWyvmSRue3qgpGmzjgYNYtZWGERgSPJikyCmcXdr2",
+            "amount": 6088637.331267,
+            "solBalance": 2.223028085
+        },
+        {
+            "address": "7te9R4umRnpVUaFVx9oJgcccpEb6YWKFk9EV3hszhWgv",
+            "amount": 5895044.952306,
+            "solBalance": 617.459241306
+        },
+        {
+            "address": "GV4ZWLhxoWrUZyDmYjpnS4yHX67x3qDKDqSroVGWFejS",
+            "amount": 5789299.201577,
+            "solBalance": 57.370025966
+        },
+        {
+            "address": "8U9T7WwqYBwmGjD83JGJWgb1ruUzAPNMjirJSoLHqtmh",
+            "amount": 5249707.671875,
+            "solBalance": 60.747511682
+        },
+        {
+            "address": "AT4C5XFfpZToEm3AT5AsFFEeGxqnLRgKuRzt6TGPMYb",
+            "amount": 5190201.617556,
+            "solBalance": 0.024602677
+        },
+        {
+            "address": "DhcmLme6Qd5hd3weGvKn4mDsUzs38SeZYt7FyAmfb9gu",
+            "amount": 5104922.485443,
+            "solBalance": 0
+        },
+        {
+            "address": "EX4kQcPVL8rgA5AyjNvnB35uFTwzESZUvprqWBbjEqbp",
+            "amount": 5029501.844669,
+            "solBalance": 0.037816305
+        },
+        {
+            "address": "DXgGRsu5Vcd2Asguq1QEaqRnabT1moGEnA9i2FZtAdA8",
+            "amount": 5000000,
+            "solBalance": 517.529265984
+        },
+        {
+            "address": "CDDw2gLYa9ZtCSn1coUHrN1nyTzexBvaURceRUXwQj8a",
+            "amount": 4986875.232968,
+            "solBalance": 4.123488023
+        },
+        {
+            "address": "HNKduvnaYySYHdmeN84NmMs8j9CNWNTGYckMkWN7bAfe",
+            "amount": 4799054.321405,
+            "solBalance": 0.10714472
+        },
+        {
+            "address": "2kgPFKSQe8i4oNyPbjKw7KN7Lrn724HnkyxSvAbKKNVB",
+            "amount": 4702111.669444,
+            "solBalance": 22.649017964
+        },
+        {
+            "address": "9JukCh5LtiSKyV9jqEyWdt9yZQBCVTggtU3aRjtESino",
+            "amount": 4487656.048229,
+            "solBalance": 4.20234063
+        },
+        {
+            "address": "94bDpnr1XHcTEAPFm3tdkwfAh44B74BhjpnCSoSt4p9n",
+            "amount": 4481475.15554,
+            "solBalance": 5.377719879
+        },
+        {
+            "address": "5goUYRCJiDdNKeNvzWCCp4yHHkoCqPtJbGmV9qAc6Lzh",
+            "amount": 4454855.882326,
+            "solBalance": 19.661596169
+        },
+        {
+            "address": "ZM1SgERMbeexWe4PDFiUjALc8hJpU2KpYctmg6gwyh5",
+            "amount": 4285591.909393,
+            "solBalance": 0.052037494
+        },
+        {
+            "address": "9Yn67DKuQdrmf2qJWuMxur3hZzzAg85kfu5RAZmjNXQS",
+            "amount": 4034521.874885,
+            "solBalance": 0.073537376
+        },
+        {
+            "address": "48A64H3Bih8qvNJ31TYcEUkuRFcv3xKCMvdUDgvWPHsx",
+            "amount": 4017292.168854,
+            "solBalance": 1.305935984
+        }
+    ],
+    "totalHolders": [
+        "2YE4FgqCFkAKokaE3ENGFrS7CGkjB1xBRXCn2rUgj4Au",
+        "6bBEQghPcsJ6jvxpGEJgfYAM2bZpjn2DS1gv9JVngvPD",
+        "CakVxJWJ3mxfPnPW1FehieEvMpPfaZD6Rmb8T1Lo1YZG",
+        "52K6pXGoKFvWE64vyXxVFrYhCcz2jtWPmKTaczXRAgau",
+        "GoFcUtqesnWYiPkdaRgyfaripkMiHozUGBawot73L8Ci",
+        "A5yFXnby9hcKstNcrFzUN293htfjsY8hPZvBAvjVz3RU",
+        "4cjPSXrc9fwTwfRB9cYKg2oUsPPVWNu2tsodeuw7PvG2",

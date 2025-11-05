@@ -1,0 +1,194 @@
+Request URL
+https://swap-api.pump.fun/v1/coins/663LqBugCRHvg2P34t7qFQ4ZrZoBySTmVfLUsM6dpump/trades/batch
+Request Method
+POST
+Status Code
+201 Created
+Remote Address
+104.18.34.22:443
+Referrer Policy
+same-origin
+access-control-allow-credentials
+true
+access-control-allow-origin
+https://pump.fun
+cf-cache-status
+DYNAMIC
+cf-ray
+999f7798d98c1b66-ORD
+content-length
+4698
+content-type
+application/json; charset=utf-8
+date
+Wed, 05 Nov 2025 21:33:02 GMT
+etag
+W/"125a-Lnjnl73UbLAkT75B1G9Gv4BwHRA"
+expect-ct
+max-age=86400, enforce
+referrer-policy
+same-origin
+server
+cloudflare
+set-cookie
+__cf_bm=cCwaobkv__rDRsVqK1Re_7vFVtNyfo0m3Oe0SOuaG4E-1762378382-1.0.1.1-hhbpNqmvxyMnzBNtX9gPQH8JTGP_3k.YOnpJAv9XmuTt54fPNs.D2oZp8SI722YO9.BrvzT0VWVK7VfL5RKYt9L0cxM4mwPT7r4.F2z7Oe0; path=/; expires=Wed, 05-Nov-25 22:03:02 GMT; domain=.pump.fun; HttpOnly; Secure; SameSite=None
+set-cookie
+_cfuvid=5ZDc7aTOyrMKm2V87NjBXUHmrYzBpkzFvSOJghsqkV8-1762378382340-0.0.1.1-604800000; path=/; domain=.pump.fun; HttpOnly; Secure; SameSite=None
+strict-transport-security
+max-age=15552000; includeSubDomains
+vary
+Origin
+x-content-type-options
+nosniff
+x-frame-options
+SAMEORIGIN
+x-ratelimit-limit
+100
+x-ratelimit-remaining
+82
+x-ratelimit-reset
+40
+x-xss-protection
+1; mode=block
+:authority
+swap-api.pump.fun
+:method
+POST
+:path
+/v1/coins/663LqBugCRHvg2P34t7qFQ4ZrZoBySTmVfLUsM6dpump/trades/batch
+:scheme
+https
+accept
+*/*
+accept-encoding
+gzip, deflate, br, zstd
+accept-language
+en-US,en;q=0.9
+content-length
+66
+content-type
+application/json
+origin
+https://pump.fun
+priority
+u=1, i
+sec-ch-ua
+"Google Chrome";v="141", "Not?A_Brand";v="8", "Chromium";v="141"
+sec-ch-ua-mobile
+?0
+sec-ch-ua-platform
+"Windows"
+sec-fetch-dest
+empty
+sec-fetch-mode
+cors
+sec-fetch-site
+same-site
+user-agent
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36
+
+
+
+{,…}
+52K6pXGoKFvWE64vyXxVFrYhCcz2jtWPmKTaczXRAgau
+: 
+[{slotIndexId: "0003781592980000250000",…}, {slotIndexId: "0003781570900011600000",…},…]
+0
+: 
+{slotIndexId: "0003781592980000250000",…}
+amountSOL
+: 
+"3.000000001"
+amountUSD
+: 
+"486.0957714271066237550249"
+baseAmount
+: 
+"4606841208227"
+isBondingCurve
+: 
+false
+priceSOL
+: 
+"0.0000006608564105915449223853167613823121741799"
+priceUSD
+: 
+"0.0001070798355339886366362187676803897289997"
+quoteAmount
+: 
+"3000000001"
+slotIndexId
+: 
+"0003781592980000250000"
+timestamp
+: 
+"2025-11-05T21:06:49.000Z"
+tx
+: 
+"8ibL1hWD3HPK35YDrDrMdazdfXcf7hZsXUBENFSnR7W4eJCwmfdTYmUEfjFSrxoEbwV6vpKrQfDG54sAk4UKNir"
+type
+: 
+"buy"
+userAddress
+: 
+"52K6pXGoKFvWE64vyXxVFrYhCcz2jtWPmKTaczXRAgau"
+1
+: 
+{slotIndexId: "0003781570900011600000",…}
+amountSOL
+: 
+"3.000000001"
+amountUSD
+: 
+"487.95412909852738631195867"
+baseAmount
+: 
+"4745444576433"
+isBondingCurve
+: 
+false
+priceSOL
+: 
+"0.0000006418252078802397394244892566208425558234"
+priceUSD
+: 
+"0.0001043937534134299750500677340786073859088"
+quoteAmount
+: 
+"3000000001"
+slotIndexId
+: 
+"0003781570900011600000"
+timestamp
+: 
+"2025-11-05T20:52:09.000Z"
+tx
+: 
+"2huWMGVmCtBL4FgFhBWGo8gF5esthuLKemQAS8KMc3CKLBVCzXztm5PsTkTv5r6f7xvdE11zy9f1hfCNx8Sp5h9c"
+type
+: 
+"buy"
+userAddress
+: 
+"52K6pXGoKFvWE64vyXxVFrYhCcz2jtWPmKTaczXRAgau"
+2
+: 
+{slotIndexId: "0003781534060006430000",…}
+3
+: 
+{slotIndexId: "0003781503040009480000",…}
+4
+: 
+{slotIndexId: "0003781049640011020000",…}
+5
+: 
+{slotIndexId: "0003780170400007100000",…}
+6
+: 
+{slotIndexId: "0003779757060000380000",…}
+7
+: 
+{slotIndexId: "0003779557490009880000",…}
+8
+: 
+{slotIndexId: "0003779123140008860002",…}

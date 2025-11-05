@@ -1,0 +1,89 @@
+Request URL
+https://frontend-api-v3.pump.fun/sol-price
+Request Method
+GET
+Status Code
+304 Not Modified
+Remote Address
+104.18.34.22:443
+Referrer Policy
+same-origin
+access-control-allow-credentials
+true
+access-control-allow-origin
+https://pump.fun
+cf-cache-status
+DYNAMIC
+cf-ray
+999f779778a3a465-ORD
+content-security-policy-report-only
+script-src 'none'; report-uri https://csp-reporting.cloudflare.com/cdn-cgi/script_monitor/report?m=JK.MufRKQraNuvkhQsk0e85ZU5_nMSjtNtPwBxvM6Pg-1762378382-1.0.1.1-aBjS50ZvQf563BGUIqo4JVDHNNq4CC23ZqJkq8Vmy7b0Kw8c0tgU2..BG2LDZk51vDIw7Tsz4AK4rZ88Jsu2iXVx0cEBJbxYUj5fN6LADKz_ewp0ecsmbbj85oGFDf42_dCKWC5ETtfalQy7.Gl.sT4d8ZHmc4mgbtYLnxBNgJ6kI53jVDf83rb2azCoyhrY; report-to cf-csp-endpoint
+date
+Wed, 05 Nov 2025 21:33:02 GMT
+etag
+W/"13-H4rO1w1hUbRmhHE0TbTjjfTvLHE"
+expect-ct
+max-age=86400, enforce
+referrer-policy
+same-origin
+report-to
+{"endpoints":[{"url":"https:\/\/csp-reporting.cloudflare.com\/cdn-cgi\/script_monitor\/report?m=JK.MufRKQraNuvkhQsk0e85ZU5_nMSjtNtPwBxvM6Pg-1762378382-1.0.1.1-aBjS50ZvQf563BGUIqo4JVDHNNq4CC23ZqJkq8Vmy7b0Kw8c0tgU2..BG2LDZk51vDIw7Tsz4AK4rZ88Jsu2iXVx0cEBJbxYUj5fN6LADKz_ewp0ecsmbbj85oGFDf42_dCKWC5ETtfalQy7.Gl.sT4d8ZHmc4mgbtYLnxBNgJ6kI53jVDf83rb2azCoyhrY"}],"group":"cf-csp-endpoint","max_age":86400}
+server
+cloudflare
+set-cookie
+__cf_bm=Q8TVqpz1pq4fL103yrVRMMXYKnno42Ta0KqExRmmogY-1762378382-1.0.1.1-grPoQ21qffQ85tlud4CRigfXW1oKgwVmW0uyd.yrOiORYUEcYW0UwNI7XLOldN.gPvUxH_4XBKKoHd2TXlXkW36mJChrFXcv_IKgmbQK.94; path=/; expires=Wed, 05-Nov-25 22:03:02 GMT; domain=.pump.fun; HttpOnly; Secure; SameSite=None
+set-cookie
+_cfuvid=2CxtotpQiVM9r868RPxtw3Lsv66Nh.gXFKG4RSpDLnU-1762378382056-0.0.1.1-604800000; path=/; domain=.pump.fun; HttpOnly; Secure; SameSite=None
+strict-transport-security
+max-age=15552000; includeSubDomains
+vary
+Origin
+x-content-type-options
+nosniff
+x-frame-options
+SAMEORIGIN
+x-ratelimit-limit
+50
+x-ratelimit-remaining
+49
+x-ratelimit-reset
+60
+x-xss-protection
+1; mode=block
+:authority
+frontend-api-v3.pump.fun
+:method
+GET
+:path
+/sol-price
+:scheme
+https
+accept
+*/*
+accept-encoding
+gzip, deflate, br, zstd
+accept-language
+en-US,en;q=0.9
+if-none-match
+W/"13-H4rO1w1hUbRmhHE0TbTjjfTvLHE"
+origin
+https://pump.fun
+priority
+u=1, i
+sec-ch-ua
+"Google Chrome";v="141", "Not?A_Brand";v="8", "Chromium";v="141"
+sec-ch-ua-mobile
+?0
+sec-ch-ua-platform
+"Windows"
+sec-fetch-dest
+empty
+sec-fetch-mode
+cors
+sec-fetch-site
+same-site
+user-agent
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36
+
+
+{"solPrice":161.71}

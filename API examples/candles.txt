@@ -1,0 +1,239 @@
+Request URL
+https://swap-api.pump.fun/v2/coins/663LqBugCRHvg2P34t7qFQ4ZrZoBySTmVfLUsM6dpump/candles?interval=1h&limit=1000&currency=USD&createdTs=1762277758301
+Request Method
+GET
+Status Code
+304 Not Modified
+Remote Address
+104.18.34.22:443
+Referrer Policy
+same-origin
+access-control-allow-credentials
+true
+access-control-allow-origin
+https://pump.fun
+cf-cache-status
+DYNAMIC
+cf-ray
+999f77a019b91b66-ORD
+date
+Wed, 05 Nov 2025 21:33:03 GMT
+etag
+W/"209d-L1pd/Fn/EZ82JBpdEmn8qbeGcb4"
+expect-ct
+max-age=86400, enforce
+referrer-policy
+same-origin
+server
+cloudflare
+set-cookie
+__cf_bm=IhP0a8hdeTqMpW.6Q514yTaEQipGlHkfZFDI0NgqEdE-1762378383-1.0.1.1-424SjCKKEBnGcv6etf5dI0EmdIbrcQ66NmM0NBpYnlENgHPq8urdWN56sHZZ7Q9pma_hBxG8wqw3jlzQxm.lmkDZcJezRq04pRp3WOZLcUE; path=/; expires=Wed, 05-Nov-25 22:03:03 GMT; domain=.pump.fun; HttpOnly; Secure; SameSite=None
+set-cookie
+_cfuvid=MvyO1MF4ZRBckWANRm_tn0NSzXTKtGOeyjyeMqHHge4-1762378383456-0.0.1.1-604800000; path=/; domain=.pump.fun; HttpOnly; Secure; SameSite=None
+strict-transport-security
+max-age=15552000; includeSubDomains
+vary
+Origin
+x-content-type-options
+nosniff
+x-frame-options
+SAMEORIGIN
+x-ratelimit-limit
+750
+x-ratelimit-remaining
+617
+x-ratelimit-reset
+42
+x-xss-protection
+1; mode=block
+:authority
+swap-api.pump.fun
+:method
+GET
+:path
+/v2/coins/663LqBugCRHvg2P34t7qFQ4ZrZoBySTmVfLUsM6dpump/candles?interval=1h&limit=1000&currency=USD&createdTs=1762277758301
+:scheme
+https
+accept
+*/*
+accept-encoding
+gzip, deflate, br, zstd
+accept-language
+en-US,en;q=0.9
+if-none-match
+W/"209d-L1pd/Fn/EZ82JBpdEmn8qbeGcb4"
+origin
+https://pump.fun
+priority
+u=1, i
+sec-ch-ua
+"Google Chrome";v="141", "Not?A_Brand";v="8", "Chromium";v="141"
+sec-ch-ua-mobile
+?0
+sec-ch-ua-platform
+"Windows"
+sec-fetch-dest
+empty
+sec-fetch-mode
+cors
+sec-fetch-site
+same-site
+user-agent
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36
+Chrome DevTools (MCP) for your AI agent
+With the newly launched Chrome DevTools MCP server, AI coding assistants can now debug web pages directly in Chrome, and benefit from DevTools debugging capabilities and performance insights.
+
+Debug the network dependency tree with Gemini
+In Performance > Insights > Network dependency tree, click the corresponding AI button to discuss and debug said tree with Gemini in the 'AI assistance' panel.
+
+Export your chats with Gemini
+You can now export your current chat with Gemini or copy its response to clipboard with a click of a button.
+
+Filter IP protected network requests
+In the Network panel, you can now filter requests sent to IP Protection proxies.
+
+
+
+
+[{timestamp: 1762275600000, open: "0.0000043941073704536962082463132",…},…]
+0
+: 
+{timestamp: 1762275600000, open: "0.0000043941073704536962082463132",…}
+1
+: 
+{timestamp: 1762279200000, open: "0.00005597873521906945459991428919816323467023",…}
+close
+: 
+"0.0001408067768490436011327580426380719044294"
+high
+: 
+"0.0002438197796960932708514302753657098528996"
+low
+: 
+"0.00002388300256285876797740556611974906365189"
+open
+: 
+"0.00005597873521906945459991428919816323467023"
+timestamp
+: 
+1762279200000
+volume
+: 
+"447895.97974319487366657177191"
+2
+: 
+{timestamp: 1762282800000, open: "0.0001408067768490436011327580426380719044294",…}
+close
+: 
+"0.0003074088591099812556077475312644679885855"
+high
+: 
+"0.0003987755065977007284499526894591460155068"
+low
+: 
+"0.0001190162889932247393467171382879030475326"
+open
+: 
+"0.0001408067768490436011327580426380719044294"
+timestamp
+: 
+1762282800000
+volume
+: 
+"170998.56810990795716002138234"
+3
+: 
+{timestamp: 1762286400000, open: "0.0003074088591099812556077475312644679885855",…}
+close
+: 
+"0.0002352137647417628495314520715262493217787"
+high
+: 
+"0.0003515289686891050301171166204701556223919"
+low
+: 
+"0.0002163312603768098134676143784469626317722"
+open
+: 
+"0.0003074088591099812556077475312644679885855"
+timestamp
+: 
+1762286400000
+volume
+: 
+"80686.93500637304345588137743"
+4
+: 
+{timestamp: 1762290000000, open: "0.0002352137647417628495314520715262493217787",…}
+5
+: 
+{timestamp: 1762293600000, open: "0.0001802689417951787258197731401101412793647",…}
+6
+: 
+{timestamp: 1762297200000, open: "0.0002448704226366424694069233424801364695338",…}
+7
+: 
+{timestamp: 1762300800000, open: "0.0001915290960473247349288216951265720226268",…}
+8
+: 
+{timestamp: 1762304400000, open: "0.0001775062325827896776374328801873962535344",…}
+9
+: 
+{timestamp: 1762308000000, open: "0.0001670634161365715879945299497268711986854",…}
+10
+: 
+{timestamp: 1762311600000, open: "0.0001419947909151557059344429344813891386749",…}
+11
+: 
+{timestamp: 1762315200000, open: "0.0001532353567544785028091876743689783632356",…}
+12
+: 
+{timestamp: 1762318800000, open: "0.0001678838168527281259798542124361012816794",…}
+13
+: 
+{timestamp: 1762322400000, open: "0.000161305226439562142210512312736942072449",…}
+14
+: 
+{timestamp: 1762326000000, open: "0.0001645880641507047929177243240239223750612",…}
+15
+: 
+{timestamp: 1762329600000, open: "0.0002228540953510270278053114433704962430957",…}
+16
+: 
+{timestamp: 1762333200000, open: "0.0002956061868261024453099045800964222069659",…}
+17
+: 
+{timestamp: 1762336800000, open: "0.0002537935787493568809520955382342274448487",…}
+18
+: 
+{timestamp: 1762340400000, open: "0.000225613764737636022925817553976137634632",…}
+19
+: 
+{timestamp: 1762344000000, open: "0.0001810830443258515788295351451359583444716",…}
+20
+: 
+{timestamp: 1762347600000, open: "0.0001840534546953515443197818294074182863899",…}
+21
+: 
+{timestamp: 1762351200000, open: "0.000177388290235151812514946925326366187366",…}
+22
+: 
+{timestamp: 1762354800000, open: "0.0001677425866051902166103848990288878232498",…}
+23
+: 
+{timestamp: 1762358400000, open: "0.0002543355390514325424878498374434980121445",…}
+24
+: 
+{timestamp: 1762362000000, open: "0.0002049512621965963778027446692986602697875",…}
+25
+: 
+{timestamp: 1762365600000, open: "0.0001563200468606646606656696388843108351675",…}
+26
+: 
+{timestamp: 1762369200000, open: "0.0002056945886788658214343690474009456964477",…}
+27
+: 
+{timestamp: 1762372800000, open: "0.0001376179566196110123707698169386619751617",…}
+28
+: 
+{timestamp: 1762376400000, open: "0.00008016033382475153377011009141762225170298",…}

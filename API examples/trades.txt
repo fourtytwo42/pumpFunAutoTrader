@@ -1,0 +1,196 @@
+Request URL
+https://swap-api.pump.fun/v2/coins/663LqBugCRHvg2P34t7qFQ4ZrZoBySTmVfLUsM6dpump/trades?limit=100&cursor=0&minSolAmount=0.05
+Request Method
+GET
+Status Code
+200 OK
+Remote Address
+104.18.34.22:443
+Referrer Policy
+same-origin
+access-control-allow-credentials
+true
+access-control-allow-origin
+https://pump.fun
+cf-cache-status
+DYNAMIC
+cf-ray
+999f63176efa1b66-ORD
+content-encoding
+gzip
+content-type
+application/json; charset=utf-8
+date
+Wed, 05 Nov 2025 21:19:02 GMT
+etag
+W/"c9f3-RAXsvxUWb0M+HJdoAHA7RBV8wRU"
+expect-ct
+max-age=86400, enforce
+referrer-policy
+same-origin
+server
+cloudflare
+set-cookie
+__cf_bm=WJ1LEigf9Y47Z_W6o_LT4jfPpM4kZ8cgoRC9XO4gBps-1762377542-1.0.1.1-vrXUa09VKfx1bPn0i6dTuD43E9ddNP73Wdg81w42Pb9atNi0ABRlr2HA95rBAraKkrpvP_T5QanBcA94H9MSxo4zj4eIYOzsMcVj64FGXGo; path=/; expires=Wed, 05-Nov-25 21:49:02 GMT; domain=.pump.fun; HttpOnly; Secure; SameSite=None
+set-cookie
+_cfuvid=PW03rj9SHryj3jqCJ1BoYXoyS37C7mYwB1nV7gj.IYk-1762377542424-0.0.1.1-604800000; path=/; domain=.pump.fun; HttpOnly; Secure; SameSite=None
+strict-transport-security
+max-age=15552000; includeSubDomains
+vary
+Origin
+x-content-type-options
+nosniff
+x-frame-options
+SAMEORIGIN
+x-ratelimit-limit
+50
+x-ratelimit-remaining
+49
+x-ratelimit-reset
+1
+x-xss-protection
+1; mode=block
+:authority
+swap-api.pump.fun
+:method
+GET
+:path
+/v2/coins/663LqBugCRHvg2P34t7qFQ4ZrZoBySTmVfLUsM6dpump/trades?limit=100&cursor=0&minSolAmount=0.05
+:scheme
+https
+accept
+*/*
+accept-encoding
+gzip, deflate, br, zstd
+accept-language
+en-US,en;q=0.9
+if-none-match
+W/"c9e4-IM0iwtsvQALHm2H+Qf+tx0+qrWk"
+origin
+https://pump.fun
+priority
+u=1, i
+sec-ch-ua
+"Google Chrome";v="141", "Not?A_Brand";v="8", "Chromium";v="141"
+sec-ch-ua-mobile
+?0
+sec-ch-ua-platform
+"Windows"
+sec-fetch-dest
+empty
+sec-fetch-mode
+cors
+sec-fetch-site
+same-site
+user-agent
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36
+Chrome DevTools (MCP) for your AI agent
+With the newly launched Chrome DevTools MCP server, AI coding assistants can now debug web pages directly in Chrome, and benefit from DevTools debugging capabilities and performance insights.
+
+
+{trades: [{slotIndexId: "0003781611070008090000",…}, {slotIndexId: "0003781611070002720000",…},…],…}
+pagination
+: 
+{nextCursor: "0003781572910010940000-1762376011000", hasMore: true, limit: 100}
+hasMore
+: 
+true
+limit
+: 
+100
+nextCursor
+: 
+"0003781572910010940000-1762376011000"
+trades
+: 
+[{slotIndexId: "0003781611070008090000",…}, {slotIndexId: "0003781611070002720000",…},…]
+0
+: 
+{slotIndexId: "0003781611070008090000",…}
+1
+: 
+{slotIndexId: "0003781611070002720000",…}
+amountSol
+: 
+"0.061896304"
+amountUsd
+: 
+"10.01032678837897300595296"
+baseAmount
+: 
+"94917.396353"
+priceSol
+: 
+"0.0000006596621237690048854384777781971454637416"
+priceUsd
+: 
+"0.0001066854238799756972042420909944932922438"
+program
+: 
+"pump_amm"
+quoteAmount
+: 
+"0.061896304"
+slotIndexId
+: 
+"0003781611070002720000"
+timestamp
+: 
+"2025-11-05T21:18:50.000Z"
+tx
+: 
+"Vgt3Hm1y1QjEuLSUZmq7xt6afVf6w5ipnjSJ6XViYkorMSacuio4E2SUC7Uo63y11LdFQxvc9DbRWJwMrLUrxuB"
+type
+: 
+"sell"
+userAddress
+: 
+"7Q1yAU2K2fuWkPNqJkpV68q4Qn4ZgBkaqQ4ZNwNucS4h"
+2
+: 
+{slotIndexId: "0003781610990009390000",…}
+amountSol
+: 
+"0.581949504"
+amountUsd
+: 
+"94.11716585492820871572096"
+baseAmount
+: 
+"887302.118384"
+priceSol
+: 
+"0.0000006603936290896655034109599160621330204596"
+priceUsd
+: 
+"0.0001068037283155240739654266284397333080596"
+program
+: 
+"pump_amm"
+quoteAmount
+: 
+"0.581949504"
+slotIndexId
+: 
+"0003781610990009390000"
+timestamp
+: 
+"2025-11-05T21:18:46.000Z"
+tx
+: 
+"5pg1Y9n19NmeqG25p1huVBBTBhNKXurBRQX5WdA1s4auHg18AEqtBYL4dECfbDibSvgiVes3HwmwAW5RtTvHwK5F"
+type
+: 
+"sell"
+userAddress
+: 
+"ABEL2ebYKrxWnKYj8Zv5FYVFbxnGg75cprwau5ZYRVjj"
+
+Debug the network dependency tree with Gemini
+In Performance > Insights > Network dependency tree, click the corresponding AI button to discuss and debug said tree with Gemini in the 'AI assistance' panel.
+
+Export your chats with Gemini
+You can now export your current chat with Gemini or copy its response to clipboard with a click of a button.
+
+Filter IP protected network requests
+In the Network panel, you can now filter requests sent to IP Protection proxies.
