@@ -337,13 +337,15 @@ export default function TokensPage() {
                         Price (per 1M tokens)
                       </Typography>
                       <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 'bold' }}>
-                        {token.price && token.price.priceUsd > 0 
+                        {token.price && token.price.priceUsd && Number(token.price.priceUsd) > 0
                           ? formatPricePerMillion(token.price.priceUsd)
+                          : token.price && token.price.priceSol && Number(token.price.priceSol) > 0
+                          ? formatPricePerMillion(Number(token.price.priceSol) * 160) // Fallback calculation
                           : 'N/A'}
                       </Typography>
-                      {token.price && (
+                      {token.price && token.price.priceSol && Number(token.price.priceSol) > 0 && (
                         <Typography variant="caption" color="text.secondary">
-                          {token.price.priceSol.toFixed(8)} SOL/token
+                          {Number(token.price.priceSol).toFixed(8)} SOL/token
                         </Typography>
                       )}
                     </Box>

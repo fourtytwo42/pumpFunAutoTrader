@@ -172,7 +172,7 @@ async function processTrade(tradeData: TradeCreatedEvent) {
             create: {
               priceSol,
               priceUsd,
-              lastTradeTimestamp: BigInt(tradeData.last_trade_timestamp || tradeData.timestamp || Date.now() / 1000),
+                lastTradeTimestamp: BigInt((tradeData.last_trade_timestamp || tradeData.timestamp || Date.now() / 1000) * 1000),
             },
           },
         },
