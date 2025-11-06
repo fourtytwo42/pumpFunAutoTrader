@@ -273,6 +273,16 @@ export default function TokenDetailPage() {
     }
   };
 
+  const remote = token?.remote || null;
+  const metadata = remote?.metadata || null;
+  const topHolders = remote?.topHolders || [];
+  const remoteTrades = remote?.trades || [];
+  const marketActivity = remote?.marketActivity;
+  const fallbackActivity = useMemo(
+    () => selectMarketActivityBucket(marketActivity),
+    [marketActivity],
+  );
+
   if (loading || !token) {
     return (
       <Container maxWidth="lg">
@@ -294,16 +304,6 @@ export default function TokenDetailPage() {
       </Container>
     );
   }
-
-  const remote = token.remote;
-  const metadata = remote?.metadata || null;
-  const topHolders = remote?.topHolders || [];
-  const remoteTrades = remote?.trades || [];
-  const marketActivity = remote?.marketActivity || null;
-  const fallbackActivity = useMemo(
-    () => selectMarketActivityBucket(marketActivity || undefined),
-    [marketActivity],
-  );
 
   const totalSupplyTokens = token.totalSupplyTokens ?? (remote?.coin?.total_supply ? Number(remote.coin.total_supply) / 1_000_000_000 : undefined);
   const priceSol = token.price?.priceSol ?? 0;
