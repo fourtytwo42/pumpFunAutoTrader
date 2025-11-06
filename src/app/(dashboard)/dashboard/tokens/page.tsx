@@ -109,14 +109,20 @@ export default function TokensPage() {
   }
 
   const formatPricePerMillion = (priceUsd: number | null) => {
-    if (!priceUsd || priceUsd === 0) return 'N/A'
+    if (!priceUsd || priceUsd === 0 || isNaN(priceUsd)) return 'N/A'
     
     // Convert to price per million tokens
     const pricePerMillion = priceUsd * 1_000_000
     
+    // Handle very small values
+    if (pricePerMillion < 0.000001) {
+      return 'N/A'
+    }
+    
     // Format the price
     if (pricePerMillion < 0.01) {
-      return `$${pricePerMillion.toFixed(4)}`
+      // Show more precision for very small values
+      return `$${pricePerMillion.toFixed(6)}`
     } else if (pricePerMillion < 1000) {
       return `$${pricePerMillion.toFixed(2)}`
     } else if (pricePerMillion < 1000000) {
