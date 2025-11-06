@@ -34,7 +34,6 @@ yarn-error.log*
 next-env.d.ts
 
 # Prisma
-/prisma/migrations
 
 # PM2
 logs/
@@ -45,4 +44,3 @@ logs/
 .vscode
 *.swp
 *.swo
-
