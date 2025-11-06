@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDashboardSnapshot } from '@/lib/dashboard'
+import { requireAuth } from '@/lib/middleware'
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await requireAuth({ redirectOnFail: false })
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     const walletId = request.nextUrl.searchParams.get('walletId') || undefined
-    const snapshot = await getDashboardSnapshot(walletId)
+    const snapshot = await getDashboardSnapshot(session.user.id, walletId)
 
     if (!snapshot) {
       return NextResponse.json({ error: 'Dashboard metrics unavailable' }, { status: 404 })

@@ -22,9 +22,9 @@ import { AgentEventFeed } from './components/AgentEventFeed'
 import { formatDistanceToNow } from 'date-fns'
 
 export default async function DashboardPage() {
-  await requireAuth()
+  const session = await requireAuth()
 
-  const snapshot = await getDashboardSnapshot()
+  const snapshot = session ? await getDashboardSnapshot(session.user.id) : null
   if (!snapshot) {
     return (
       <Container maxWidth="lg">

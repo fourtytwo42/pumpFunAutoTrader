@@ -2,9 +2,10 @@ import { Prisma } from '@prisma/client'
 import { prisma } from './db'
 import { getLatestSolPrice, getTokenUsdPrice } from './metrics'
 
-export async function getDefaultWallet() {
+export async function getDefaultWallet(userId?: string) {
   try {
     const wallet = await prisma.wallet.findFirst({
+      where: userId ? { userId } : undefined,
       orderBy: { createdAt: 'asc' },
       include: {
         positions: true,
@@ -25,14 +26,14 @@ export async function getDefaultWallet() {
   }
 }
 
-export async function getDashboardSnapshot(walletId?: string) {
+export async function getDashboardSnapshot(userId: string, walletId?: string) {
   try {
     let wallet = null
 
     if (walletId) {
       try {
         wallet = await prisma.wallet.findUnique({
-          where: { id: walletId },
+          where: { id: walletId, userId },
           include: {
             positions: true,
           },
@@ -48,7 +49,7 @@ export async function getDashboardSnapshot(walletId?: string) {
         throw error
       }
     } else {
-      wallet = await getDefaultWallet()
+      wallet = await getDefaultWallet(userId)
     }
 
     if (!wallet) {
@@ -88,6 +89,7 @@ export async function getDashboardSnapshot(walletId?: string) {
     const openOrders = await prisma.order.count({
       where: {
         walletId: wallet.id,
+        userId,
         status: {
           in: ['pending', 'open', 'accepted', 'queued'],
         },

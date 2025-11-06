@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getTokenUsdPrice, getLatestSolPrice } from '@/lib/metrics'
+import { matchOpenOrdersForToken } from '@/lib/orders'
 
 export async function GET(
   _: Request,
@@ -12,6 +13,7 @@ export async function GET(
       prisma.token.findUnique({
         where: { mintAddress: mint },
         include: {
+          price: true,
           tokenStat: true,
         },
       }),
@@ -42,6 +44,10 @@ export async function GET(
       : null)
 
     const priceSol = tokenPx != null ? Number(tokenPx) : null
+
+    if (priceSol && priceSol > 0) {
+      await matchOpenOrdersForToken(token, priceSol)
+    }
 
     const activityByWindow: Record<string, unknown> = {}
     for (const entry of activity) {

@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
         status: order.status,
         qtyTokens: order.qtyTokens ? Number(order.qtyTokens) : null,
         qtySol: order.qtySol ? Number(order.qtySol) : null,
-        limitPriceUsd: order.limitPriceUsd ? Number(order.limitPriceUsd) : null,
+        limitPriceSol: order.limitPriceSol ? Number(order.limitPriceSol) : null,
         slippageBps: order.slippageBps,
         reason: order.reason,
         txSig: order.txSig,
@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { walletId, mint, side, qtyTokens, qtySol, slippageBps, limitUsd } = body || {}
+    const { walletId, mint, side, qtyTokens, qtySol, slippageBps, limitSol, userId } = body || {}
 
     if (!walletId || !mint || !side) {
       return NextResponse.json({ error: 'walletId, mint and side are required' }, { status: 400 })
@@ -89,8 +89,9 @@ export async function POST(request: NextRequest) {
         status: 'pending',
         qtyTokens: qtyTokens != null ? qtyTokens : undefined,
         qtySol: qtySol != null ? qtySol : undefined,
-        limitPriceUsd: limitUsd != null ? limitUsd : undefined,
+        limitPriceSol: limitSol != null ? limitSol : undefined,
         slippageBps: slippageBps ?? null,
+        userId: userId ?? null,
       },
     })
 

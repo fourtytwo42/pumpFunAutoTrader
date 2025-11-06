@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { getLatestSolPrice } from '@/lib/metrics'
 import { requireAuth } from '@/lib/middleware'
 import { getUserBalance } from '@/lib/trading'
+import { getDefaultWallet } from '@/lib/dashboard'
 
 export async function GET() {
   const session = await requireAuth({ redirectOnFail: false })
@@ -13,7 +14,8 @@ export async function GET() {
 
   const userId = session.user.id
 
-  const [balanceSol, trades, solPrice] = await Promise.all([
+  const [wallet, balanceSol, trades, solPrice] = await Promise.all([
+    getDefaultWallet(userId),
     getUserBalance(userId),
     prisma.userTrade.findMany({
       where: { userId },
@@ -30,6 +32,14 @@ export async function GET() {
     }),
     getLatestSolPrice(),
   ])
+
+  if (!wallet) {
+    return NextResponse.json({
+      balanceSol,
+      balanceUsd: solPrice ? balanceSol * solPrice : null,
+      transactions: [],
+    })
+  }
 
   const balanceUsd = solPrice ? balanceSol * solPrice : null
 

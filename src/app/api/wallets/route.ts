@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
+import { requireAuth } from '@/lib/middleware'
 
 const DEFAULT_LABEL = 'Simulation Wallet'
 
@@ -19,7 +20,13 @@ const normalizePubkey = (pubkey?: unknown) => {
 }
 
 export async function GET() {
+  const session = await requireAuth({ redirectOnFail: false })
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const wallets = await prisma.wallet.findMany({
+    where: { userId: session.user.id },
     orderBy: { createdAt: 'asc' },
   })
 
@@ -28,6 +35,10 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await requireAuth({ redirectOnFail: false })
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     const body = await request.json().catch(() => ({}))
     const label = normalizeLabel(body?.label)
     const pubkey = normalizePubkey(body?.pubkey)
@@ -36,6 +47,7 @@ export async function POST(request: NextRequest) {
       data: {
         label,
         pubkey,
+        userId: session.user.id,
       },
     })
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
-import { executeSellOrder } from '@/lib/trading'
+import { submitSellOrder } from '@/lib/orders'
 
 export async function POST(request: NextRequest) {
   try {
@@ -8,7 +8,8 @@ export async function POST(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const { tokenId, amountTokens } = await request.json()
+    const body = await request.json()
+    const { tokenId, amountTokens, limitPriceSol } = body || {}
 
     if (!tokenId || !amountTokens) {
       return NextResponse.json(
@@ -24,16 +25,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const result = await executeSellOrder(session.user.id, tokenId, amountTokens)
+    const result = await submitSellOrder({
+      userId: session.user.id,
+      tokenId,
+      amountTokens,
+      limitPriceSol,
+    })
 
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 })
     }
 
-    return NextResponse.json({
-      success: true,
-      solReceived: result.solReceived,
-    })
+    return NextResponse.json(result)
   } catch (error) {
     console.error('Sell order error:', error)
     return NextResponse.json(

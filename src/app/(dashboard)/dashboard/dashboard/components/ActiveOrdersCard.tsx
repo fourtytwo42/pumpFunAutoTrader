@@ -24,6 +24,7 @@ interface OrderRow {
   status: string
   qtyTokens: number | null
   qtySol: number | null
+  limitPriceSol?: number | null
   createdAt: string
   updatedAt: string
 }
@@ -89,6 +90,7 @@ export function ActiveOrdersCard({ walletId, initialOrders }: ActiveOrdersCardPr
                 <TableCell>Token</TableCell>
                 <TableCell align="right">Side</TableCell>
                 <TableCell align="right">Size</TableCell>
+                  <TableCell align="right">Limit (SOL)</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell align="right">Age</TableCell>
               </TableRow>
@@ -112,6 +114,9 @@ export function ActiveOrdersCard({ walletId, initialOrders }: ActiveOrdersCardPr
                       />
                     </TableCell>
                     <TableCell align="right">{size}</TableCell>
+                    <TableCell align="right">
+                      {order.limitPriceSol != null ? order.limitPriceSol.toFixed(6) : '—'}
+                    </TableCell>
                     <TableCell>
                       <Chip label={order.status} size="small" variant="outlined" />
                     </TableCell>

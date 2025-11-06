@@ -36,6 +36,8 @@ model User {
   aiLogs           AiTraderLog[]
   aiConfig         AiTraderConfig?
   createdAiConfigs AiTraderConfig[] @relation("AiConfigCreatedBy")
+  wallets          Wallet[]
+  orders           Order[]
 
   @@index([role, isActive])
   @@index([createdAt])
@@ -310,6 +312,8 @@ model Wallet {
   pubkey     String      @unique
   signerBlob Bytes?
   createdAt  DateTime    @default(now())
+  userId     String?
+  user       User?       @relation(fields: [userId], references: [id])
   positions  Position[]
   orders     Order[]
   trades     TradeTape[]
@@ -341,14 +345,16 @@ model Order {
   status        String
   qtyTokens     Decimal?    @map("qty_tokens") @db.Decimal(30, 18)
   qtySol        Decimal?    @map("qty_sol") @db.Decimal(30, 18)
-  limitPriceUsd Decimal?    @map("limit_price_usd") @db.Decimal(30, 18)
+  limitPriceSol Decimal?    @map("limit_price_sol") @db.Decimal(30, 18)
   slippageBps   Int?        @map("slippage_bps")
   reason        String?
   txSig         String?     @map("tx_sig")
+  userId        String?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @default(now()) @updatedAt
   wallet        Wallet      @relation(fields: [walletId], references: [id], onDelete: Cascade)
   token         Token       @relation(fields: [tokenMint], references: [mintAddress])
+  user          User?       @relation(fields: [userId], references: [id])
   executions    Execution[]
 
   @@index([walletId, status])

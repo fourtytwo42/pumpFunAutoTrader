@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { Decimal } from '@prisma/client/runtime/library'
+import { matchOpenOrdersForToken } from '@/lib/orders'
 
 const PUMP_HEADERS = {
   accept: 'application/json, text/plain, */*',
@@ -55,6 +56,9 @@ export async function GET(request: NextRequest) {
         where,
         include: {
           price: true,
+          tokenStat: {
+            select: { px: true },
+          },
         },
         orderBy: {
           createdAt: 'desc',
@@ -160,6 +164,10 @@ export async function GET(request: NextRequest) {
             // Note: We don't store market cap in trades, so this is a fallback
             // The real fix would be to ensure market cap is used during ingestion
           }
+        }
+
+        if (priceSol > 0) {
+          await matchOpenOrdersForToken(token, priceSol)
         }
 
         let totalSupplyTokens = 0

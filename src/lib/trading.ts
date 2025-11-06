@@ -118,7 +118,12 @@ export async function executeBuyOrder(
 
   const token = await prisma.token.findUnique({
     where: { id: tokenId },
-    include: { price: true },
+    include: {
+      price: true,
+      tokenStat: {
+        select: { px: true },
+      },
+    },
   })
 
   if (!token) {
@@ -127,30 +132,114 @@ export async function executeBuyOrder(
 
   const price = token.price
     ? Number(token.price.priceSol)
-    : await getTokenPriceAtTime(tokenId, session.currentTimestamp).then((p) =>
-        p ? p.priceSol : 0
-      )
+    : token.tokenStat?.px
+      ? Number(token.tokenStat.px)
+      : await getTokenPriceAtTime(tokenId, session.currentTimestamp).then((p) =>
+          p ? p.priceSol : 0
+        )
 
   if (price === 0) {
     return { success: false, error: 'Token price not available' }
   }
 
-  const tokensReceived = amountSol / price
+  const tokensReceived = await recordBuyFill({
+    userId,
+    tokenId,
+    amountSol,
+    priceSol: price,
+    timestamp: session.currentTimestamp,
+  })
 
-  // Create trade
+  return { success: true, tokensReceived }
+}
+
+export async function executeSellOrder(
+  userId: string,
+  tokenId: string,
+  amountTokens: number
+): Promise<{ success: boolean; error?: string; solReceived?: number }> {
+  const session = await advanceSimulationSession(userId)
+
+  if (!session) {
+    return { success: false, error: 'No active simulation session' }
+  }
+
+  const token = await prisma.token.findUnique({
+    where: { id: tokenId },
+    include: {
+      price: true,
+      tokenStat: {
+        select: { px: true },
+      },
+    },
+  })
+
+  if (!token) {
+    return { success: false, error: 'Token not found' }
+  }
+
+  const price = token.price
+    ? Number(token.price.priceSol)
+    : token.tokenStat?.px
+      ? Number(token.tokenStat.px)
+      : await getTokenPriceAtTime(tokenId, session.currentTimestamp).then((p) =>
+          p ? p.priceSol : 0
+        )
+
+  if (price === 0) {
+    return { success: false, error: 'Token price not available' }
+  }
+
+  const solReceived = await recordSellFill({
+    userId,
+    tokenId,
+    amountTokens,
+    priceSol: price,
+    timestamp: session.currentTimestamp,
+  })
+
+  return { success: true, solReceived }
+}
+
+interface BuyFillParams {
+  userId: string
+  tokenId: string
+  amountSol: number
+  priceSol: number
+  timestamp: bigint
+  walletId?: string
+}
+
+interface SellFillParams {
+  userId: string
+  tokenId: string
+  amountTokens: number
+  priceSol: number
+  timestamp: bigint
+  walletId?: string
+}
+
+export async function recordBuyFill({
+  userId,
+  tokenId,
+  amountSol,
+  priceSol,
+  timestamp,
+}: BuyFillParams): Promise<number> {
+  const tokensReceived = amountSol / priceSol
+
   await prisma.userTrade.create({
     data: {
       userId,
       tokenId,
-      type: 1, // Buy
+      type: 1,
       amountSol,
       amountTokens: tokensReceived,
-      priceSol: price,
-      simulatedTimestamp: session.currentTimestamp,
+      priceSol,
+      simulatedTimestamp: timestamp,
     },
   })
 
-  // Update portfolio
   const existing = await prisma.userPortfolio.findUnique({
     where: {
       userId_tokenId: {
@@ -163,7 +252,7 @@ export async function executeBuyOrder(
   if (existing) {
     const newAmount = Number(existing.amount) + tokensReceived
     const newAvgPrice =
-      (Number(existing.avgBuyPrice) * Number(existing.amount) + price * tokensReceived) /
+      (Number(existing.avgBuyPrice) * Number(existing.amount) + priceSol * tokensReceived) /
       newAmount
 
     await prisma.userPortfolio.update({
@@ -184,25 +273,21 @@ export async function executeBuyOrder(
         userId,
         tokenId,
         amount: tokensReceived,
-        avgBuyPrice: price,
+        avgBuyPrice: priceSol,
       },
     })
   }
 
-  return { success: true, tokensReceived }
+  return tokensReceived
 }
 
-export async function executeSellOrder(
-  userId: string,
-  tokenId: string,
-  amountTokens: number
-): Promise<{ success: boolean; error?: string; solReceived?: number }> {
-  const session = await advanceSimulationSession(userId)
-
-  if (!session) {
-    return { success: false, error: 'No active simulation session' }
-  }
-
+export async function recordSellFill({
+  userId,
+  tokenId,
+  amountTokens,
+  priceSol,
+  timestamp,
+}: SellFillParams): Promise<number> {
   const portfolio = await prisma.userPortfolio.findUnique({
     where: {
       userId_tokenId: {
@@ -213,44 +298,23 @@ export async function executeSellOrder(
   })
 
   if (!portfolio || Number(portfolio.amount) < amountTokens) {
-    return { success: false, error: 'Insufficient token balance' }
+    throw new Error('Insufficient token balance')
   }
 
-  const token = await prisma.token.findUnique({
-    where: { id: tokenId },
-    include: { price: true },
-  })
+  const solReceived = amountTokens * priceSol
 
-  if (!token) {
-    return { success: false, error: 'Token not found' }
-  }
-
-  const price = token.price
-    ? Number(token.price.priceSol)
-    : await getTokenPriceAtTime(tokenId, session.currentTimestamp).then((p) =>
-        p ? p.priceSol : 0
-      )
-
-  if (price === 0) {
-    return { success: false, error: 'Token price not available' }
-  }
-
-  const solReceived = amountTokens * price
-
-  // Create trade
   await prisma.userTrade.create({
     data: {
       userId,
       tokenId,
-      type: 2, // Sell
+      type: 2,
       amountSol: solReceived,
       amountTokens,
-      priceSol: price,
-      simulatedTimestamp: session.currentTimestamp,
+      priceSol,
+      simulatedTimestamp: timestamp,
     },
   })
 
-  // Update portfolio
   const newAmount = Number(portfolio.amount) - amountTokens
   if (newAmount <= 0) {
     await prisma.userPortfolio.delete({
@@ -275,5 +339,5 @@ export async function executeSellOrder(
     })
   }
 
-  return { success: true, solReceived }
+  return solReceived
 }

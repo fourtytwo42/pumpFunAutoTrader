@@ -207,6 +207,10 @@ export default function TokenDetailPage() {
   const [tradeSuccess, setTradeSuccess] = useState("");
   const [candleInterval, setCandleInterval] = useState<(typeof CANDLE_INTERVALS)[number]>('1m');
   const [metrics, setMetrics] = useState<TokenMetrics | null>(null);
+  const [buyOrderType, setBuyOrderType] = useState<'market' | 'limit'>('market');
+  const [buyLimitPrice, setBuyLimitPrice] = useState('');
+  const [sellOrderType, setSellOrderType] = useState<'market' | 'limit'>('market');
+  const [sellLimitPrice, setSellLimitPrice] = useState('');
   const handleCandleIntervalChange = (_: unknown, value: (typeof CANDLE_INTERVALS)[number] | null) => {
     if (value) {
       setCandleInterval(value);
@@ -255,6 +259,11 @@ export default function TokenDetailPage() {
   const handleBuy = async () => {
     if (!buyAmount || parseFloat(buyAmount) <= 0 || !token) return;
     const amountSol = parseFloat(buyAmount);
+    const limitPriceSol = buyOrderType === 'limit' ? parseFloat(buyLimitPrice) : undefined;
+    if (buyOrderType === 'limit' && (!limitPriceSol || limitPriceSol <= 0)) {
+      setError('Enter a valid limit price in SOL');
+      return;
+    }
     const approved = await requestApproval({
       type: "buy",
       tokenName: token.name,
@@ -273,6 +282,7 @@ export default function TokenDetailPage() {
         body: JSON.stringify({
           tokenId: token.id,
           amountSol,
+          limitPriceSol: limitPriceSol ?? null,
         }),
       });
 
@@ -280,11 +290,17 @@ export default function TokenDetailPage() {
       if (!response.ok) {
         throw new Error(data.error || "Buy failed");
       }
-
-      setTradeSuccess(`Bought ${data.tokensReceived?.toFixed(2)} tokens!`);
+      if (data.status === 'open') {
+        setTradeSuccess('Limit buy order placed. Waiting for market to reach your price.');
+      } else {
+        setTradeSuccess(`Bought ${data.tokensReceived?.toFixed(2)} tokens at ${data.fillPrice?.toFixed(6)} SOL!`);
+        refreshWallet();
+      }
       setBuyAmount("");
+      if (buyOrderType === 'limit') {
+        setBuyLimitPrice('');
+      }
       fetchToken();
-      refreshWallet();
     } catch (err: any) {
       setError(err.message || "Buy failed");
     } finally {
@@ -295,6 +311,11 @@ export default function TokenDetailPage() {
   const handleSell = async () => {
     if (!sellAmount || parseFloat(sellAmount) <= 0 || !token) return;
     const amountTokens = parseFloat(sellAmount);
+    const limitPriceSol = sellOrderType === 'limit' ? parseFloat(sellLimitPrice) : undefined;
+    if (sellOrderType === 'limit' && (!limitPriceSol || limitPriceSol <= 0)) {
+      setError('Enter a valid limit price in SOL');
+      return;
+    }
     const approved = await requestApproval({
       type: "sell",
       tokenName: token.name,
@@ -313,6 +334,7 @@ export default function TokenDetailPage() {
         body: JSON.stringify({
           tokenId: token.id,
           amountTokens,
+          limitPriceSol: limitPriceSol ?? null,
         }),
       });
 
@@ -320,11 +342,17 @@ export default function TokenDetailPage() {
       if (!response.ok) {
         throw new Error(data.error || "Sell failed");
       }
-
-      setTradeSuccess(`Sold for ${data.solReceived?.toFixed(4)} SOL!`);
+      if (data.status === 'open') {
+        setTradeSuccess('Limit sell order placed. Waiting for market to reach your price.');
+      } else {
+        setTradeSuccess(`Sold for ${data.solReceived?.toFixed(4)} SOL at ${data.fillPrice?.toFixed(6)} SOL!`);
+        refreshWallet();
+      }
       setSellAmount("");
+      if (sellOrderType === 'limit') {
+        setSellLimitPrice('');
+      }
       fetchToken();
-      refreshWallet();
     } catch (err: any) {
       setError(err.message || "Sell failed");
     } finally {
@@ -911,48 +939,110 @@ export default function TokenDetailPage() {
             <Typography variant="h6" gutterBottom>
               Buy
             </Typography>
-            <TextField
-              fullWidth
-              label="Amount (SOL)"
-              type="number"
-              value={buyAmount}
-              onChange={(e) => setBuyAmount(e.target.value)}
-              sx={{ mb: 2 }}
-            />
-            <Button
-              fullWidth
-              variant="contained"
-              color="success"
-              startIcon={<ShoppingCart />}
-              onClick={handleBuy}
-              disabled={trading || !buyAmount}
-            >
-              {trading ? "Buying..." : "Buy"}
-            </Button>
+            <Stack spacing={2}>
+              <ToggleButtonGroup
+                color="primary"
+                value={buyOrderType}
+                exclusive
+                size="small"
+                onChange={(_, value) => {
+                  if (value) {
+                    setBuyOrderType(value);
+                    if (value === 'market') {
+                      setBuyLimitPrice('');
+                    }
+                  }
+                }}
+              >
+                <ToggleButton value="market">Market</ToggleButton>
+                <ToggleButton value="limit">Limit</ToggleButton>
+              </ToggleButtonGroup>
+              {buyOrderType === 'limit' ? (
+                <TextField
+                  fullWidth
+                  label="Limit Price (SOL)"
+                  type="number"
+                  value={buyLimitPrice}
+                  onChange={(e) => setBuyLimitPrice(e.target.value)}
+                />
+              ) : null}
+              <TextField
+                fullWidth
+                label="Amount (SOL)"
+                type="number"
+                value={buyAmount}
+                onChange={(e) => setBuyAmount(e.target.value)}
+              />
+              <Button
+                fullWidth
+                variant="contained"
+                color="success"
+                startIcon={<ShoppingCart />}
+                onClick={handleBuy}
+                disabled={
+                  trading ||
+                  !buyAmount ||
+                  (buyOrderType === 'limit' && (!buyLimitPrice || parseFloat(buyLimitPrice) <= 0))
+                }
+              >
+                {trading ? "Buying..." : buyOrderType === 'limit' ? 'Place Buy Order' : 'Buy'}
+              </Button>
+            </Stack>
           </Paper>
 
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
               Sell
             </Typography>
-            <TextField
-              fullWidth
-              label="Amount (Tokens)"
-              type="number"
-              value={sellAmount}
-              onChange={(e) => setSellAmount(e.target.value)}
-              sx={{ mb: 2 }}
-            />
-            <Button
-              fullWidth
-              variant="contained"
-              color="error"
-              startIcon={<Sell />}
-              onClick={handleSell}
-              disabled={trading || !sellAmount}
-            >
-              {trading ? "Selling..." : "Sell"}
-            </Button>
+            <Stack spacing={2}>
+              <ToggleButtonGroup
+                color="primary"
+                value={sellOrderType}
+                exclusive
+                size="small"
+                onChange={(_, value) => {
+                  if (value) {
+                    setSellOrderType(value);
+                    if (value === 'market') {
+                      setSellLimitPrice('');
+                    }
+                  }
+                }}
+              >
+                <ToggleButton value="market">Market</ToggleButton>
+                <ToggleButton value="limit">Limit</ToggleButton>
+              </ToggleButtonGroup>
+              {sellOrderType === 'limit' ? (
+                <TextField
+                  fullWidth
+                  label="Limit Price (SOL)"
+                  type="number"
+                  value={sellLimitPrice}
+                  onChange={(e) => setSellLimitPrice(e.target.value)}
+                />
+              ) : null}
+              <TextField
+                fullWidth
+                label="Amount (Tokens)"
+                type="number"
+                value={sellAmount}
+                onChange={(e) => setSellAmount(e.target.value)}
+              />
+              <Button
+                fullWidth
+                variant="contained"
+                color="error"
+                startIcon={<Sell />}
+                onClick={handleSell}
+                disabled={
+                  trading ||
+                  !sellAmount ||
+                  (sellOrderType === 'limit' && (!sellLimitPrice || parseFloat(sellLimitPrice) <= 0))
+                }
+              >
+                {trading ? "Selling..." : sellOrderType === 'limit' ? 'Place Sell Order' : 'Sell'}
+              </Button>
+            </Stack>
           </Paper>
         </Grid>
       </Grid>

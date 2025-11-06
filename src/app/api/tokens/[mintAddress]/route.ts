@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { matchOpenOrdersForToken } from '@/lib/orders'
 
 const PUMP_HEADERS = {
   accept: 'application/json, text/plain, */*',
@@ -64,6 +65,9 @@ export async function GET(
       where: { mintAddress: params.mintAddress },
       include: {
         price: true,
+        tokenStat: {
+          select: { px: true },
+        },
       },
     })
 
@@ -107,6 +111,10 @@ export async function GET(
       totalSupplyTokens = Number(token.totalSupply.toString()) / TOKEN_DECIMALS_NUMBER
     } catch (error) {
       totalSupplyTokens = 0
+    }
+
+    if (priceSol > 0) {
+      await matchOpenOrdersForToken(token, priceSol)
     }
 
     const [coinDetails, tradesData, candlesData, topHoldersData] = await Promise.all([
