@@ -169,24 +169,25 @@ export default function PriceChart({ tokenAddress, interval = '1m', height = 300
     return [priceExtent.min - padding, priceExtent.max + padding] as [number, number]
   }, [priceExtent])
 
-  const chartHeight = useMemo(() => Math.max(height - CHART_MARGIN.top - CHART_MARGIN.bottom, 1), [height])
-
-  const scaleY = useMemo(() => {
-    const [domainMin, domainMax] = domain
-    const denom = domainMax - domainMin || Number.EPSILON
-    return (value: number) => CHART_MARGIN.top + ((domainMax - value) / denom) * chartHeight
-  }, [domain, chartHeight])
-
   const candleShape = useCallback((props: any) => {
-    const { x, width, payload } = props || {}
+    const { x, width, payload, yAxis } = props || {}
     if (!payload) {
       return null
     }
 
-    const openY = scaleY(payload.open)
-    const closeY = scaleY(payload.close)
-    const highY = scaleY(payload.high)
-    const lowY = scaleY(payload.low)
+    const scale = yAxis && typeof yAxis.scale === 'function' ? yAxis.scale : null
+    if (!scale) {
+      return null
+    }
+
+    const openY = scale(payload.open)
+    const closeY = scale(payload.close)
+    const highY = scale(payload.high)
+    const lowY = scale(payload.low)
+
+    if (![openY, closeY, highY, lowY].every((v) => Number.isFinite(v))) {
+      return null
+    }
 
     const isUp = payload.direction === 'up'
     const color = isUp ? '#00ff88' : '#ff4d4d'
@@ -216,7 +217,7 @@ export default function PriceChart({ tokenAddress, interval = '1m', height = 300
         />
       </g>
     )
-  }, [scaleY])
+  }, [])
 
   if (loading) {
     return (
