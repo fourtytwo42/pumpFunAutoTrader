@@ -107,28 +107,33 @@ export async function GET(
 
     const tradeHistory = trades.map((trade) => {
       const amountSol = Number(trade.amountSol)
-      const amountTokens = Number(trade.amountTokens)
-    const storedPriceSol = Number(trade.priceSol)
-    const priceSol =
-      storedPriceSol && storedPriceSol > 0
-        ? storedPriceSol
-        : amountTokens > 0
-          ? amountSol / amountTokens
-          : 0
-    const tradePriceUsd =
-      priceSol > 0 && solPriceUsd > 0
-        ? priceSol * solPriceUsd
-        : currentPriceUsd
-    const amountUsd =
-      solPriceUsd > 0
-        ? amountSol * solPriceUsd
-        : amountSol * (tradePriceUsd > 0 ? tradePriceUsd : currentPriceUsd)
+      const rawAmountTokens = trade.amountTokens
+      const amountTokens = rawAmountTokens ? Number(rawAmountTokens) : 0
+      const amountMillions = amountTokens > 0 ? amountTokens / 1_000_000 : 0
+      const storedPriceSol = Number(trade.priceSol)
+      const priceSol =
+        storedPriceSol && storedPriceSol > 0
+          ? storedPriceSol
+          : amountTokens > 0
+            ? amountSol / amountTokens
+            : 0
+      const pricePerMillionSol = priceSol > 0 ? priceSol * 1_000_000 : 0
+      const tradePriceUsd =
+        priceSol > 0 && solPriceUsd > 0
+          ? priceSol * solPriceUsd
+          : currentPriceUsd
+      const amountUsd =
+        solPriceUsd > 0
+          ? amountSol * solPriceUsd
+          : amountSol * (tradePriceUsd > 0 ? tradePriceUsd : currentPriceUsd)
       return {
         id: trade.id.toString(),
         type: trade.type === 1 ? 'buy' : 'sell',
         amountSol,
         amountTokens,
+        amountMillions,
         priceSol,
+        pricePerMillionSol,
         priceUsd: tradePriceUsd,
         amountUsd,
         timestamp: Number(trade.simulatedTimestamp),

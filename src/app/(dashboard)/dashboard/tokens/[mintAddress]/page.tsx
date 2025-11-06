@@ -136,7 +136,9 @@ interface UserTradeEntry {
   amountSol: number;
   amountUsd: number;
   amountTokens: number;
+  amountMillions?: number;
   priceSol: number;
+  pricePerMillionSol?: number;
   priceUsd: number;
   timestamp: number;
 }
@@ -1184,6 +1186,7 @@ export default function TokenDetailPage() {
                       <TableHead>
                         <TableRow>
                           <TableCell>Type</TableCell>
+                          <TableCell align="right">Amount (M tokens)</TableCell>
                           <TableCell align="right">Amount (SOL)</TableCell>
                           <TableCell align="right">Amount (USD)</TableCell>
                           <TableCell align="right">Price (SOL)</TableCell>
@@ -1200,9 +1203,18 @@ export default function TokenDetailPage() {
                                 size="small"
                               />
                             </TableCell>
+                            <TableCell align="right">
+                              {trade.amountMillions !== undefined
+                                ? trade.amountMillions.toFixed(4)
+                                : (trade.amountTokens / 1_000_000).toFixed(4)}
+                            </TableCell>
                             <TableCell align="right">{trade.amountSol.toFixed(4)}</TableCell>
                             <TableCell align="right">{formatUsdFull(trade.amountUsd)}</TableCell>
-                            <TableCell align="right">{formatSolPrice(trade.priceSol)}</TableCell>
+                            <TableCell align="right">
+                              {trade.pricePerMillionSol
+                                ? `${formatSolValue(trade.pricePerMillionSol)} / 1M`
+                                : `${formatSolPrice(trade.priceSol)} / token`}
+                            </TableCell>
                             <TableCell>{formatTimestamp(trade.timestamp)}</TableCell>
                           </TableRow>
                         ))}
