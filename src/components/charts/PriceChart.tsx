@@ -42,7 +42,27 @@ export default function PriceChart({ tokenAddress, interval = '1h', height = 300
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch(`/api/tokens/${tokenAddress}/candles?interval=${interval}&limit=100`)
+      // Get current simulation time for time-travel support
+      let simulationTime: string | null = null
+      try {
+        const simResponse = await fetch('/api/simulation/time')
+        if (simResponse.ok) {
+          const simData = await simResponse.json()
+          if (simData?.currentTimestamp) {
+            simulationTime = simData.currentTimestamp.toString()
+          }
+        }
+      } catch (e) {
+        // If simulation time fetch fails, continue without it (real-time mode)
+      }
+
+      // Build URL with simulation time if available
+      let url = `/api/tokens/${tokenAddress}/candles?interval=${interval}&limit=100`
+      if (simulationTime) {
+        url += `&simulation_time=${simulationTime}`
+      }
+
+      const response = await fetch(url)
       if (!response.ok) {
         throw new Error('Failed to fetch chart data')
       }
