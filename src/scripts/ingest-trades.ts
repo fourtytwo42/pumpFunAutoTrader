@@ -26,6 +26,7 @@ interface TradeCreatedEvent {
   description?: string
   twitter?: string | null
   telegram?: string | null
+  website?: string | null
   creator: string
   total_supply: number | string
   
@@ -159,6 +160,7 @@ async function processTrade(tradeData: TradeCreatedEvent) {
           imageUri: tradeData.image_uri || null,
           twitter: tradeData.twitter || null,
           telegram: tradeData.telegram || null,
+          website: tradeData.website || null,
           creatorAddress: tradeData.creator || 'unknown',
           createdAt: BigInt((tradeData.created_timestamp || tradeData.timestamp || Date.now() / 1000) * 1000),
           totalSupply: new Decimal(tradeData.total_supply?.toString() || '0'),

@@ -23,7 +23,11 @@ import {
 import SearchIcon from '@mui/icons-material/Search'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import TrendingDownIcon from '@mui/icons-material/TrendingDown'
+import TwitterIcon from '@mui/icons-material/Twitter'
+import TelegramIcon from '@mui/icons-material/Telegram'
+import LanguageIcon from '@mui/icons-material/Language'
 import { useRouter } from 'next/navigation'
+import IconButton from '@mui/material/IconButton'
 
 interface Token {
   id: string
@@ -31,6 +35,9 @@ interface Token {
   symbol: string
   name: string
   imageUri: string | null
+  twitter: string | null
+  telegram: string | null
+  website: string | null
   price: { priceSol: number; priceUsd: number } | null
   buyVolume: number
   sellVolume: number
@@ -265,9 +272,63 @@ export default function TokensPage() {
                       <Typography variant="h6" noWrap sx={{ fontWeight: 'bold', mb: 0.5 }}>
                         {token.name}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary" noWrap>
+                      <Typography variant="body2" color="text.secondary" noWrap sx={{ mb: 1 }}>
                         {token.symbol}
                       </Typography>
+                      
+                      {/* Social media icons */}
+                      {(token.twitter || token.telegram || token.website) && (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.5, mt: 1 }}>
+                          {token.twitter && (
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                window.open(token.twitter!, '_blank', 'noopener,noreferrer')
+                              }}
+                              sx={{ 
+                                color: 'text.secondary',
+                                '&:hover': { color: '#1DA1F2' },
+                                p: 0.5,
+                              }}
+                            >
+                              <TwitterIcon fontSize="small" />
+                            </IconButton>
+                          )}
+                          {token.telegram && (
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                window.open(token.telegram!, '_blank', 'noopener,noreferrer')
+                              }}
+                              sx={{ 
+                                color: 'text.secondary',
+                                '&:hover': { color: '#0088cc' },
+                                p: 0.5,
+                              }}
+                            >
+                              <TelegramIcon fontSize="small" />
+                            </IconButton>
+                          )}
+                          {token.website && (
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                window.open(token.website!, '_blank', 'noopener,noreferrer')
+                              }}
+                              sx={{ 
+                                color: 'text.secondary',
+                                '&:hover': { color: 'primary.main' },
+                                p: 0.5,
+                              }}
+                            >
+                              <LanguageIcon fontSize="small" />
+                            </IconButton>
+                          )}
+                        </Box>
+                      )}
                     </Box>
 
                     {/* Price */}

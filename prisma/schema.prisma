@@ -65,6 +65,7 @@ model Token {
   imageUri        String?   @map("image_uri")
   twitter         String?
   telegram        String?
+  website         String?
   createdAt       BigInt    @map("created_timestamp")
   creatorAddress  String    @map("creator_address")
   totalSupply     Decimal   @map("total_supply") @db.Decimal(30, 9)

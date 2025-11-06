@@ -107,6 +107,9 @@ export async function GET(request: NextRequest) {
           symbol: token.symbol,
           name: token.name,
           imageUri: token.imageUri,
+          twitter: token.twitter,
+          telegram: token.telegram,
+          website: token.website,
           price: token.price
             ? {
                 priceSol: Number(token.price.priceSol),
