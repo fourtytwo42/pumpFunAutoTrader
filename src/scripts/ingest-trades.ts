@@ -112,33 +112,60 @@ async function processTrade(tradeData: TradeCreatedEvent) {
     // Price = virtual_sol_reserves / virtual_token_reserves
     let priceSol: Decimal
     let priceUsdFromMarketCap: Decimal | null = null
+    let calculationMethod = 'none'
     
     // First, try to calculate from bonding curve reserves (most accurate for current price)
     if (tradeData.virtual_sol_reserves && tradeData.virtual_token_reserves) {
+      calculationMethod = 'bonding_curve_reserves'
       const virtualSolReserves = new Decimal(tradeData.virtual_sol_reserves.toString()).div(LAMPORTS_PER_SOL) // Convert lamports to SOL
       const virtualTokenReserves = new Decimal(tradeData.virtual_token_reserves.toString())
+      console.log(`🔍 [${tradeData.symbol}] Price calculation from bonding curve:`)
+      console.log(`   virtual_sol_reserves (lamports): ${tradeData.virtual_sol_reserves}`)
+      console.log(`   virtual_sol_reserves (SOL): ${virtualSolReserves.toString()}`)
+      console.log(`   virtual_token_reserves: ${virtualTokenReserves.toString()}`)
       if (virtualTokenReserves.gt(0)) {
         // Price per token = SOL reserves / token reserves
         priceSol = virtualSolReserves.div(virtualTokenReserves)
+        console.log(`   Calculated priceSol: ${priceSol.toString()}`)
+        console.log(`   SOL per 1M tokens: ${(Number(priceSol) * 1000000).toFixed(6)}`)
       } else {
         priceSol = new Decimal(0)
+        console.log(`   ⚠️ Invalid token reserves`)
       }
     } else if (tradeData.usd_market_cap && tradeData.total_supply) {
+      calculationMethod = 'market_cap'
       // Fallback: calculate from market cap if available
       const totalSupply = new Decimal(tradeData.total_supply.toString())
       const marketCap = new Decimal(tradeData.usd_market_cap.toString())
+      console.log(`🔍 [${tradeData.symbol}] Price calculation from market cap:`)
+      console.log(`   usd_market_cap: ${marketCap.toString()}`)
+      console.log(`   total_supply: ${totalSupply.toString()}`)
       if (totalSupply.gt(0)) {
         priceUsdFromMarketCap = marketCap.div(totalSupply)
         // Convert USD price to SOL price using current SOL price
         priceSol = priceUsdFromMarketCap.div(solPriceUsd)
+        console.log(`   Calculated priceUsd: ${priceUsdFromMarketCap.toString()}`)
+        console.log(`   Calculated priceSol: ${priceSol.toString()}`)
+        console.log(`   SOL per 1M tokens: ${(Number(priceSol) * 1000000).toFixed(6)}`)
       } else {
         priceSol = new Decimal(0)
+        console.log(`   ⚠️ Invalid total supply`)
       }
     } else if (tradeData.priceSol) {
+      calculationMethod = 'provided_priceSol'
       priceSol = new Decimal(tradeData.priceSol)
+      console.log(`🔍 [${tradeData.symbol}] Using provided priceSol: ${priceSol.toString()}`)
     } else {
+      calculationMethod = 'trade_amounts'
       // Last resort: price = sol_amount / token_amount (not as accurate due to bonding curve)
+      console.log(`🔍 [${tradeData.symbol}] Price calculation from trade amounts:`)
+      console.log(`   sol_amount (lamports): ${tradeData.sol_amount}`)
+      console.log(`   amountSol: ${amountSol.toString()}`)
+      console.log(`   token_amount: ${tradeData.token_amount}`)
+      console.log(`   baseAmount: ${baseAmount.toString()}`)
       priceSol = baseAmount.gt(0) ? amountSol.div(baseAmount) : new Decimal(0)
+      console.log(`   Calculated priceSol: ${priceSol.toString()}`)
+      console.log(`   SOL per 1M tokens: ${(Number(priceSol) * 1000000).toFixed(6)}`)
     }
 
     let priceUsd: Decimal
@@ -241,9 +268,15 @@ async function processTrade(tradeData: TradeCreatedEvent) {
     const priceUsdNum = Number(priceUsd)
     const priceSolNum = Number(priceSol)
     const solPerMillion = priceSolNum * 1000000
-    console.log(
-      `📊 Trade: ${tradeData.is_buy ? 'BUY' : 'SELL'} ${tradeData.symbol} - ${amountSol.toString()} SOL @ ${priceSol.toString()} SOL/token (${solPerMillion.toFixed(6)} SOL per 1M tokens, $${(priceUsdNum * 1000000).toFixed(2)} USD per 1M tokens)`
-    )
+    const usdPerMillion = priceUsdNum * 1000000
+    console.log(`📊 [${tradeData.symbol}] Trade: ${tradeData.is_buy ? 'BUY' : 'SELL'}`)
+    console.log(`   Amount: ${amountSol.toString()} SOL, ${baseAmount.toString()} tokens`)
+    console.log(`   Price calculation method: ${calculationMethod}`)
+    console.log(`   Price per token: ${priceSol.toString()} SOL = $${priceUsdNum.toFixed(12)} USD`)
+    console.log(`   Per 1M tokens: ${solPerMillion.toFixed(6)} SOL = $${usdPerMillion.toFixed(2)} USD`)
+    if (solPerMillion < 0.001 || usdPerMillion < 0.01) {
+      console.log(`   ⚠️ WARNING: Price seems very low!`)
+    }
   } catch (error: any) {
     console.error('❌ Error processing trade:', error.message, error.stack)
   }
