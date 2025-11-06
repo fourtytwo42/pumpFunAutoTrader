@@ -36,17 +36,14 @@ interface ChartDatum extends CandleData {
 }
 
 const CandleShape = (props: any) => {
-  const { x, width, payload, domain, chartViewBox } = props
-  if (!payload || !domain || !Array.isArray(domain) || !chartViewBox) {
+  const { x, width, payload, yAxis } = props
+  if (!payload) {
     return null
   }
 
-  const [domainMin, domainMax] = domain
-  const { top = 0, height = 0 } = chartViewBox
-  const scale = (value: number) => {
-    if (domainMax === domainMin) return top + height / 2
-    const ratio = (domainMax - value) / (domainMax - domainMin)
-    return top + ratio * height
+  const scale = typeof yAxis?.scale === 'function' ? yAxis.scale : null
+  if (!scale) {
+    return null
   }
 
   const openY = scale(payload.open)
