@@ -108,11 +108,21 @@ export async function GET(
     const tradeHistory = trades.map((trade) => {
       const amountSol = Number(trade.amountSol)
       const amountTokens = Number(trade.amountTokens)
-      const priceSol = Number(trade.priceSol)
-      const tradePriceUsd =
-        priceSol > 0 && solPriceUsd > 0 ? priceSol * solPriceUsd : currentPriceUsd
-      const amountUsd =
-        amountSol > 0 && solPriceUsd > 0 ? amountSol * solPriceUsd : amountSol * currentPriceUsd
+    const storedPriceSol = Number(trade.priceSol)
+    const priceSol =
+      storedPriceSol && storedPriceSol > 0
+        ? storedPriceSol
+        : amountTokens > 0
+          ? amountSol / amountTokens
+          : 0
+    const tradePriceUsd =
+      priceSol > 0 && solPriceUsd > 0
+        ? priceSol * solPriceUsd
+        : currentPriceUsd
+    const amountUsd =
+      solPriceUsd > 0
+        ? amountSol * solPriceUsd
+        : amountSol * (tradePriceUsd > 0 ? tradePriceUsd : currentPriceUsd)
       return {
         id: trade.id.toString(),
         type: trade.type === 1 ? 'buy' : 'sell',

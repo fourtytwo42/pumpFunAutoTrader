@@ -220,6 +220,19 @@ const formatSolFull = (value?: number, fractionDigits = 4) => {
   return `${value.toFixed(fractionDigits)} SOL`;
 };
 
+const formatSolPrice = (value?: number) => {
+  if (value === undefined || value === null || Number.isNaN(value)) return "N/A";
+  if (value === 0) return "0 SOL";
+  const absValue = Math.abs(value);
+  if (absValue < 1e-8) {
+    return `${value.toExponential(2)} SOL`;
+  }
+  if (absValue < 1e-4) {
+    return `${value.toFixed(8)} SOL`;
+  }
+  return `${value.toFixed(6)} SOL`;
+};
+
 const formatCurrencyWithSign = (value?: number, currency: 'USD' | 'SOL' = 'USD') => {
   if (value === undefined || value === null || Number.isNaN(value)) return "N/A";
   const formatter = new Intl.NumberFormat('en-US', {
@@ -515,6 +528,11 @@ export default function TokenDetailPage() {
   const unrealizedSol = userPosition?.unrealizedSol ?? 0;
   const pnlPct = userPosition?.pnlPct ?? 0;
   const avgPriceSol = userPosition?.avgPriceSol ?? 0;
+  const avgPricePerMillionSol = avgPriceSol > 0 ? avgPriceSol * 1_000_000 : 0;
+  const avgPricePerMillionUsd =
+    avgPricePerMillionSol > 0 && solReferencePrice > 0
+      ? avgPricePerMillionSol * solReferencePrice
+      : 0;
 
   const BONDING_CURVE_BASE_SOL = 30;
   const BONDING_CURVE_TARGET_SOL = 690;
@@ -1117,9 +1135,18 @@ export default function TokenDetailPage() {
                   <Typography variant="caption" color="text.secondary">
                     Average Cost
                   </Typography>
-                  <Typography variant="body1">
-                    {avgPriceSol > 0 ? `${avgPriceSol.toFixed(6)} SOL` : 'N/A'}
-                  </Typography>
+                  {avgPricePerMillionSol > 0 ? (
+                    <>
+                      <Typography variant="body1" fontWeight={600}>
+                        {formatSolFull(avgPricePerMillionSol, 6)} per 1M
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {formatUsdFull(avgPricePerMillionUsd)} per 1M • {formatSolPrice(avgPriceSol)} per token
+                      </Typography>
+                    </>
+                  ) : (
+                    <Typography variant="body1">N/A</Typography>
+                  )}
                 </Box>
                 <Box>
                   <Typography variant="caption" color="text.secondary">
@@ -1175,7 +1202,7 @@ export default function TokenDetailPage() {
                             </TableCell>
                             <TableCell align="right">{trade.amountSol.toFixed(4)}</TableCell>
                             <TableCell align="right">{formatUsdFull(trade.amountUsd)}</TableCell>
-                            <TableCell align="right">{trade.priceSol.toFixed(6)}</TableCell>
+                            <TableCell align="right">{formatSolPrice(trade.priceSol)}</TableCell>
                             <TableCell>{formatTimestamp(trade.timestamp)}</TableCell>
                           </TableRow>
                         ))}
