@@ -68,6 +68,7 @@ model Token {
   website         String?
   createdAt       BigInt    @map("created_timestamp")
   kingOfTheHillTimestamp BigInt? @map("king_of_the_hill_timestamp")
+  completed       Boolean   @default(false) @map("complete")
   creatorAddress  String    @map("creator_address")
   totalSupply     Decimal   @map("total_supply") @db.Decimal(30, 9)
 

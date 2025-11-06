@@ -42,6 +42,7 @@ interface Token {
   createdAt: number
   lastTradeTimestamp: number | null
   kingOfTheHillTimestamp: number | null
+  completed: boolean
   buyVolume: number
   sellVolume: number
   totalVolume: number
@@ -278,9 +279,18 @@ export default function TokensPage() {
                     backgroundColor: getCardColor(token.volumeRatio),
                     border: '2px solid',
                     borderColor: token.volumeRatio > 0.6 ? 'rgba(0, 255, 136, 0.3)' : token.volumeRatio < 0.4 ? 'rgba(255, 68, 68, 0.3)' : '#333',
+                    position: 'relative',
                   }}
                   onClick={() => router.push(`/dashboard/tokens/${token.mintAddress}`)}
                 >
+                  {token.completed && (
+                    <Chip
+                      label="Graduated"
+                      color="primary"
+                      size="small"
+                      sx={{ position: 'absolute', top: 12, right: 12 }}
+                    />
+                  )}
                   <CardContent sx={{ p: 2 }}>
                     {/* Large token image at top */}
                     <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
@@ -417,7 +427,7 @@ export default function TokensPage() {
                         Last trade: {formatTimeAgo(token.lastTradeTimestamp, 'No trades')}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        KOTH: {token.kingOfTheHillTimestamp ? `Reached ${formatTimeAgo(token.kingOfTheHillTimestamp)}` : 'Not reached'}
+                        {token.completed ? 'Graduated' : 'KOTH: ' + (token.kingOfTheHillTimestamp ? `Reached ${formatTimeAgo(token.kingOfTheHillTimestamp)}` : 'Not reached')}
                       </Typography>
                     </Box>
 

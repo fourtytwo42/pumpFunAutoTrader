@@ -140,6 +140,7 @@ export async function GET(request: NextRequest) {
           website: token.website,
           createdAt: Number(token.createdAt),
           kingOfTheHillTimestamp: token.kingOfTheHillTimestamp ? Number(token.kingOfTheHillTimestamp) : null,
+          completed: token.completed,
           price: token.price
             ? {
                 priceSol,

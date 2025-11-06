@@ -41,6 +41,7 @@ interface TradeCreatedEvent {
   virtual_sol_reserves?: number | string
   virtual_token_reserves?: number | string
   king_of_the_hill_timestamp?: number | null
+  complete?: boolean
 }
 
 // Batch inserts for efficiency
@@ -99,6 +100,7 @@ async function processTrade(tradeData: TradeCreatedEvent) {
     const kingOfTheHillTimestamp = tradeData.king_of_the_hill_timestamp
       ? BigInt(tradeData.king_of_the_hill_timestamp)
       : null
+    const completed = tradeData.complete === true
     
     // Get SOL price for conversions (need this before price calculations)
     let solPriceUsd = 160
@@ -245,6 +247,7 @@ async function processTrade(tradeData: TradeCreatedEvent) {
           telegram: tradeData.telegram || undefined,
           website: tradeData.website || undefined,
           kingOfTheHillTimestamp: kingOfTheHillTimestamp ?? undefined,
+          completed: completed ? true : undefined,
           // Always update price info from the latest trade
           price: {
             upsert: {
@@ -272,6 +275,7 @@ async function processTrade(tradeData: TradeCreatedEvent) {
           creatorAddress: tradeData.creator || 'unknown',
           createdAt: BigInt((tradeData.created_timestamp || tradeData.timestamp || Date.now() / 1000) * 1000),
           kingOfTheHillTimestamp: kingOfTheHillTimestamp,
+          completed: completed,
           totalSupply: new Decimal(tradeData.total_supply?.toString() || '0'),
           price: {
             create: {

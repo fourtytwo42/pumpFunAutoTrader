@@ -46,6 +46,7 @@ export async function GET(
       ...token,
       createdAt: Number(token.createdAt),
       kingOfTheHillTimestamp: token.kingOfTheHillTimestamp ? Number(token.kingOfTheHillTimestamp) : null,
+      completed: token.completed,
       price: token.price
         ? {
             priceSol: Number(token.price.priceSol),

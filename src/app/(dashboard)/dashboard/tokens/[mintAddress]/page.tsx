@@ -36,6 +36,7 @@ interface TokenData {
   imageUri: string | null
   createdAt: number
   kingOfTheHillTimestamp: number | null
+  completed: boolean
   price: { priceSol: number; priceUsd: number; lastTradeTimestamp: number | null } | null
   stats: {
     buyVolume: number
@@ -247,8 +248,11 @@ export default function TokenDetailPage() {
         <Avatar src={token.imageUri || undefined} sx={{ width: 64, height: 64 }}>
           {token.symbol.charAt(0)}
         </Avatar>
-        <Box>
-          <Typography variant="h4">{token.name}</Typography>
+        <Box sx={{ flexGrow: 1 }}>
+          <Typography variant="h4" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {token.name}
+            {token.completed && <Chip label="Graduated" color="primary" size="small" />}
+          </Typography>
           <Typography variant="h6" color="text.secondary">
             {token.symbol} • {token.mintAddress}
           </Typography>
