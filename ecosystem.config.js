@@ -39,10 +39,9 @@ module.exports = {
       args: 'run aggregate:candles',
       cwd: '/home/hendo420/autoTrader',
       instances: 1,
-      autorestart: false, // Run once and exit - use cron for periodic runs
+      autorestart: true, // Keep running - polls every 15 minutes
       watch: false,
       max_memory_restart: '500M',
-      cron_restart: '*/15 * * * *', // Run every 15 minutes (only for active tokens, less frequent)
       env: {
         NODE_ENV: 'production',
       },

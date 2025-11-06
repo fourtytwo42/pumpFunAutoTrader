@@ -9,6 +9,7 @@ const prisma = new PrismaClient()
 // Higher threshold = fewer tokens pre-aggregated (uses less memory, slower for inactive tokens)
 const ACTIVE_TRADE_THRESHOLD = 1 // Tokens with 1+ trades in last hour (lowered for initial setup)
 const INTERVALS = [1, 5, 60, 360, 1440] // 1m, 5m, 1h, 6h, 24h
+const AGGREGATION_INTERVAL_MS = 15 * 60 * 1000 // Run every 15 minutes
 
 interface CandleData {
   tokenId: string
@@ -119,7 +120,7 @@ async function aggregateCandlesForToken(tokenId: string, intervalMinutes: number
 }
 
 async function aggregateAllCandles() {
-  console.log('🕯️ Starting candle aggregation for active tokens only...')
+  console.log(`🕯️ [${new Date().toISOString()}] Starting candle aggregation...`)
   const startTime = Date.now()
 
   // Only process tokens with recent activity (reduces memory usage)
@@ -226,7 +227,7 @@ async function aggregateAllCandles() {
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(2)
   console.log(
-    `✅ Candle aggregation completed: ${totalCandles} candles created/updated for ${processedTokens} active tokens in ${duration}s`
+    `✅ [${new Date().toISOString()}] Candle aggregation completed: ${totalCandles} candles created/updated for ${processedTokens} tokens in ${duration}s`
   )
   console.log(
     `💡 Note: Less active tokens will generate candles on-demand from trades when requested`
@@ -234,14 +235,37 @@ async function aggregateAllCandles() {
 }
 
 async function startAggregation() {
-  try {
-    await aggregateAllCandles()
-  } catch (error: any) {
-    console.error('❌ Fatal error:', error)
-    process.exit(1)
-  } finally {
+  // Run immediately on start
+  await aggregateAllCandles()
+
+  // Then run periodically
+  const interval = setInterval(async () => {
+    try {
+      await aggregateAllCandles()
+    } catch (error: any) {
+      console.error('❌ Error in periodic aggregation:', error.message)
+    }
+  }, AGGREGATION_INTERVAL_MS)
+
+  // Handle graceful shutdown
+  process.on('SIGINT', async () => {
+    console.log('\n🛑 Shutting down candle aggregation service...')
+    clearInterval(interval)
     await prisma.$disconnect()
-  }
+    process.exit(0)
+  })
+
+  process.on('SIGTERM', async () => {
+    console.log('\n🛑 Shutting down candle aggregation service...')
+    clearInterval(interval)
+    await prisma.$disconnect()
+    process.exit(0)
+  })
+
+  console.log(`⏰ Candle aggregation service running. Will aggregate every ${AGGREGATION_INTERVAL_MS / 1000 / 60} minutes.`)
 }
 
-startAggregation()
+startAggregation().catch((error) => {
+  console.error('❌ Fatal error:', error)
+  process.exit(1)
+})
