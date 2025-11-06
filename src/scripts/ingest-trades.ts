@@ -35,6 +35,8 @@ interface TradeCreatedEvent {
   priceUsd?: string
   market_cap?: number
   usd_market_cap?: number
+  virtual_sol_reserves?: number | string
+  virtual_token_reserves?: number | string
 }
 
 // Batch inserts for efficiency
@@ -106,12 +108,23 @@ async function processTrade(tradeData: TradeCreatedEvent) {
       // Use fallback if DB query fails
     }
     
-    // Calculate price - prioritize market cap calculation as it's more accurate
+    // Calculate price - use bonding curve reserves for most accurate price
+    // Price = virtual_sol_reserves / virtual_token_reserves
     let priceSol: Decimal
     let priceUsdFromMarketCap: Decimal | null = null
     
-    // First, try to calculate from market cap if available (most accurate)
-    if (tradeData.usd_market_cap && tradeData.total_supply) {
+    // First, try to calculate from bonding curve reserves (most accurate for current price)
+    if (tradeData.virtual_sol_reserves && tradeData.virtual_token_reserves) {
+      const virtualSolReserves = new Decimal(tradeData.virtual_sol_reserves.toString()).div(LAMPORTS_PER_SOL) // Convert lamports to SOL
+      const virtualTokenReserves = new Decimal(tradeData.virtual_token_reserves.toString())
+      if (virtualTokenReserves.gt(0)) {
+        // Price per token = SOL reserves / token reserves
+        priceSol = virtualSolReserves.div(virtualTokenReserves)
+      } else {
+        priceSol = new Decimal(0)
+      }
+    } else if (tradeData.usd_market_cap && tradeData.total_supply) {
+      // Fallback: calculate from market cap if available
       const totalSupply = new Decimal(tradeData.total_supply.toString())
       const marketCap = new Decimal(tradeData.usd_market_cap.toString())
       if (totalSupply.gt(0)) {
@@ -124,7 +137,7 @@ async function processTrade(tradeData: TradeCreatedEvent) {
     } else if (tradeData.priceSol) {
       priceSol = new Decimal(tradeData.priceSol)
     } else {
-      // Fallback: price = sol_amount / token_amount
+      // Last resort: price = sol_amount / token_amount (not as accurate due to bonding curve)
       priceSol = baseAmount.gt(0) ? amountSol.div(baseAmount) : new Decimal(0)
     }
 
