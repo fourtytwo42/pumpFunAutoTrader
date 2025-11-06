@@ -137,6 +137,10 @@ async function processTrade(tradeData: TradeCreatedEvent) {
       token = await prisma.token.upsert({
         where: { mintAddress: tradeData.mint },
         update: {
+          // Update social links if provided
+          twitter: tradeData.twitter || undefined,
+          telegram: tradeData.telegram || undefined,
+          website: tradeData.website || undefined,
           // Always update price info from the latest trade
           price: {
             upsert: {
