@@ -19,12 +19,12 @@
     "db:studio": "prisma studio",
     "setup": "npm install && npm run db:wait && npm run db:migrate:dev && npm run db:seed",
     "postinstall": "prisma generate",
-    "ingest:tokens": "tsx src/scripts/ingest-tokens.ts",
     "ingest:trades": "tsx src/scripts/ingest-trades.ts",
-    "ingest:candles": "tsx src/scripts/ingest-candles.ts",
+    "ingest:tokens": "tsx src/scripts/ingest-tokens.ts",
+    "aggregate:candles": "tsx src/scripts/aggregate-candles.ts",
     "pm2:start": "pm2 start ecosystem.config.js --only autotrader-web",
     "pm2:start:all": "pm2 start ecosystem.config.js",
-    "pm2:start:ingest": "pm2 start ecosystem.config.js --only autotrader-ingest-tokens,autotrader-ingest-trades,autotrader-ingest-candles",
+    "pm2:start:ingest": "pm2 start ecosystem.config.js --only autotrader-ingest-trades",
     "pm2:stop": "pm2 stop ecosystem.config.js",
     "pm2:restart": "pm2 restart ecosystem.config.js",
     "pm2:delete": "pm2 delete ecosystem.config.js",
@@ -32,24 +32,25 @@
     "pm2:status": "pm2 status"
   },
   "dependencies": {
-    "@mui/material": "^5.15.0",
-    "@mui/icons-material": "^5.15.0",
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
+    "@mui/icons-material": "^5.15.0",
+    "@mui/material": "^5.15.0",
     "@prisma/client": "^5.9.0",
     "@tanstack/react-query": "^5.17.0",
+    "bcryptjs": "^2.4.3",
+    "date-fns": "^3.0.6",
     "next": "14.0.4",
     "next-auth": "^4.24.5",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "bcryptjs": "^2.4.3",
     "recharts": "^2.10.3",
-    "zod": "^3.22.4",
-    "date-fns": "^3.0.6"
+    "socket.io-client": "^4.8.1",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
-    "@types/node": "^20.10.6",
+    "@types/node": "^20.19.24",
     "@types/react": "^18.2.46",
     "@types/react-dom": "^18.2.18",
     "eslint": "^8.56.0",
@@ -59,4 +60,3 @@
     "typescript": "^5.3.3"
   }
 }
-

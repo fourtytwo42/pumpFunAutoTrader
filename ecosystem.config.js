@@ -18,30 +18,14 @@ module.exports = {
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
     },
     {
-      name: 'autotrader-ingest-tokens',
-      script: 'npm',
-      args: 'run ingest:tokens',
-      cwd: '/home/hendo420/autoTrader',
-      instances: 1,
-      autorestart: false, // Run once and exit - use cron for periodic runs
-      watch: false,
-      max_memory_restart: '500M',
-      env: {
-        NODE_ENV: 'production',
-      },
-      error_file: './logs/ingest-tokens-error.log',
-      out_file: './logs/ingest-tokens-out.log',
-      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-    },
-    {
       name: 'autotrader-ingest-trades',
       script: 'npm',
       args: 'run ingest:trades',
       cwd: '/home/hendo420/autoTrader',
       instances: 1,
-      autorestart: false, // Run once and exit - use cron for periodic runs
+      autorestart: true, // Keep running - WebSocket connection
       watch: false,
-      max_memory_restart: '500M',
+      max_memory_restart: '1G',
       env: {
         NODE_ENV: 'production',
       },
@@ -50,9 +34,9 @@ module.exports = {
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
     },
     {
-      name: 'autotrader-ingest-candles',
+      name: 'autotrader-aggregate-candles',
       script: 'npm',
-      args: 'run ingest:candles',
+      args: 'run aggregate:candles',
       cwd: '/home/hendo420/autoTrader',
       instances: 1,
       autorestart: false, // Run once and exit - use cron for periodic runs
@@ -61,8 +45,8 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
       },
-      error_file: './logs/ingest-candles-error.log',
-      out_file: './logs/ingest-candles-out.log',
+      error_file: './logs/aggregate-candles-error.log',
+      out_file: './logs/aggregate-candles-out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
     },
   ],
