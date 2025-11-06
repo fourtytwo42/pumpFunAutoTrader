@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -35,53 +35,9 @@ interface ChartDatum extends CandleData {
   direction: 'up' | 'down'
 }
 
-const CandleShape = (props: any) => {
-  const { x, width, payload, yAxis } = props
-  if (!payload) {
-    return null
-  }
+const CHART_MARGIN = { top: 16, bottom: 16, left: 12, right: 12 } as const
 
-  const scale = typeof yAxis?.scale === 'function' ? yAxis.scale : null
-  if (!scale) {
-    return null
-  }
-
-  const openY = scale(payload.open)
-  const closeY = scale(payload.close)
-  const highY = scale(payload.high)
-  const lowY = scale(payload.low)
-
-  const isUp = payload.direction === 'up'
-  const color = isUp ? '#00ff88' : '#ff4d4d'
-  const bodyTop = Math.min(openY, closeY)
-  const bodyBottom = Math.max(openY, closeY)
-  const bodyHeight = Math.max(bodyBottom - bodyTop, 2)
-  const candleWidth = Math.max(width * 0.6, 6)
-  const xCenter = x + width / 2
-
-  return (
-    <g>
-      <line
-        x1={xCenter}
-        y1={highY}
-        x2={xCenter}
-        y2={lowY}
-        stroke={color}
-        strokeWidth={2}
-      />
-      <rect
-        x={x + (width - candleWidth) / 2}
-        y={bodyTop}
-        width={candleWidth}
-        height={bodyHeight}
-        fill={color}
-        stroke={color}
-      />
-    </g>
-  )
-}
-
-const CandleTooltip = ({ active, payload, label }: any) => {
+const CandleTooltip = ({ active, payload }: any) => {
   if (!active || !payload || payload.length === 0) {
     return null
   }
@@ -225,10 +181,58 @@ export default function PriceChart({ tokenAddress, interval = '1m', height = 300
   const maxPrice = Math.max(...prices)
   const padding = (maxPrice - minPrice) * 0.1 || minPrice * 0.1 || 0.00000001
   const domain: [number, number] = [minPrice - padding, maxPrice + padding]
+  const chartHeight = Math.max(height - CHART_MARGIN.top - CHART_MARGIN.bottom, 1)
+
+  const scaleY = useMemo(() => {
+    const [domainMin, domainMax] = domain
+    const denom = domainMax - domainMin || Number.EPSILON
+    return (value: number) => CHART_MARGIN.top + ((domainMax - value) / denom) * chartHeight
+  }, [domain, chartHeight])
+
+  const candleShape = useCallback((props: any) => {
+    const { x, width, payload } = props || {}
+    if (!payload) {
+      return null
+    }
+
+    const openY = scaleY(payload.open)
+    const closeY = scaleY(payload.close)
+    const highY = scaleY(payload.high)
+    const lowY = scaleY(payload.low)
+
+    const isUp = payload.direction === 'up'
+    const color = isUp ? '#00ff88' : '#ff4d4d'
+    const bodyTop = Math.min(openY, closeY)
+    const bodyBottom = Math.max(openY, closeY)
+    const bodyHeight = Math.max(bodyBottom - bodyTop, 2)
+    const candleWidth = Math.max(width * 0.6, 6)
+    const xCenter = x + width / 2
+
+    return (
+      <g>
+        <line
+          x1={xCenter}
+          y1={highY}
+          x2={xCenter}
+          y2={lowY}
+          stroke={color}
+          strokeWidth={2}
+        />
+        <rect
+          x={x + (width - candleWidth) / 2}
+          y={bodyTop}
+          width={candleWidth}
+          height={bodyHeight}
+          fill={color}
+          stroke={color}
+        />
+      </g>
+    )
+  }, [scaleY])
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <ComposedChart data={chartData} margin={{ left: 12, right: 12 }}>
+      <ComposedChart data={chartData} margin={CHART_MARGIN} barCategoryGap="35%">
         <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
         <XAxis
           dataKey="timeLabel"
@@ -246,11 +250,12 @@ export default function PriceChart({ tokenAddress, interval = '1m', height = 300
           width={80}
         />
         <Tooltip content={<CandleTooltip />} />
+        <Bar dataKey="base" stackId="candles" fillOpacity={0} fill="transparent" isAnimationActive={false} />
         <Bar
           dataKey="body"
-          yAxisId={0}
-          barSize={10}
-          shape={<CandleShape />}
+          stackId="candles"
+          barSize={12}
+          shape={candleShape as any}
           isAnimationActive={false}
         />
       </ComposedChart>
