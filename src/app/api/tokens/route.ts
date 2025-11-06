@@ -101,6 +101,20 @@ export async function GET(request: NextRequest) {
         const totalVolume = buyVolume + sellVolume
         const volumeRatio = totalVolume > 0 ? buyVolume / totalVolume : 0.5
 
+        // Calculate price info - use stored priceUsd if available and > 0, otherwise calculate from priceSol
+        let priceSol = 0
+        let priceUsd = 0
+        if (token.price) {
+          priceSol = Number(token.price.priceSol)
+          const storedPriceUsd = Number(token.price.priceUsd)
+          // If stored priceUsd is 0 or very small, recalculate using current SOL price
+          if (storedPriceUsd > 0.000001) {
+            priceUsd = storedPriceUsd
+          } else if (priceSol > 0) {
+            priceUsd = priceSol * solPriceUsd
+          }
+        }
+
         return {
           id: token.id,
           mintAddress: token.mintAddress,
@@ -112,8 +126,8 @@ export async function GET(request: NextRequest) {
           website: token.website,
           price: token.price
             ? {
-                priceSol: Number(token.price.priceSol),
-                priceUsd: Number(token.price.priceUsd),
+                priceSol,
+                priceUsd,
               }
             : null,
           buyVolume,
