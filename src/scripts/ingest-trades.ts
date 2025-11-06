@@ -83,7 +83,10 @@ async function processTrade(tradeData: TradeCreatedEvent) {
     }
 
     // Convert amounts to proper decimals
-    const amountSol = new Decimal(tradeData.sol_amount?.toString() || '0')
+    // sol_amount is in lamports (1 SOL = 1,000,000,000 lamports)
+    const LAMPORTS_PER_SOL = 1_000_000_000
+    const amountSolLamports = new Decimal(tradeData.sol_amount?.toString() || '0')
+    const amountSol = amountSolLamports.div(LAMPORTS_PER_SOL)
     const baseAmount = new Decimal(tradeData.token_amount?.toString() || '0')
     const timestamp = BigInt((tradeData.timestamp || Date.now() / 1000) * 1000) // Convert to milliseconds
     
@@ -96,8 +99,22 @@ async function processTrade(tradeData: TradeCreatedEvent) {
       priceSol = baseAmount.gt(0) ? amountSol.div(baseAmount) : new Decimal(0)
     }
 
-    // Calculate USD price (rough estimate - SOL price changes)
-    // For now, use market_cap if available, otherwise estimate
+    // Calculate USD price
+    // Try to get SOL price from DB, fallback to estimated $160
+    let solPriceUsd = 160
+    try {
+      const latestSolPrice = await prisma.solPrice.findFirst({
+        orderBy: {
+          timestamp: 'desc',
+        },
+      })
+      if (latestSolPrice) {
+        solPriceUsd = Number(latestSolPrice.priceUsd)
+      }
+    } catch (error) {
+      // Use fallback if DB query fails
+    }
+
     let priceUsd: Decimal
     if (tradeData.priceUsd) {
       priceUsd = new Decimal(tradeData.priceUsd)
@@ -107,8 +124,8 @@ async function processTrade(tradeData: TradeCreatedEvent) {
         ? new Decimal(tradeData.usd_market_cap.toString()).div(totalSupply)
         : new Decimal(0)
     } else {
-      // Rough estimate: SOL price ~$160 (update as needed)
-      priceUsd = priceSol.mul(160)
+      // Calculate from SOL price: priceUsd = priceSol * solPriceUsd
+      priceUsd = priceSol.mul(solPriceUsd)
     }
 
     const amountUsd = amountSol.mul(priceUsd)

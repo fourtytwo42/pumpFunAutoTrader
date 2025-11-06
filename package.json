@@ -22,6 +22,7 @@
     "ingest:trades": "tsx src/scripts/ingest-trades.ts",
     "ingest:tokens": "tsx src/scripts/ingest-tokens.ts",
     "aggregate:candles": "tsx src/scripts/aggregate-candles.ts",
+    "fetch:sol-price": "tsx src/scripts/fetch-sol-price.ts",
     "pm2:start": "pm2 start ecosystem.config.js --only autotrader-web",
     "pm2:start:all": "pm2 start ecosystem.config.js",
     "pm2:start:ingest": "pm2 start ecosystem.config.js --only autotrader-ingest-trades",

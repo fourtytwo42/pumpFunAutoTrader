@@ -49,5 +49,21 @@ module.exports = {
       out_file: './logs/aggregate-candles-out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
     },
+    {
+      name: 'autotrader-fetch-sol-price',
+      script: 'npm',
+      args: 'run fetch:sol-price',
+      cwd: '/home/hendo420/autoTrader',
+      instances: 1,
+      autorestart: true, // Keep running - polls every 5 minutes
+      watch: false,
+      max_memory_restart: '200M',
+      env: {
+        NODE_ENV: 'production',
+      },
+      error_file: './logs/fetch-sol-price-error.log',
+      out_file: './logs/fetch-sol-price-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+    },
   ],
 }

@@ -210,3 +210,13 @@ model AiTraderConfig {
   @@map("ai_trader_configs")
 }
 
+model SolPrice {
+  id        BigInt   @id @default(autoincrement())
+  priceUsd  Decimal  @map("price_usd") @db.Decimal(10, 2)
+  timestamp BigInt   // Unix timestamp in milliseconds
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([timestamp(sort: Desc)])
+  @@map("sol_prices")
+}
+

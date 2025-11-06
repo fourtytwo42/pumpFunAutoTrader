@@ -80,10 +80,24 @@ export async function GET(request: NextRequest) {
           uniqueTraders.add(trade.userAddress)
         })
 
-        // Convert SOL volume to USD for display (rough estimate: 1 SOL = $160)
-        const SOL_PRICE_USD = 160
-        const buyVolume = buyVolumeSol * SOL_PRICE_USD
-        const sellVolume = sellVolumeSol * SOL_PRICE_USD
+        // Get SOL price for USD conversion (use latest or fallback)
+        let solPriceUsd = 160 // Fallback
+        try {
+          const latestSolPrice = await prisma.solPrice.findFirst({
+            orderBy: {
+              timestamp: 'desc',
+            },
+          })
+          if (latestSolPrice) {
+            solPriceUsd = Number(latestSolPrice.priceUsd)
+          }
+        } catch (error) {
+          console.warn('Failed to fetch SOL price, using fallback')
+        }
+
+        // Convert SOL volume to USD for display
+        const buyVolume = buyVolumeSol * solPriceUsd
+        const sellVolume = sellVolumeSol * solPriceUsd
         const totalVolume = buyVolume + sellVolume
         const volumeRatio = totalVolume > 0 ? buyVolume / totalVolume : 0.5
 
