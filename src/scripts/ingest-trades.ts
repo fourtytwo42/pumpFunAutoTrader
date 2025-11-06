@@ -4,6 +4,9 @@ import { Decimal } from '@prisma/client/runtime/library'
 
 const prisma = new PrismaClient()
 
+// Pump.fun tokens use 6 decimal places (1 token = 1_000_000 base units)
+const TOKEN_DECIMALS = new Decimal(1_000_000)
+
 // WebSocket URL for pump.fun trade feed
 const SOCKET_URL = 'wss://frontend-api-v3.pump.fun'
 const ORIGIN = 'https://pump.fun'
@@ -117,18 +120,24 @@ async function processTrade(tradeData: TradeCreatedEvent) {
     // First, try to calculate from actual trade amounts (most accurate - reflects real price paid)
     if (baseAmount.gt(0) && amountSol.gt(0)) {
       calculationMethod = 'trade_amounts'
-      // Calculate: price per token = SOL spent / tokens received
-      // This gives us the actual price paid for this trade
-      priceSol = amountSol.div(baseAmount)
-      const tokensPerSol = baseAmount.div(amountSol)
+      // Calculate: price per token = SOL spent / tokens received (convert base units to tokens)
+      const baseAmountTokens = baseAmount.div(TOKEN_DECIMALS)
       console.log(`🔍 [${tradeData.symbol}] Price calculation from trade amounts:`)
       console.log(`   sol_amount (lamports): ${tradeData.sol_amount}`)
       console.log(`   amountSol: ${amountSol.toString()} SOL`)
-      console.log(`   token_amount: ${tradeData.token_amount}`)
-      console.log(`   baseAmount: ${baseAmount.toString()} tokens`)
-      console.log(`   Tokens per SOL: ${tokensPerSol.toString()}`)
-      console.log(`   Calculated priceSol: ${priceSol.toString()}`)
-      console.log(`   SOL per 1M tokens: ${(Number(priceSol) * 1000000).toFixed(6)}`)
+      console.log(`   token_amount (raw): ${tradeData.token_amount}`)
+      console.log(`   baseAmount (raw): ${baseAmount.toString()}`)
+      console.log(`   baseAmountTokens (converted): ${baseAmountTokens.toString()}`)
+      if (baseAmountTokens.gt(0)) {
+        priceSol = amountSol.div(baseAmountTokens)
+        const tokensPerSol = baseAmountTokens.div(amountSol)
+        console.log(`   Tokens per SOL: ${tokensPerSol.toString()}`)
+        console.log(`   Calculated priceSol: ${priceSol.toString()}`)
+        console.log(`   SOL per 1M tokens: ${(Number(priceSol) * 1000000).toFixed(6)}`)
+      } else {
+        priceSol = new Decimal(0)
+        console.log('   ⚠️ baseAmountTokens is zero after conversion')
+      }
     } else if (tradeData.virtual_sol_reserves && tradeData.virtual_token_reserves) {
       calculationMethod = 'bonding_curve_reserves'
       const virtualSolReserves = new Decimal(tradeData.virtual_sol_reserves.toString()).div(LAMPORTS_PER_SOL) // Convert lamports to SOL
@@ -181,6 +190,26 @@ async function processTrade(tradeData: TradeCreatedEvent) {
       priceSol = baseAmount.gt(0) ? amountSol.div(baseAmount) : new Decimal(0)
       console.log(`   Calculated priceSol: ${priceSol.toString()}`)
       console.log(`   SOL per 1M tokens: ${(Number(priceSol) * 1000000).toFixed(6)}`)
+    }
+
+
+    // Fallback: derive price from market cap if calculated price looks too small
+    const totalSupplyRaw = new Decimal(tradeData.total_supply?.toString() || '0')
+    const totalSupplyTokens = totalSupplyRaw.gt(0) ? totalSupplyRaw.div(TOKEN_DECIMALS) : new Decimal(0)
+
+    let marketCapSol: Decimal | null = null
+    if (tradeData.market_cap !== undefined && tradeData.market_cap !== null) {
+      marketCapSol = new Decimal(tradeData.market_cap.toString())
+    } else if (tradeData.usd_market_cap !== undefined && tradeData.usd_market_cap !== null) {
+      marketCapSol = new Decimal(tradeData.usd_market_cap.toString()).div(solPriceUsd)
+    }
+
+    if ((priceSol.lte(0) || priceSol.lt(new Decimal('1e-9'))) && marketCapSol && totalSupplyTokens.gt(0)) {
+      const priceSolFromMarketCap = marketCapSol.div(totalSupplyTokens)
+      console.log(`🔄 [${tradeData.symbol}] Adjusting price using market cap: ${priceSolFromMarketCap.toString()} SOL/token`)
+      priceSol = priceSolFromMarketCap
+      priceUsdFromMarketCap = priceSol.mul(solPriceUsd)
+      calculationMethod = 'market_cap_adjusted'
     }
 
     let priceUsd: Decimal
