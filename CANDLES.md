@@ -4,6 +4,22 @@
 
 Candles (OHLCV data) are **derived from trades**, not fetched separately. This ensures accuracy and efficiency.
 
+## Memory-Efficient Hybrid Approach
+
+**Problem**: With 10s-100s of thousands of tokens, pre-aggregating all candles would use too much memory.
+
+**Solution**: Hybrid approach:
+1. **Pre-aggregate** candles for active tokens only (10+ trades/hour)
+2. **Generate on-demand** candles from trades for less active tokens
+3. **Time-travel aware**: All candle generation respects simulation time boundaries
+
+This ensures:
+- ✅ Memory efficient (only active tokens pre-aggregated)
+- ✅ Always accurate (generated from source trades)
+- ✅ Time-travel compatible (filters by simulation timestamp)
+- ✅ Fast for active tokens (pre-aggregated)
+- ✅ Works for all tokens (on-demand generation)
+
 ## How It Works
 
 1. **Trades are ingested** via WebSocket in real-time
@@ -20,12 +36,30 @@ Candles (OHLCV data) are **derived from trades**, not fetched separately. This e
 
 ## Aggregation Process
 
-For each token and interval:
+### Pre-Aggregation (Active Tokens Only)
+
+For active tokens (10+ trades/hour) and all intervals:
 1. Find the last candle timestamp
 2. Get all trades since that timestamp
 3. Group trades by candle interval
 4. Calculate OHLCV (Open, High, Low, Close, Volume)
 5. Upsert candles (create new or update existing)
+
+Runs every 15 minutes via PM2 cron.
+
+### On-Demand Generation (All Tokens)
+
+When a token's candles are requested:
+1. Get trades for the token in the requested time range
+2. Filter by simulation time if in time-travel mode
+3. Group trades by candle interval
+4. Calculate OHLCV on-the-fly
+5. Return candles (not stored, regenerated each time)
+
+This ensures:
+- Memory efficient (no storage for inactive tokens)
+- Time-travel aware (respects simulation timestamps)
+- Always accurate (generated from source data)
 
 ## Running Candle Aggregation
 
@@ -35,13 +69,20 @@ For each token and interval:
 npm run aggregate:candles
 ```
 
+This only pre-aggregates candles for active tokens (10+ trades/hour). Less active tokens generate candles on-demand.
+
 ### Automatic (PM2 Cron)
 
-The PM2 ecosystem config includes a cron job that runs every 5 minutes:
+The PM2 ecosystem config includes a cron job that runs every 15 minutes:
 
 ```javascript
-cron_restart: '*/5 * * * *' // Every 5 minutes
+cron_restart: '*/15 * * * *' // Every 15 minutes (only for active tokens)
 ```
+
+This is less frequent because:
+- Only active tokens are pre-aggregated
+- Less active tokens generate candles on-demand anyway
+- Reduces database load and memory usage
 
 ### System Cron (Alternative)
 
@@ -67,7 +108,7 @@ crontab -e
 Candles are fetched via:
 
 ```
-GET /api/tokens/{mintAddress}/candles?interval=1h&limit=100
+GET /api/tokens/{mintAddress}/candles?interval=1h&limit=100&simulation_time=1234567890
 ```
 
 Parameters:
@@ -75,6 +116,19 @@ Parameters:
 - `limit`: Number of candles to return (default: 100)
 - `start_time`: Optional start timestamp
 - `end_time`: Optional end timestamp
+- `simulation_time`: **Required for time-travel** - Only show data up to this timestamp
+
+### Time-Travel Support
+
+When `simulation_time` is provided:
+- Only trades up to that timestamp are included
+- Candles are generated from those trades only
+- Ensures historical accuracy when trading in the past
+
+Example: User is trading as if it's January 15th:
+- `simulation_time=1705276800000` (Jan 15 timestamp)
+- Only shows candles from trades before Jan 15
+- Future trades are invisible (as if they haven't happened yet)
 
 ## Data Flow
 

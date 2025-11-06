@@ -42,7 +42,7 @@ module.exports = {
       autorestart: false, // Run once and exit - use cron for periodic runs
       watch: false,
       max_memory_restart: '500M',
-      cron_restart: '*/5 * * * *', // Run every 5 minutes via PM2 cron
+      cron_restart: '*/15 * * * *', // Run every 15 minutes (only for active tokens, less frequent)
       env: {
         NODE_ENV: 'production',
       },

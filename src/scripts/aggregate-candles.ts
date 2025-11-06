@@ -3,7 +3,9 @@ import { Decimal } from '@prisma/client/runtime/library'
 
 const prisma = new PrismaClient()
 
-// Candle intervals in minutes
+// Only pre-aggregate candles for active tokens (reduces memory usage)
+// For less active tokens, candles are generated on-demand from trades
+const ACTIVE_TRADE_THRESHOLD = 10 // Tokens with 10+ trades in last hour
 const INTERVALS = [1, 5, 60, 360, 1440] // 1m, 5m, 1h, 6h, 24h
 
 interface CandleData {
@@ -115,25 +117,54 @@ async function aggregateCandlesForToken(tokenId: string, intervalMinutes: number
 }
 
 async function aggregateAllCandles() {
-  console.log('🕯️ Starting candle aggregation...')
+  console.log('🕯️ Starting candle aggregation for active tokens only...')
   const startTime = Date.now()
 
-  // Get all tokens that have trades
-  const tokens = await prisma.token.findMany({
+  // Only process tokens with recent activity (reduces memory usage)
+  // This is a performance optimization - inactive tokens can generate candles on-demand
+  const oneHourAgo = BigInt(Date.now() - 60 * 60 * 1000)
+  
+  const activeTokens = await prisma.token.findMany({
     where: {
       trades: {
-        some: {},
+        some: {
+          timestamp: {
+            gte: oneHourAgo,
+          },
+        },
       },
     },
-    select: { id: true, symbol: true, mintAddress: true },
+    select: { 
+      id: true, 
+      symbol: true, 
+      mintAddress: true,
+      _count: {
+        select: {
+          trades: {
+            where: {
+              timestamp: {
+                gte: oneHourAgo,
+              },
+            },
+          },
+        },
+      },
+    },
   })
 
-  console.log(`📊 Processing ${tokens.length} tokens with trades...`)
+  // Filter to only tokens with significant activity
+  const veryActiveTokens = activeTokens.filter(
+    (token) => (token._count?.trades || 0) >= ACTIVE_TRADE_THRESHOLD
+  )
+
+  console.log(
+    `📊 Processing ${veryActiveTokens.length} active tokens (${activeTokens.length} total with recent trades, threshold: ${ACTIVE_TRADE_THRESHOLD}+ trades/hour)...`
+  )
 
   let totalCandles = 0
   let processedTokens = 0
 
-  for (const token of tokens) {
+  for (const token of veryActiveTokens) {
     try {
       let tokenCandles = 0
       for (const interval of INTERVALS) {
@@ -155,7 +186,10 @@ async function aggregateAllCandles() {
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(2)
   console.log(
-    `✅ Candle aggregation completed: ${totalCandles} candles created/updated for ${processedTokens} tokens in ${duration}s`
+    `✅ Candle aggregation completed: ${totalCandles} candles created/updated for ${processedTokens} active tokens in ${duration}s`
+  )
+  console.log(
+    `💡 Note: Less active tokens will generate candles on-demand from trades when requested`
   )
 }
 
