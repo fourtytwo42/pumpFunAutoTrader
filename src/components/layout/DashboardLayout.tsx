@@ -34,6 +34,7 @@ const menuItems = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
   { text: 'Tokens', icon: <TrendingUp />, path: '/dashboard/tokens' },
   { text: 'Portfolio', icon: <AccountBalanceWallet />, path: '/dashboard/portfolio' },
+  { text: 'Wallet Setup', icon: <Settings />, path: '/dashboard/wallet' },
   { text: 'Faucet', icon: <Science />, path: '/dashboard/faucet' },
 ]
 

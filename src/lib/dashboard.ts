@@ -5,6 +5,7 @@ import { getLatestSolPrice, getTokenUsdPrice } from './metrics'
 export async function getDefaultWallet() {
   try {
     const wallet = await prisma.wallet.findFirst({
+      orderBy: { createdAt: 'asc' },
       include: {
         positions: true,
       },

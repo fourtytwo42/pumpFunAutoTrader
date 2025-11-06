@@ -35,6 +35,14 @@ export default async function DashboardPage() {
           <Typography variant="body1" color="text.secondary">
             Configure a wallet to begin monitoring activity.
           </Typography>
+          <Button
+            component={Link}
+            href="/dashboard/wallet"
+            variant="contained"
+            sx={{ mt: 3 }}
+          >
+            Open Wallet Setup
+          </Button>
         </Box>
       </Container>
     )
