@@ -732,30 +732,6 @@ export default function TokenDetailPage() {
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <Typography variant="body2" color="text.secondary">
-                  Price per Token (USD)
-                </Typography>
-                <Typography variant="h6">
-                  {pricePerTokenUsd > 0 ? formatUsdFull(pricePerTokenUsd) : "N/A"}
-                </Typography>
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="body2" color="text.secondary">
-                  Price per Token (SOL)
-                </Typography>
-                <Typography variant="h6">
-                  {priceSol > 0 ? formatSolFull(priceSol, 8) : "N/A"}
-                </Typography>
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="body2" color="text.secondary">
-                  Total Supply
-                </Typography>
-                <Typography variant="h6">
-                  {totalSupplyTokens ? `${formatCompactNumber(totalSupplyTokens)} tokens` : "N/A"}
-                </Typography>
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="body2" color="text.secondary">
                   King of the Hill
                 </Typography>
                 <Typography variant="h6">
