@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   Container,
@@ -29,14 +29,6 @@ import VolumeChart from "@/components/charts/VolumeChart";
 
 const TIME_BUCKETS = ["5m", "1h", "6h", "24h"] as const;
 
-type TimeBucketKey = (typeof TIME_BUCKETS)[number];
-
-interface RemoteTopHolder {
-  address: string;
-  amount: number;
-  solBalance: number;
-}
-
 interface MarketActivityBucket {
   numTxs?: number;
   volumeUSD?: number;
@@ -50,12 +42,39 @@ interface MarketActivityBucket {
   priceChangePercent?: number;
 }
 
+interface RemoteTopHolder {
+  address: string;
+  amount?: number;
+  amountTokens?: number;
+  share?: number;
+  solBalance?: number;
+}
+
+interface RemoteTrade {
+  type: "buy" | "sell";
+  amountSol?: number;
+  amountUsd?: number;
+  priceSol?: number;
+  priceUsd?: number;
+  timestamp: number;
+  tx: string | null;
+}
+
+interface RemoteCandle {
+  timestamp: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
 interface RemoteData {
   poolAddress?: string | null;
   coin?: any;
   metadata?: any;
-  trades?: any[];
-  candles?: any[];
+  trades?: RemoteTrade[];
+  candles?: RemoteCandle[];
   topHolders?: RemoteTopHolder[];
   marketActivity?: Record<string, MarketActivityBucket>;
   creator?: any;
@@ -90,11 +109,14 @@ interface TokenData {
     timestamp: string;
   }>;
   totalSupplyTokens?: number;
+  marketCapUsd?: number;
+  marketCapSol?: number;
   remote?: RemoteData;
 }
 
 const formatCompactNumber = (value?: number, options: Intl.NumberFormatOptions = {}) => {
   if (value === undefined || value === null || Number.isNaN(value)) return "N/A";
+  if (!Number.isFinite(value)) return "N/A";
   return new Intl.NumberFormat("en-US", {
     notation: value >= 1_000_000 ? "compact" : "standard",
     maximumFractionDigits: 2,
@@ -104,6 +126,9 @@ const formatCompactNumber = (value?: number, options: Intl.NumberFormatOptions =
 
 const formatUsd = (value?: number) => {
   if (value === undefined || value === null || Number.isNaN(value)) return "N/A";
+  if (value <= 0) return "$0.00";
+  if (value < 0.000001) return `$${value.toExponential(2)}`;
+  if (value < 0.001) return `$${value.toFixed(6)}`;
   if (value < 1) return `$${value.toFixed(4)}`;
   if (value < 1_000) return `$${value.toFixed(2)}`;
   if (value < 1_000_000) return `$${(value / 1_000).toFixed(2)}K`;
@@ -113,20 +138,43 @@ const formatUsd = (value?: number) => {
 
 const formatSolValue = (value?: number) => {
   if (value === undefined || value === null || Number.isNaN(value)) return "N/A";
-  if (value < 0.001) return `${value.toFixed(6)} SOL`;
-  if (value < 1) return `${value.toFixed(4)} SOL`;
+  if (value <= 0) return "0 SOL";
+  if (value < 0.0000001) return `${value.toExponential(2)} SOL`;
+  if (value < 0.001) return `${value.toFixed(8)} SOL`;
+  if (value < 1) return `${value.toFixed(6)} SOL`;
   if (value < 1_000) return `${value.toFixed(2)} SOL`;
   return `${(value / 1_000).toFixed(2)}K SOL`;
 };
 
 const formatPercent = (value?: number) => {
   if (value === undefined || value === null || Number.isNaN(value)) return "N/A";
+  if (!Number.isFinite(value)) return "N/A";
   return `${value.toFixed(2)}%`;
 };
 
 const shortenAddress = (address?: string | null) => {
   if (!address) return "N/A";
   return `${address.slice(0, 4)}...${address.slice(-4)}`;
+};
+
+const formatTimeAgo = (timestamp?: number | null) => {
+  if (!timestamp) return "N/A";
+  const diff = Date.now() - timestamp;
+  if (diff < 0) return "just now";
+
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+};
+
+const selectMarketActivityBucket = (activity?: Record<string, MarketActivityBucket>) => {
+  if (!activity) return undefined;
+  return activity["24h"] || activity["6h"] || activity["1h"] || activity["5m"];
 };
 
 export default function TokenDetailPage() {
@@ -142,54 +190,9 @@ export default function TokenDetailPage() {
   const [trading, setTrading] = useState(false);
   const [tradeSuccess, setTradeSuccess] = useState("");
 
-  const formatSolPerMillion = (priceSol?: number | null) => {
-    if (priceSol == null || Number.isNaN(priceSol) || priceSol <= 0) {
-      return "N/A";
-    }
-
-    const solPerMillion = priceSol * 1_000_000;
-
-    if (!Number.isFinite(solPerMillion) || solPerMillion <= 0) {
-      return "N/A";
-    }
-
-    if (solPerMillion >= 1000) {
-      return `${(solPerMillion / 1000).toFixed(2)}K SOL`;
-    }
-    if (solPerMillion >= 1) {
-      return `${solPerMillion.toFixed(2)} SOL`;
-    }
-    if (solPerMillion >= 0.01) {
-      return `${solPerMillion.toFixed(4)} SOL`;
-    }
-    return `${solPerMillion.toExponential(2)} SOL`;
-  };
-
-  const formatTimeAgo = (timestamp?: number | null, fallback = "N/A") => {
-    if (!timestamp || Number.isNaN(timestamp)) return fallback;
-
-    const diff = Date.now() - timestamp;
-    if (diff < 0) return "just now";
-
-    const units = [
-      { label: "day", ms: 86_400_000 },
-      { label: "hour", ms: 3_600_000 },
-      { label: "minute", ms: 60_000 },
-      { label: "second", ms: 1_000 },
-    ];
-
-    for (const unit of units) {
-      if (diff >= unit.ms) {
-        const value = Math.floor(diff / unit.ms);
-        return `${value} ${unit.label}${value !== 1 ? "s" : ""} ago`;
-      }
-    }
-
-    return "just now";
-  };
-
   useEffect(() => {
     fetchToken();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mintAddress]);
 
   const fetchToken = async () => {
@@ -209,7 +212,7 @@ export default function TokenDetailPage() {
   };
 
   const handleBuy = async () => {
-    if (!buyAmount || parseFloat(buyAmount) <= 0) return;
+    if (!buyAmount || parseFloat(buyAmount) <= 0 || !token) return;
     setTrading(true);
     setTradeSuccess("");
     setError("");
@@ -219,7 +222,7 @@ export default function TokenDetailPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tokenId: token?.id,
+          tokenId: token.id,
           amountSol: parseFloat(buyAmount),
         }),
       });
@@ -240,7 +243,7 @@ export default function TokenDetailPage() {
   };
 
   const handleSell = async () => {
-    if (!sellAmount || parseFloat(sellAmount) <= 0) return;
+    if (!sellAmount || parseFloat(sellAmount) <= 0 || !token) return;
     setTrading(true);
     setTradeSuccess("");
     setError("");
@@ -250,7 +253,7 @@ export default function TokenDetailPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tokenId: token?.id,
+          tokenId: token.id,
           amountTokens: parseFloat(sellAmount),
         }),
       });
@@ -270,7 +273,7 @@ export default function TokenDetailPage() {
     }
   };
 
-  if (loading) {
+  if (loading || !token) {
     return (
       <Container maxWidth="lg">
         <Box
@@ -292,119 +295,40 @@ export default function TokenDetailPage() {
     );
   }
 
-  if (error && !token) {
-    return (
-      <Container maxWidth="lg">
-        <Alert
-          severity="error"
-          sx={{
-            mt: 2,
-            backgroundColor: "#1a1a1a",
-            border: "1px solid #ff4444",
-            color: "#ff4444",
-          }}
-        >
-          {error}
-        </Alert>
-      </Container>
-    );
-  }
+  const remote = token.remote;
+  const metadata = remote?.metadata || null;
+  const topHolders = remote?.topHolders || [];
+  const remoteTrades = remote?.trades || [];
+  const marketActivity = remote?.marketActivity || null;
+  const fallbackActivity = useMemo(
+    () => selectMarketActivityBucket(marketActivity || undefined),
+    [marketActivity],
+  );
 
-  if (!token) return null;
+  const totalSupplyTokens = token.totalSupplyTokens ?? (remote?.coin?.total_supply ? Number(remote.coin.total_supply) / 1_000_000_000 : undefined);
+  const priceSol = token.price?.priceSol ?? 0;
+  const priceUsd = token.price?.priceUsd ?? 0;
+  const marketCapUsd = token.marketCapUsd ?? (remote?.coin?.usd_market_cap ? Number(remote.coin.usd_market_cap) : undefined);
+  const marketCapSol = token.marketCapSol ?? (remote?.coin?.market_cap ? Number(remote.coin.market_cap) : undefined);
 
-  const remote = token.remote || {};
-  const metadata = remote.metadata || null;
-  const topHolders = (remote.topHolders || []).slice(0, 12);
-  const remoteTradesRaw = (remote.trades || []).slice(0, 30);
-  const marketActivity = remote.marketActivity || null;
-  const creator = remote.creator || null;
-  const coinDetails = remote.coin || null;
+  const displayTotalVolumeUsd = token.stats.totalVolume && token.stats.totalVolume > 0
+    ? token.stats.totalVolume
+    : fallbackActivity?.volumeUSD ?? 0;
+  const displayBuyVolumeUsd = token.stats.buyVolume && token.stats.buyVolume > 0
+    ? token.stats.buyVolume
+    : fallbackActivity?.buyVolumeUSD ?? 0;
+  const displaySellVolumeUsd = token.stats.sellVolume && token.stats.sellVolume > 0
+    ? token.stats.sellVolume
+    : fallbackActivity?.sellVolumeUSD ?? 0;
+  const displayUniqueTraders = token.stats.uniqueTraders && token.stats.uniqueTraders > 0
+    ? token.stats.uniqueTraders
+    : fallbackActivity?.numUsers ?? fallbackActivity?.numBuyers ?? fallbackActivity?.numSellers ?? 0;
 
-  const totalSupplyTokens = (() => {
-    if (token.totalSupplyTokens && Number.isFinite(token.totalSupplyTokens)) {
-      return token.totalSupplyTokens;
-    }
-    const rawSupply =
-      coinDetails?.total_supply ||
-      coinDetails?.totalSupply ||
-      coinDetails?.supply ||
-      metadata?.total_supply;
-    const supplyNumber = Number(rawSupply);
-    if (Number.isFinite(supplyNumber) && supplyNumber > 0) {
-      return supplyNumber / 1_000_000_000;
-    }
-    return undefined;
-  })();
-
-  const marketCapUsd = token.price?.priceUsd && totalSupplyTokens
-    ? token.price.priceUsd * totalSupplyTokens
-    : undefined;
-  const marketCapSol = token.price?.priceSol && totalSupplyTokens
-    ? token.price.priceSol * totalSupplyTokens
-    : undefined;
+  const sortedTopHolders = [...topHolders].sort((a, b) => (b.amountTokens ?? b.amount ?? 0) - (a.amountTokens ?? a.amount ?? 0));
+  const sortedRemoteTrades = [...remoteTrades].sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
 
   const pumpCoinUrl = `https://pump.fun/coin/${token.mintAddress}`;
-  const poolAddress = remote.poolAddress || null;
-  const metadataLinks: Array<{ label: string; url: string }> = [];
-
-  const addLink = (label: string, value?: string | null) => {
-    if (!value) return;
-    let url = value;
-    if (label === "Twitter") {
-      const handle = value.replace(/^@/, "");
-      url = `https://twitter.com/${handle}`;
-    } else if (label === "Telegram") {
-      const handle = value.replace(/^@/, "");
-      url = `https://t.me/${handle}`;
-    } else if (!/^https?:/i.test(value)) {
-      url = `https://${value}`;
-    }
-    metadataLinks.push({ label, url });
-  };
-
-  addLink("Website", metadata?.website || coinDetails?.website);
-  addLink("Twitter", metadata?.twitter || coinDetails?.twitter);
-  addLink("Telegram", metadata?.telegram || coinDetails?.telegram);
-
-  const normalizedRemoteTrades = remoteTradesRaw
-    .map((trade: any) => {
-      const amountSol = Number(
-        trade.amountSol ?? trade.solAmount ?? trade.quoteAmount ?? trade.amount_sol,
-      );
-      const amountUsd = Number(trade.amountUsd ?? trade.amount_usd);
-      const priceSol = Number(trade.priceSol ?? trade.price_sol ?? trade.price);
-      const priceUsd = Number(trade.priceUsd ?? trade.price_usd);
-      const timestampValue =
-        trade.timestamp || trade.time || trade.blockTime || trade.block_timestamp;
-      const timestamp = timestampValue ? new Date(timestampValue).getTime() : null;
-
-      if (!Number.isFinite(amountSol) && !Number.isFinite(amountUsd)) {
-        return null;
-      }
-
-      return {
-        type: (trade.type || "").toLowerCase() === "buy" ? "buy" : "sell",
-        amountSol: Number.isFinite(amountSol) ? amountSol : undefined,
-        amountUsd: Number.isFinite(amountUsd) ? amountUsd : undefined,
-        priceSol: Number.isFinite(priceSol) ? priceSol : undefined,
-        priceUsd: Number.isFinite(priceUsd) ? priceUsd : undefined,
-        timestamp,
-        tx: trade.tx || trade.signature || trade.transactionId || null,
-      };
-    })
-    .filter(Boolean) as Array<{
-      type: "buy" | "sell";
-      amountSol?: number;
-      amountUsd?: number;
-      priceSol?: number;
-      priceUsd?: number;
-      timestamp: number | null;
-      tx: string | null;
-    }>;
-
-  const marketBuckets: TimeBucketKey[] = TIME_BUCKETS.filter(
-    (bucket) => marketActivity && marketActivity[bucket],
-  );
+  const poolAddress = remote?.poolAddress || null;
 
   return (
     <Container maxWidth="lg">
@@ -419,9 +343,7 @@ export default function TokenDetailPage() {
         <Box sx={{ flexGrow: 1 }}>
           <Typography variant="h4" sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             {token.name}
-            {token.completed && (
-              <Chip label="Graduated" color="primary" size="small" />
-            )}
+            {token.completed && <Chip label="Graduated" color="primary" size="small" />}
           </Typography>
           <Typography variant="h6" color="text.secondary">
             {token.symbol} • {token.mintAddress}
@@ -506,43 +428,33 @@ export default function TokenDetailPage() {
                   Price (per 1M tokens)
                 </Typography>
                 <Typography variant="h5">
-                  {token.price && token.price.priceUsd > 0
-                    ? `$${(token.price.priceUsd * 1_000_000).toFixed(2)}`
-                    : "N/A"}
+                  {priceUsd > 0 ? formatUsd(priceUsd * 1_000_000) : "N/A"}
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <Typography variant="body2" color="text.secondary">
                   Price (per 1M tokens - SOL)
                 </Typography>
-                <Typography variant="h5">
-                  {token.price && token.price.priceSol > 0
-                    ? formatSolPerMillion(Number(token.price.priceSol))
-                    : "N/A"}
-                </Typography>
+                <Typography variant="h5">{priceSol > 0 ? formatSolValue(priceSol * 1_000_000) : "N/A"}</Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <Typography variant="body2" color="text.secondary">
                   Market Cap (USD)
                 </Typography>
-                <Typography variant="h5">
-                  {formatUsd(marketCapUsd)}
-                </Typography>
+                <Typography variant="h5">{formatUsd(marketCapUsd)}</Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <Typography variant="body2" color="text.secondary">
                   Market Cap (SOL)
                 </Typography>
-                <Typography variant="h5">
-                  {formatSolValue(marketCapSol)}
-                </Typography>
+                <Typography variant="h5">{formatSolValue(marketCapSol)}</Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <Typography variant="body2" color="text.secondary">
                   Price per Token (USD)
                 </Typography>
                 <Typography variant="h6">
-                  {token.price ? `$${token.price.priceUsd.toFixed(6)}` : "N/A"}
+                  {priceUsd > 0 ? formatUsd(priceUsd) : "N/A"}
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
@@ -550,7 +462,7 @@ export default function TokenDetailPage() {
                   Price per Token (SOL)
                 </Typography>
                 <Typography variant="h6">
-                  {token.price ? token.price.priceSol.toFixed(8) : "N/A"}
+                  {priceSol > 0 ? formatSolValue(priceSol) : "N/A"}
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
@@ -582,14 +494,15 @@ export default function TokenDetailPage() {
             </Box>
           </Paper>
 
-          {marketBuckets.length > 0 && (
+          {marketActivity && TIME_BUCKETS.some((bucket) => marketActivity[bucket]) && (
             <Paper sx={{ p: 3, mb: 3 }}>
               <Typography variant="h6" gutterBottom>
                 Market Activity
               </Typography>
               <Grid container spacing={2}>
-                {marketBuckets.map((bucket) => {
-                  const bucketData = marketActivity?.[bucket] || {};
+                {TIME_BUCKETS.filter((bucket) => marketActivity[bucket]).map((bucket) => {
+                  const bucketData = marketActivity[bucket];
+                  if (!bucketData) return null;
                   return (
                     <Grid item xs={12} sm={6} md={3} key={bucket}>
                       <Box
@@ -636,7 +549,7 @@ export default function TokenDetailPage() {
             </Paper>
           )}
 
-          {topHolders.length > 0 && (
+          {sortedTopHolders.length > 0 && (
             <Paper sx={{ p: 3, mb: 3 }}>
               <Typography variant="h6" gutterBottom>
                 Top Holders
@@ -653,10 +566,9 @@ export default function TokenDetailPage() {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {topHolders.map((holder, index) => {
-                      const share = totalSupplyTokens
-                        ? (holder.amount / totalSupplyTokens) * 100
-                        : undefined;
+                    {sortedTopHolders.map((holder, index) => {
+                      const amountTokens = holder.amountTokens ?? (holder.amount ?? 0);
+                      const sharePercent = holder.share ?? (totalSupplyTokens ? (amountTokens / totalSupplyTokens) * 100 : undefined);
                       return (
                         <TableRow key={`${holder.address}-${index}`} hover>
                           <TableCell>{index + 1}</TableCell>
@@ -672,15 +584,9 @@ export default function TokenDetailPage() {
                               {shortenAddress(holder.address)}
                             </Button>
                           </TableCell>
-                          <TableCell align="right">
-                            {formatCompactNumber(holder.amount)}
-                          </TableCell>
-                          <TableCell align="right">
-                            {formatPercent(share)}
-                          </TableCell>
-                          <TableCell align="right">
-                            {formatSolValue(holder.solBalance)}
-                          </TableCell>
+                          <TableCell align="right">{formatCompactNumber(amountTokens)}</TableCell>
+                          <TableCell align="right">{formatPercent(sharePercent)}</TableCell>
+                          <TableCell align="right">{formatSolValue(holder.solBalance)}</TableCell>
                         </TableRow>
                       );
                     })}
@@ -690,7 +596,7 @@ export default function TokenDetailPage() {
             </Paper>
           )}
 
-          {normalizedRemoteTrades.length > 0 && (
+          {sortedRemoteTrades.length > 0 && (
             <Paper sx={{ p: 3, mb: 3 }}>
               <Typography variant="h6" gutterBottom>
                 On-chain Trades (latest)
@@ -709,7 +615,7 @@ export default function TokenDetailPage() {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {normalizedRemoteTrades.map((trade, idx) => (
+                    {sortedRemoteTrades.slice(0, 40).map((trade, idx) => (
                       <TableRow key={idx} hover>
                         <TableCell>
                           <Chip
@@ -719,29 +625,19 @@ export default function TokenDetailPage() {
                           />
                         </TableCell>
                         <TableCell align="right">
-                          {trade.amountSol !== undefined
-                            ? trade.amountSol.toFixed(4)
-                            : "-"}
+                          {trade.amountSol !== undefined ? trade.amountSol.toFixed(4) : "-"}
                         </TableCell>
                         <TableCell align="right">
-                          {trade.amountUsd !== undefined
-                            ? `$${trade.amountUsd.toFixed(2)}`
-                            : "-"}
+                          {trade.amountUsd !== undefined ? formatUsd(trade.amountUsd) : "-"}
                         </TableCell>
                         <TableCell align="right">
-                          {trade.priceSol !== undefined
-                            ? trade.priceSol.toFixed(8)
-                            : "-"}
+                          {trade.priceSol !== undefined ? formatSolValue(trade.priceSol) : "-"}
                         </TableCell>
                         <TableCell align="right">
-                          {trade.priceUsd !== undefined
-                            ? `$${trade.priceUsd.toFixed(6)}`
-                            : "-"}
+                          {trade.priceUsd !== undefined ? formatUsd(trade.priceUsd) : "-"}
                         </TableCell>
                         <TableCell>
-                          {trade.timestamp
-                            ? new Date(trade.timestamp).toLocaleString()
-                            : "-"}
+                          {trade.timestamp ? new Date(trade.timestamp).toLocaleString() : "-"}
                         </TableCell>
                         <TableCell>
                           {trade.tx ? (
@@ -776,32 +672,26 @@ export default function TokenDetailPage() {
                   Total Volume (USD)
                 </Typography>
                 <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                  {formatUsd(token.stats.totalVolume)}
+                  {formatUsd(displayTotalVolumeUsd)}
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <Typography variant="body2" color="text.secondary">
                   Buy Volume
                 </Typography>
-                <Typography variant="body1">
-                  {formatUsd(token.stats.buyVolume)}
-                </Typography>
+                <Typography variant="body1">{formatUsd(displayBuyVolumeUsd)}</Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <Typography variant="body2" color="text.secondary">
                   Sell Volume
                 </Typography>
-                <Typography variant="body1">
-                  {formatUsd(token.stats.sellVolume)}
-                </Typography>
+                <Typography variant="body1">{formatUsd(displaySellVolumeUsd)}</Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <Typography variant="body2" color="text.secondary">
                   Unique Traders
                 </Typography>
-                <Typography variant="body1">
-                  {token.stats.uniqueTraders}
-                </Typography>
+                <Typography variant="body1">{displayUniqueTraders}</Typography>
               </Grid>
             </Grid>
             <TableContainer>
@@ -825,7 +715,7 @@ export default function TokenDetailPage() {
                         />
                       </TableCell>
                       <TableCell>{trade.amountSol.toFixed(4)}</TableCell>
-                      <TableCell>${trade.amountUsd.toFixed(2)}</TableCell>
+                      <TableCell>{formatUsd(trade.amountUsd)}</TableCell>
                       <TableCell>
                         {new Date(parseInt(trade.timestamp, 10)).toLocaleTimeString()}
                       </TableCell>
@@ -836,57 +726,63 @@ export default function TokenDetailPage() {
             </TableContainer>
           </Paper>
 
-          {(metadata?.description || metadataLinks.length > 0) && (
+          {(metadata?.description || metadata?.summary || metadata?.details || metadata?.about || metadata?.story || metadata?.biography || metadata?.background || remote?.coin?.description) && (
             <Paper sx={{ p: 3, mb: 3 }}>
               <Typography variant="h6" gutterBottom>
                 About {token.name}
               </Typography>
-              {metadata?.description ? (
-                <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-line' }}>
-                  {metadata.description}
-                </Typography>
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  No description available.
-                </Typography>
-              )}
-              {metadataLinks.length > 0 && (
-                <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: 'wrap' }}>
-                  {metadataLinks.map((link) => (
+              <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "pre-line" }}>
+                {metadata?.description || metadata?.summary || metadata?.details || metadata?.about || metadata?.story || metadata?.biography || metadata?.background || remote?.coin?.description || "No description available."}
+              </Typography>
+              <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>
+                {["website", "twitter", "telegram"].map((key) => {
+                  const value = metadata?.[key] || remote?.coin?.[key];
+                  if (!value) return null;
+                  let url = value as string;
+                  if (key === "twitter") {
+                    const handle = url.replace(/^@/, "");
+                    url = `https://twitter.com/${handle}`;
+                  } else if (key === "telegram") {
+                    const handle = url.replace(/^@/, "");
+                    url = `https://t.me/${handle}`;
+                  } else if (!/^https?:/i.test(url)) {
+                    url = `https://${url}`;
+                  }
+                  return (
                     <Button
-                      key={link.label}
+                      key={key}
                       variant="outlined"
                       size="small"
                       component="a"
-                      href={link.url}
+                      href={url}
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      {link.label}
+                      {key.charAt(0).toUpperCase() + key.slice(1)}
                     </Button>
-                  ))}
-                </Stack>
-              )}
+                  );
+                })}
+              </Stack>
             </Paper>
           )}
         </Grid>
 
         <Grid item xs={12} md={4}>
-          {(creator || token.stats || coinDetails) && (
+          {(remote?.creator || token.creatorAddress) && (
             <Paper sx={{ p: 3, mb: 2 }}>
               <Typography variant="h6" gutterBottom>
                 Creator
               </Typography>
               <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
-                <Avatar src={creator?.profile_image || undefined}>
-                  {creator?.username?.charAt(0)?.toUpperCase() || token.symbol.charAt(0)}
+                <Avatar src={remote?.creator?.profile_image || undefined}>
+                  {remote?.creator?.username?.charAt(0)?.toUpperCase() || token.symbol.charAt(0)}
                 </Avatar>
                 <Box>
                   <Typography variant="subtitle1">
-                    {creator?.username || shortenAddress(token.creatorAddress)}
+                    {remote?.creator?.username || shortenAddress(token.creatorAddress)}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Followers: {creator?.followers ?? "N/A"}
+                    Followers: {remote?.creator?.followers ?? "N/A"}
                   </Typography>
                 </Box>
               </Stack>
