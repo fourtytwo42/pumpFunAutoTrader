@@ -5,7 +5,9 @@ const prisma = new PrismaClient()
 
 // Only pre-aggregate candles for active tokens (reduces memory usage)
 // For less active tokens, candles are generated on-demand from trades
-const ACTIVE_TRADE_THRESHOLD = 10 // Tokens with 10+ trades in last hour
+// Lower threshold = more tokens pre-aggregated (uses more memory but faster queries)
+// Higher threshold = fewer tokens pre-aggregated (uses less memory, slower for inactive tokens)
+const ACTIVE_TRADE_THRESHOLD = 1 // Tokens with 1+ trades in last hour (lowered for initial setup)
 const INTERVALS = [1, 5, 60, 360, 1440] // 1m, 5m, 1h, 6h, 24h
 
 interface CandleData {
@@ -122,9 +124,32 @@ async function aggregateAllCandles() {
 
   // Only process tokens with recent activity (reduces memory usage)
   // This is a performance optimization - inactive tokens can generate candles on-demand
+  // For initial setup, we'll process all tokens that have trades (regardless of recency)
+  // This ensures candles are created for historical data
   const oneHourAgo = BigInt(Date.now() - 60 * 60 * 1000)
   
-  const activeTokens = await prisma.token.findMany({
+  // Get all tokens with trades (for initial aggregation)
+  // After initial setup, you can switch to only recent trades
+  const allTokensWithTrades = await prisma.token.findMany({
+    where: {
+      trades: {
+        some: {},
+      },
+    },
+    select: { 
+      id: true, 
+      symbol: true, 
+      mintAddress: true,
+      _count: {
+        select: {
+          trades: true, // Total trades
+        },
+      },
+    },
+  })
+
+  // Get tokens with recent activity for threshold filtering
+  const recentActiveTokens = await prisma.token.findMany({
     where: {
       trades: {
         some: {
@@ -152,19 +177,34 @@ async function aggregateAllCandles() {
     },
   })
 
-  // Filter to only tokens with significant activity
-  const veryActiveTokens = activeTokens.filter(
-    (token) => (token._count?.trades || 0) >= ACTIVE_TRADE_THRESHOLD
+  // Create a map of recent active tokens for quick lookup
+  const recentActiveMap = new Map(
+    recentActiveTokens
+      .filter((token) => (token._count?.trades || 0) >= ACTIVE_TRADE_THRESHOLD)
+      .map((token) => [token.id, true])
   )
 
+  // Process all tokens with trades, but prioritize active ones
+  // This ensures we aggregate candles for all tokens initially, but focus on active ones
+  const tokensToProcess = allTokensWithTrades.filter((token) => {
+    // Always process tokens that meet the threshold
+    if (recentActiveMap.has(token.id)) {
+      return true
+    }
+    // For initial setup, also process tokens with any trades (even if below threshold)
+    // This ensures historical candles are created
+    // After initial setup, you can remove this to only process active tokens
+    return true // Set to false after initial aggregation is complete
+  })
+
   console.log(
-    `📊 Processing ${veryActiveTokens.length} active tokens (${activeTokens.length} total with recent trades, threshold: ${ACTIVE_TRADE_THRESHOLD}+ trades/hour)...`
+    `📊 Processing ${tokensToProcess.length} tokens (${allTokensWithTrades.length} total with trades, ${recentActiveTokens.filter(t => (t._count?.trades || 0) >= ACTIVE_TRADE_THRESHOLD).length} active with ${ACTIVE_TRADE_THRESHOLD}+ trades/hour)...`
   )
 
   let totalCandles = 0
   let processedTokens = 0
 
-  for (const token of veryActiveTokens) {
+  for (const token of tokensToProcess) {
     try {
       let tokenCandles = 0
       for (const interval of INTERVALS) {
