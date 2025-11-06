@@ -87,12 +87,7 @@ export default function PriceChart({ tokenAddress, interval = '1m', height = 300
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    fetchChartData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tokenAddress, interval])
-
-  const fetchChartData = async () => {
+  const fetchChartData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -125,7 +120,11 @@ export default function PriceChart({ tokenAddress, interval = '1m', height = 300
     } finally {
       setLoading(false)
     }
-  }
+  }, [interval, tokenAddress])
+
+  useEffect(() => {
+    fetchChartData()
+  }, [fetchChartData])
 
   const chartData: ChartDatum[] = useMemo(() => {
     return data.map((candle) => {
