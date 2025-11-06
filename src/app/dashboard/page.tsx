@@ -364,9 +364,9 @@ export default async function DashboardPage() {
                   <Typography variant="caption" color="text.secondary" noWrap>
                     {token.name}
                   </Typography>
-                  {token.price && (
+                  {token.price && token.price.priceUsd > 0 && (
                     <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>
-                      {Number(token.price.priceSol).toFixed(8)} SOL
+                      ${(Number(token.price.priceUsd) * 1_000_000).toFixed(2)}/1M
                     </Typography>
                   )}
                 </Card>

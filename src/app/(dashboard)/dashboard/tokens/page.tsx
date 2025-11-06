@@ -101,27 +101,21 @@ export default function TokensPage() {
     return 'rgba(26, 26, 26, 1)'
   }
 
-  const formatPrice = (price: number | null) => {
-    if (!price || price === 0) return 'N/A'
+  const formatPricePerMillion = (priceUsd: number | null) => {
+    if (!priceUsd || priceUsd === 0) return 'N/A'
     
-    // Format small prices better
-    if (price < 0.000001) {
-      // For very small prices, show scientific notation but cleaner
-      const exp = Math.floor(Math.log10(price))
-      const mantissa = price / Math.pow(10, exp)
-      return `${mantissa.toFixed(2)}e${exp}`
-    } else if (price < 0.0001) {
-      // For small prices, show more precision
-      return price.toFixed(8).replace(/\.?0+$/, '')
-    } else if (price < 1) {
-      // For prices less than 1, show 6 decimals
-      return price.toFixed(6).replace(/\.?0+$/, '')
-    } else if (price < 1000) {
-      // For prices 1-1000, show 4 decimals
-      return price.toFixed(4).replace(/\.?0+$/, '')
+    // Convert to price per million tokens
+    const pricePerMillion = priceUsd * 1_000_000
+    
+    // Format the price
+    if (pricePerMillion < 0.01) {
+      return `$${pricePerMillion.toFixed(4)}`
+    } else if (pricePerMillion < 1000) {
+      return `$${pricePerMillion.toFixed(2)}`
+    } else if (pricePerMillion < 1000000) {
+      return `$${(pricePerMillion / 1000).toFixed(2)}K`
     } else {
-      // For larger prices, show 2 decimals
-      return price.toFixed(2).replace(/\.?0+$/, '')
+      return `$${(pricePerMillion / 1000000).toFixed(2)}M`
     }
   }
 
@@ -239,14 +233,16 @@ export default function TokensPage() {
 
                     <Box sx={{ mb: 2 }}>
                       <Typography variant="body2" color="text.secondary">
-                        Price
+                        Price (per 1M tokens)
                       </Typography>
                       <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 'bold' }}>
-                        {token.price ? `${formatPrice(token.price.priceSol)} SOL` : 'N/A'}
+                        {token.price && token.price.priceUsd > 0 
+                          ? formatPricePerMillion(token.price.priceUsd)
+                          : 'N/A'}
                       </Typography>
-                      {token.price && token.price.priceUsd > 0 && (
+                      {token.price && (
                         <Typography variant="body2" color="text.secondary">
-                          ${formatPrice(token.price.priceUsd)}
+                          {token.price.priceSol.toFixed(8)} SOL/token
                         </Typography>
                       )}
                     </Box>

@@ -228,7 +228,17 @@ export default function TokenDetailPage() {
             <Box sx={{ display: 'flex', gap: 4, flexWrap: 'wrap', mb: 3 }}>
               <Box>
                 <Typography variant="body2" color="text.secondary">
-                  Price (SOL)
+                  Price (per 1M tokens)
+                </Typography>
+                <Typography variant="h5">
+                  {token.price && token.price.priceUsd > 0
+                    ? `$${(token.price.priceUsd * 1_000_000).toFixed(2)}`
+                    : 'N/A'}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="body2" color="text.secondary">
+                  Price per Token (SOL)
                 </Typography>
                 <Typography variant="h5">
                   {token.price ? token.price.priceSol.toFixed(8) : 'N/A'}
@@ -236,10 +246,10 @@ export default function TokenDetailPage() {
               </Box>
               <Box>
                 <Typography variant="body2" color="text.secondary">
-                  Price (USD)
+                  Price per Token (USD)
                 </Typography>
                 <Typography variant="h5">
-                  {token.price ? `$${token.price.priceUsd.toFixed(4)}` : 'N/A'}
+                  {token.price ? `$${token.price.priceUsd.toFixed(6)}` : 'N/A'}
                 </Typography>
               </Box>
             </Box>
