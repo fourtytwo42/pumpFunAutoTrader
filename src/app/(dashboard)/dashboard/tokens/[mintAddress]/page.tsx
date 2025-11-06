@@ -479,12 +479,24 @@ export default function TokenDetailPage() {
     );
   }
 
-  const totalSupplyTokens = token.totalSupplyTokens ?? (remote?.coin?.total_supply ? Number(remote.coin.total_supply) / 1_000_000_000 : undefined);
+  const totalSupplyTokens =
+    token.totalSupplyTokens ??
+    (remote?.coin?.total_supply ? Number(remote.coin.total_supply) / 1_000_000 : undefined);
   const priceSol = token.price?.priceSol ?? 0;
   const priceUsd = token.price?.priceUsd ?? 0;
   const priceUsdDisplay = metrics?.priceUsd ?? priceUsd;
-  const marketCapUsd = token.marketCapUsd ?? (remote?.coin?.usd_market_cap ? Number(remote.coin.usd_market_cap) : undefined);
-  const marketCapSol = token.marketCapSol ?? (remote?.coin?.market_cap ? Number(remote.coin.market_cap) : undefined);
+  const solReferencePrice =
+    userSummary?.solPriceUsd ?? (priceSol > 0 && priceUsdDisplay > 0 ? priceUsdDisplay / priceSol : 0);
+  const pricePerTokenUsd =
+    priceSol > 0 && solReferencePrice > 0 ? priceSol * solReferencePrice : priceUsdDisplay;
+  const pricePerMillionSol = priceSol > 0 ? priceSol * 1_000_000 : 0;
+  const pricePerMillionUsd = pricePerTokenUsd > 0 ? pricePerTokenUsd * 1_000_000 : 0;
+  const marketCapUsd =
+    token.marketCapUsd ??
+    (totalSupplyTokens && pricePerTokenUsd > 0 ? totalSupplyTokens * pricePerTokenUsd : undefined);
+  const marketCapSol =
+    token.marketCapSol ??
+    (marketCapUsd && solReferencePrice > 0 ? marketCapUsd / solReferencePrice : undefined);
 
   const sortedTopHolders = [...topHolders].sort((a, b) => (b.amountTokens ?? b.amount ?? 0) - (a.amountTokens ?? a.amount ?? 0));
   const sortedRemoteTrades = [...remoteTrades].sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
@@ -495,7 +507,7 @@ export default function TokenDetailPage() {
   const solBalanceAvailable = userSummary?.solBalance ?? 0;
   const userPosition = userSummary?.position ?? null;
   const userTrades = userSummary?.trades ?? [];
-  const userSolPriceUsd = userSummary?.solPriceUsd ?? (priceSol > 0 && priceUsdDisplay > 0 ? priceUsdDisplay / priceSol : 0);
+  const userSolPriceUsd = solReferencePrice;
   const tokensHeld = userPosition?.amountTokens ?? 0;
   const tokenValueSol = userPosition?.currentValueSol ?? 0;
   const tokenValueUsd = userPosition?.currentValueUsd ?? 0;
@@ -504,17 +516,33 @@ export default function TokenDetailPage() {
   const pnlPct = userPosition?.pnlPct ?? 0;
   const avgPriceSol = userPosition?.avgPriceSol ?? 0;
 
+  const BONDING_CURVE_BASE_SOL = 30;
+  const BONDING_CURVE_TARGET_SOL = 690;
   const bondingCurveVirtualSol = remote?.coin?.virtual_sol_reserves
     ? Number(remote.coin.virtual_sol_reserves) / 1_000_000_000
     : 0;
-  const bondingCurveTargetSol = 69;
+  const bondingCurveRealSol = remote?.coin?.real_sol_reserves
+    ? Number(remote.coin.real_sol_reserves) / 1_000_000_000
+    : 0;
+  const bondingCurveActualSol =
+    bondingCurveRealSol > 0
+      ? bondingCurveRealSol
+      : Math.max(bondingCurveVirtualSol - BONDING_CURVE_BASE_SOL, 0);
   const bondingCurveProgress = Math.min(
-    bondingCurveTargetSol > 0 ? (bondingCurveVirtualSol / bondingCurveTargetSol) * 100 : 0,
+    BONDING_CURVE_TARGET_SOL > BONDING_CURVE_BASE_SOL
+      ? (bondingCurveActualSol / (BONDING_CURVE_TARGET_SOL - BONDING_CURVE_BASE_SOL)) * 100
+      : 0,
     100,
   );
-  const bondingCurveRemainingSol = Math.max(bondingCurveTargetSol - bondingCurveVirtualSol, 0);
-  const bondingCurveRemainingUsd =
-    userSolPriceUsd > 0 ? bondingCurveRemainingSol * userSolPriceUsd : undefined;
+  const graduateTargetUsd = 69_000;
+  const bondingCurveRemainingSol = Math.max(
+    BONDING_CURVE_TARGET_SOL - BONDING_CURVE_BASE_SOL - bondingCurveActualSol,
+    0,
+  );
+  const bondingCurveRemainingUsd = Math.max(
+    graduateTargetUsd - (marketCapUsd ?? 0),
+    0,
+  );
   const bondingCurveCompleted = token.completed;
   const bondingCurveCompletedAt = token.kingOfTheHillTimestamp
     ? new Date(token.kingOfTheHillTimestamp).toLocaleString()
@@ -675,33 +703,39 @@ export default function TokenDetailPage() {
                   Price (per 1M tokens)
                 </Typography>
                 <Typography variant="h5">
-                  {priceUsdDisplay && priceUsdDisplay > 0 ? formatUsd(priceUsdDisplay * 1_000_000) : "N/A"}
+                  {pricePerMillionUsd > 0 ? formatUsdFull(pricePerMillionUsd) : "N/A"}
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <Typography variant="body2" color="text.secondary">
                   Price (per 1M tokens - SOL)
                 </Typography>
-                <Typography variant="h5">{priceSol > 0 ? formatSolValue(priceSol * 1_000_000) : "N/A"}</Typography>
+                <Typography variant="h5">
+                  {pricePerMillionSol > 0 ? formatSolValue(pricePerMillionSol) : "N/A"}
+                </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <Typography variant="body2" color="text.secondary">
                   Market Cap (USD)
                 </Typography>
-                <Typography variant="h5">{formatUsd(marketCapUsd)}</Typography>
+                <Typography variant="h5">
+                  {marketCapUsd !== undefined ? formatUsdFull(marketCapUsd) : "N/A"}
+                </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <Typography variant="body2" color="text.secondary">
                   Market Cap (SOL)
                 </Typography>
-                <Typography variant="h5">{formatSolValue(marketCapSol)}</Typography>
+                <Typography variant="h5">
+                  {marketCapSol !== undefined ? formatSolValue(marketCapSol) : "N/A"}
+                </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <Typography variant="body2" color="text.secondary">
                   Price per Token (USD)
                 </Typography>
                 <Typography variant="h6">
-                  {priceUsdDisplay && priceUsdDisplay > 0 ? formatUsd(priceUsdDisplay) : "N/A"}
+                  {pricePerTokenUsd > 0 ? formatUsdFull(pricePerTokenUsd) : "N/A"}
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
@@ -709,7 +743,7 @@ export default function TokenDetailPage() {
                   Price per Token (SOL)
                 </Typography>
                 <Typography variant="h6">
-                  {priceSol > 0 ? formatSolValue(priceSol) : "N/A"}
+                  {priceSol > 0 ? formatSolFull(priceSol, 8) : "N/A"}
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
@@ -1122,6 +1156,13 @@ export default function TokenDetailPage() {
                   >
                     {formatCurrencyWithSign(unrealizedUsd)} ({formatPercentWithSign(pnlPct)})
                   </Typography>
+                  <Typography
+                    variant="caption"
+                    color={unrealizedSol >= 0 ? 'success.main' : 'error.main'}
+                    sx={{ display: 'block' }}
+                  >
+                    {formatSolFull(unrealizedSol, 4)}
+                  </Typography>
                   <LinearProgress
                     variant="determinate"
                     value={pnlBarValue}
@@ -1210,13 +1251,16 @@ export default function TokenDetailPage() {
                   value={bondingCurveProgress}
                   sx={{ height: 8, borderRadius: 4, mb: 1 }}
                 />
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                  {bondingCurveProgress.toFixed(1)}% to 69k USD target
+                </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {formatSolFull(bondingCurveVirtualSol, 3)} in bonding curve
+                  {formatSolFull(bondingCurveActualSol, 3)} in bonding curve
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   {bondingCurveRemainingUsd !== undefined
                     ? `${formatUsdFull(bondingCurveRemainingUsd)} to graduate`
-                    : `${formatSolFull(bondingCurveRemainingSol, 3)} remaining to graduate`}
+                    : `${formatSolFull(bondingCurveRemainingSol, 3)} SOL remaining`}
                 </Typography>
               </>
             )}

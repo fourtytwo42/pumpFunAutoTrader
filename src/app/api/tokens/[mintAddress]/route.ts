@@ -32,7 +32,7 @@ async function fetchPumpJson<T>(url: string, init: RequestInit = {}): Promise<T 
   }
 }
 
-const TOKEN_DECIMALS_NUMBER = 1_000_000_000
+const TOKEN_DECIMALS_NUMBER = 1_000_000
 
 function toNumber(value: any): number {
   if (value === null || value === undefined) return 0
@@ -189,7 +189,7 @@ export async function GET(
 
     if ((!priceSol || priceSol <= 0) && coinDetails?.virtual_sol_reserves && coinDetails?.virtual_token_reserves) {
       const virtualSol = toNumber(coinDetails.virtual_sol_reserves) / 1_000_000_000
-      const virtualTokens = toNumber(coinDetails.virtual_token_reserves) / 1_000_000_000
+      const virtualTokens = toNumber(coinDetails.virtual_token_reserves) / TOKEN_DECIMALS_NUMBER
       if (virtualSol > 0 && virtualTokens > 0) {
         priceSol = virtualSol / virtualTokens
       }
@@ -209,7 +209,7 @@ export async function GET(
       }
     }
 
-    if (priceSol > 0 && (!priceUsdFromDb || priceUsdFromDb <= 0) && solPriceUsd > 0) {
+    if (priceSol > 0 && solPriceUsd > 0) {
       priceUsdFromDb = priceSol * solPriceUsd
     }
 
