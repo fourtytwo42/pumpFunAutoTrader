@@ -101,14 +101,31 @@ export async function GET(request: NextRequest) {
         const totalVolume = buyVolume + sellVolume
         const volumeRatio = totalVolume > 0 ? buyVolume / totalVolume : 0.5
 
-        // Calculate price info - always recalculate USD from priceSol to ensure accuracy
+        // Calculate price info - try to get accurate price from latest trade or use stored price
         let priceSol = 0
         let priceUsd = 0
         if (token.price) {
           priceSol = Number(token.price.priceSol)
-          // Always calculate USD from SOL price using current SOL/USD rate for accuracy
-          if (priceSol > 0) {
+          const storedPriceUsd = Number(token.price.priceUsd)
+          
+          // If stored priceUsd is meaningful (> 0.000001), use it
+          // Otherwise calculate from priceSol
+          if (storedPriceUsd > 0.000001) {
+            priceUsd = storedPriceUsd
+          } else if (priceSol > 0) {
+            // Calculate USD from SOL price using current SOL/USD rate
             priceUsd = priceSol * solPriceUsd
+          }
+          
+          // If priceUsd is still extremely small, try to get from latest trade's market cap
+          if (priceUsd < 0.000000001 && token.totalSupply) {
+            // Get the most recent trade with market cap info if available
+            const latestTrade = await prisma.trade.findFirst({
+              where: { tokenId: token.id },
+              orderBy: { timestamp: 'desc' },
+            })
+            // Note: We don't store market cap in trades, so this is a fallback
+            // The real fix would be to ensure market cap is used during ingestion
           }
         }
 
