@@ -1,18 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  LineChart,
-  Line,
+  ResponsiveContainer,
+  ComposedChart,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
-  AreaChart,
-  Area,
+  Bar,
 } from 'recharts'
-import { Box, CircularProgress, Typography } from '@mui/material'
+import { Box, CircularProgress, Typography, Paper, Stack } from '@mui/material'
 
 interface CandleData {
   timestamp: string
@@ -29,6 +27,106 @@ interface PriceChartProps {
   height?: number
 }
 
+interface ChartDatum extends CandleData {
+  timeLabel: string
+  timestampMs: number
+  body: number
+  base: number
+  direction: 'up' | 'down'
+}
+
+const CandleShape = (props: any) => {
+  const { x, width, payload, domain, chartViewBox } = props
+  if (!payload || !domain || !Array.isArray(domain) || !chartViewBox) {
+    return null
+  }
+
+  const [domainMin, domainMax] = domain
+  const { top = 0, height = 0 } = chartViewBox
+  const scale = (value: number) => {
+    if (domainMax === domainMin) return top + height / 2
+    const ratio = (domainMax - value) / (domainMax - domainMin)
+    return top + ratio * height
+  }
+
+  const openY = scale(payload.open)
+  const closeY = scale(payload.close)
+  const highY = scale(payload.high)
+  const lowY = scale(payload.low)
+
+  const isUp = payload.direction === 'up'
+  const color = isUp ? '#00ff88' : '#ff4d4d'
+  const bodyTop = Math.min(openY, closeY)
+  const bodyBottom = Math.max(openY, closeY)
+  const bodyHeight = Math.max(bodyBottom - bodyTop, 2)
+  const candleWidth = Math.max(width * 0.6, 6)
+  const xCenter = x + width / 2
+
+  return (
+    <g>
+      <line
+        x1={xCenter}
+        y1={highY}
+        x2={xCenter}
+        y2={lowY}
+        stroke={color}
+        strokeWidth={2}
+      />
+      <rect
+        x={x + (width - candleWidth) / 2}
+        y={bodyTop}
+        width={candleWidth}
+        height={bodyHeight}
+        fill={color}
+        stroke={color}
+      />
+    </g>
+  )
+}
+
+const CandleTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload || payload.length === 0) {
+    return null
+  }
+
+  const candle = payload[0]?.payload as ChartDatum | undefined
+  if (!candle) return null
+
+  const date = new Date(candle.timestampMs)
+  const timeString = date.toLocaleString()
+  const color = candle.direction === 'up' ? '#00ff88' : '#ff4d4d'
+
+  return (
+    <Paper
+      sx={{
+        backgroundColor: '#101010',
+        border: '1px solid #333',
+        p: 1.5,
+      }}
+      elevation={0}
+    >
+      <Typography variant="caption" color="text.secondary">{timeString}</Typography>
+      <Stack spacing={0.5} sx={{ mt: 1 }}>
+        <Typography variant="caption" color={color}>
+          Close: {candle.close.toFixed(9)}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          Open: {candle.open.toFixed(9)}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          High: {candle.high.toFixed(9)}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          Low: {candle.low.toFixed(9)}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          Volume: {candle.volume.toFixed(2)}
+        </Typography>
+      </Stack>
+    </Paper>
+  )
+}
+
 export default function PriceChart({ tokenAddress, interval = '1m', height = 300 }: PriceChartProps) {
   const [data, setData] = useState<CandleData[]>([])
   const [loading, setLoading] = useState(true)
@@ -36,13 +134,13 @@ export default function PriceChart({ tokenAddress, interval = '1m', height = 300
 
   useEffect(() => {
     fetchChartData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tokenAddress, interval])
 
   const fetchChartData = async () => {
     setLoading(true)
     setError(null)
     try {
-      // Get current simulation time for time-travel support
       let simulationTime: string | null = null
       try {
         const simResponse = await fetch('/api/simulation/time')
@@ -53,10 +151,9 @@ export default function PriceChart({ tokenAddress, interval = '1m', height = 300
           }
         }
       } catch (e) {
-        // If simulation time fetch fails, continue without it (real-time mode)
+        // Ignore simulation fetch errors; fall back to real-time
       }
 
-      // Build URL with simulation time if available
       let url = `/api/tokens/${tokenAddress}/candles?interval=${interval}&limit=500`
       if (simulationTime) {
         url += `&simulation_time=${simulationTime}`
@@ -74,6 +171,26 @@ export default function PriceChart({ tokenAddress, interval = '1m', height = 300
       setLoading(false)
     }
   }
+
+  const chartData: ChartDatum[] = useMemo(() => {
+    return data.map((candle) => {
+      const timestampMs = Number.parseInt(candle.timestamp, 10)
+      const open = Number(candle.open)
+      const close = Number(candle.close)
+      const high = Number(candle.high)
+      const low = Number(candle.low)
+      const base = Math.min(open, close)
+      const body = Math.max(Math.abs(close - open), Number.EPSILON)
+      return {
+        ...candle,
+        timestampMs,
+        timeLabel: new Date(timestampMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        base,
+        body,
+        direction: close >= open ? 'up' : 'down',
+      }
+    })
+  }, [data])
 
   if (loading) {
     return (
@@ -96,7 +213,7 @@ export default function PriceChart({ tokenAddress, interval = '1m', height = 300
     )
   }
 
-  if (data.length === 0) {
+  if (chartData.length === 0) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height }}>
         <Typography variant="body2" color="text.secondary">
@@ -106,59 +223,40 @@ export default function PriceChart({ tokenAddress, interval = '1m', height = 300
     )
   }
 
-  const chartData = data.map((candle) => ({
-    time: new Date(parseInt(candle.timestamp)).toLocaleTimeString(),
-    price: Number(candle.close),
-    volume: Number(candle.volume),
-  }))
-
-  const minPrice = Math.min(...chartData.map((d) => d.price))
-  const maxPrice = Math.max(...chartData.map((d) => d.price))
-  const priceRange = maxPrice - minPrice
-  const yAxisDomain = [minPrice - priceRange * 0.1, maxPrice + priceRange * 0.1]
+  const prices = chartData.flatMap((d) => [d.open, d.close, d.high, d.low])
+  const minPrice = Math.min(...prices)
+  const maxPrice = Math.max(...prices)
+  const padding = (maxPrice - minPrice) * 0.1 || minPrice * 0.1 || 0.00000001
+  const domain: [number, number] = [minPrice - padding, maxPrice + padding]
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={chartData}>
-        <defs>
-          <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#00ff88" stopOpacity={0.3} />
-            <stop offset="95%" stopColor="#00ff88" stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+      <ComposedChart data={chartData} margin={{ left: 12, right: 12 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
         <XAxis
-          dataKey="time"
+          dataKey="timeLabel"
           stroke="#888"
           style={{ fontSize: '12px' }}
           tick={{ fill: '#888' }}
+          interval={Math.max(Math.floor(chartData.length / 12), 0)}
         />
         <YAxis
-          domain={yAxisDomain}
+          domain={domain}
           stroke="#888"
           style={{ fontSize: '12px' }}
           tick={{ fill: '#888' }}
           tickFormatter={(value) => value.toFixed(8)}
+          width={80}
         />
-        <Tooltip
-          contentStyle={{
-            backgroundColor: '#1a1a1a',
-            border: '1px solid #333',
-            borderRadius: '4px',
-            color: '#fff',
-          }}
-          formatter={(value: number) => [value.toFixed(8), 'Price']}
+        <Tooltip content={<CandleTooltip />} />
+        <Bar
+          dataKey="body"
+          yAxisId={0}
+          barSize={10}
+          shape={<CandleShape />}
+          isAnimationActive={false}
         />
-        <Area
-          type="monotone"
-          dataKey="price"
-          stroke="#00ff88"
-          strokeWidth={2}
-          fillOpacity={1}
-          fill="url(#colorPrice)"
-        />
-      </AreaChart>
+      </ComposedChart>
     </ResponsiveContainer>
   )
 }
-
