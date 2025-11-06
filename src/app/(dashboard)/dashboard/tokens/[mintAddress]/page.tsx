@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   Container,
@@ -24,6 +24,7 @@ import {
   TableRow,
   ToggleButton,
   ToggleButtonGroup,
+  LinearProgress,
 } from "@mui/material";
 import { ShoppingCart, Sell } from "@mui/icons-material";
 import PriceChart from "@/components/charts/PriceChart";
@@ -129,6 +130,49 @@ interface TokenMetrics {
   activity?: Record<string, any>;
 }
 
+interface UserTradeEntry {
+  id: string;
+  type: 'buy' | 'sell';
+  amountSol: number;
+  amountUsd: number;
+  amountTokens: number;
+  priceSol: number;
+  priceUsd: number;
+  timestamp: number;
+}
+
+interface UserPositionSummary {
+  amountTokens: number;
+  avgPriceSol: number;
+  avgPriceUsd: number;
+  currentValueSol: number;
+  currentValueUsd: number;
+  costBasisSol: number;
+  costBasisUsd: number;
+  unrealizedSol: number;
+  unrealizedUsd: number;
+  pnlPct: number;
+}
+
+interface UserTokenSummary {
+  walletId: string;
+  solBalance: number;
+  position: UserPositionSummary | null;
+  trades: UserTradeEntry[];
+  openOrders: Array<{
+    id: string;
+    side: string;
+    status: string;
+    qtyTokens: number | null;
+    qtySol: number | null;
+    limitPriceSol: number | null;
+    createdAt: string;
+  }>;
+  currentPriceSol: number;
+  currentPriceUsd: number;
+  solPriceUsd: number;
+}
+
 const formatCompactNumber = (value?: number, options: Intl.NumberFormatOptions = {}) => {
   if (value === undefined || value === null || Number.isNaN(value)) return "N/A";
   if (!Number.isFinite(value)) return "N/A";
@@ -161,6 +205,40 @@ const formatSolValue = (value?: number) => {
   return `${(value / 1_000).toFixed(2)}K SOL`;
 };
 
+const formatUsdFull = (value?: number) => {
+  if (value === undefined || value === null || Number.isNaN(value)) return "N/A";
+  const formatter = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: value < 1 ? 4 : 2,
+  });
+  return formatter.format(value);
+};
+
+const formatSolFull = (value?: number, fractionDigits = 4) => {
+  if (value === undefined || value === null || Number.isNaN(value)) return "N/A";
+  return `${value.toFixed(fractionDigits)} SOL`;
+};
+
+const formatCurrencyWithSign = (value?: number, currency: 'USD' | 'SOL' = 'USD') => {
+  if (value === undefined || value === null || Number.isNaN(value)) return "N/A";
+  const formatter = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 2,
+    signDisplay: 'always',
+  });
+  if (currency === 'USD') {
+    return formatter.format(value);
+  }
+  return `${value >= 0 ? '+' : '-'}${formatSolValue(Math.abs(value))}`;
+};
+
+const formatPercentWithSign = (value?: number) => {
+  if (value === undefined || value === null || Number.isNaN(value)) return "N/A";
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+};
+
 const formatPercent = (value?: number) => {
   if (value === undefined || value === null || Number.isNaN(value)) return "N/A";
   if (!Number.isFinite(value)) return "N/A";
@@ -187,9 +265,13 @@ const formatTimeAgo = (timestamp?: number | null) => {
   return `${days}d ago`;
 };
 
-const selectMarketActivityBucket = (activity?: Record<string, MarketActivityBucket>) => {
-  if (!activity) return undefined;
-  return activity["24h"] || activity["6h"] || activity["1h"] || activity["5m"];
+const formatTimestamp = (timestamp?: number | null) => {
+  if (!timestamp) return "N/A";
+  try {
+    return new Date(Number(timestamp)).toLocaleString();
+  } catch {
+    return "N/A";
+  }
 };
 
 export default function TokenDetailPage() {
@@ -201,16 +283,15 @@ export default function TokenDetailPage() {
   const [token, setToken] = useState<TokenData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState<'buy' | 'sell'>('buy');
   const [buyAmount, setBuyAmount] = useState("");
   const [sellAmount, setSellAmount] = useState("");
   const [trading, setTrading] = useState(false);
   const [tradeSuccess, setTradeSuccess] = useState("");
   const [candleInterval, setCandleInterval] = useState<(typeof CANDLE_INTERVALS)[number]>('1m');
   const [metrics, setMetrics] = useState<TokenMetrics | null>(null);
-  const [buyOrderType, setBuyOrderType] = useState<'market' | 'limit'>('market');
-  const [buyLimitPrice, setBuyLimitPrice] = useState('');
-  const [sellOrderType, setSellOrderType] = useState<'market' | 'limit'>('market');
-  const [sellLimitPrice, setSellLimitPrice] = useState('');
+  const [userSummary, setUserSummary] = useState<UserTokenSummary | null>(null);
+  const [userSummaryLoading, setUserSummaryLoading] = useState(true);
   const handleCandleIntervalChange = (_: unknown, value: (typeof CANDLE_INTERVALS)[number] | null) => {
     if (value) {
       setCandleInterval(value);
@@ -249,21 +330,38 @@ export default function TokenDetailPage() {
     }
   }, [mintAddress]);
 
+  const fetchUserSummary = useCallback(async () => {
+    if (!mintAddress) {
+      return;
+    }
+    setUserSummaryLoading(true);
+    try {
+      const res = await fetch(`/api/tokens/${mintAddress}/user`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setUserSummary(data);
+      } else {
+        setUserSummary(null);
+      }
+    } catch (err) {
+      console.error('Failed to load user summary', err);
+      setUserSummary(null);
+    } finally {
+      setUserSummaryLoading(false);
+    }
+  }, [mintAddress]);
+
   useEffect(() => {
     if (!mintAddress) {
       return;
     }
     fetchToken();
-  }, [fetchToken, mintAddress]);
+    fetchUserSummary();
+  }, [fetchToken, fetchUserSummary, mintAddress]);
 
   const handleBuy = async () => {
     if (!buyAmount || parseFloat(buyAmount) <= 0 || !token) return;
     const amountSol = parseFloat(buyAmount);
-    const limitPriceSol = buyOrderType === 'limit' ? parseFloat(buyLimitPrice) : undefined;
-    if (buyOrderType === 'limit' && (!limitPriceSol || limitPriceSol <= 0)) {
-      setError('Enter a valid limit price in SOL');
-      return;
-    }
     const approved = await requestApproval({
       type: "buy",
       tokenName: token.name,
@@ -282,7 +380,6 @@ export default function TokenDetailPage() {
         body: JSON.stringify({
           tokenId: token.id,
           amountSol,
-          limitPriceSol: limitPriceSol ?? null,
         }),
       });
 
@@ -290,16 +387,14 @@ export default function TokenDetailPage() {
       if (!response.ok) {
         throw new Error(data.error || "Buy failed");
       }
-      if (data.status === 'open') {
-        setTradeSuccess('Limit buy order placed. Waiting for market to reach your price.');
-      } else {
-        setTradeSuccess(`Bought ${data.tokensReceived?.toFixed(2)} tokens at ${data.fillPrice?.toFixed(6)} SOL!`);
-        refreshWallet();
-      }
+      setTradeSuccess(
+        data.tokensReceived && data.fillPrice
+          ? `Bought ${data.tokensReceived?.toFixed(2)} tokens at ${data.fillPrice?.toFixed(6)} SOL!`
+          : 'Buy order executed.'
+      );
+      refreshWallet();
+      fetchUserSummary();
       setBuyAmount("");
-      if (buyOrderType === 'limit') {
-        setBuyLimitPrice('');
-      }
       fetchToken();
     } catch (err: any) {
       setError(err.message || "Buy failed");
@@ -311,11 +406,6 @@ export default function TokenDetailPage() {
   const handleSell = async () => {
     if (!sellAmount || parseFloat(sellAmount) <= 0 || !token) return;
     const amountTokens = parseFloat(sellAmount);
-    const limitPriceSol = sellOrderType === 'limit' ? parseFloat(sellLimitPrice) : undefined;
-    if (sellOrderType === 'limit' && (!limitPriceSol || limitPriceSol <= 0)) {
-      setError('Enter a valid limit price in SOL');
-      return;
-    }
     const approved = await requestApproval({
       type: "sell",
       tokenName: token.name,
@@ -334,7 +424,6 @@ export default function TokenDetailPage() {
         body: JSON.stringify({
           tokenId: token.id,
           amountTokens,
-          limitPriceSol: limitPriceSol ?? null,
         }),
       });
 
@@ -342,16 +431,14 @@ export default function TokenDetailPage() {
       if (!response.ok) {
         throw new Error(data.error || "Sell failed");
       }
-      if (data.status === 'open') {
-        setTradeSuccess('Limit sell order placed. Waiting for market to reach your price.');
-      } else {
-        setTradeSuccess(`Sold for ${data.solReceived?.toFixed(4)} SOL at ${data.fillPrice?.toFixed(6)} SOL!`);
-        refreshWallet();
-      }
+      setTradeSuccess(
+        data.solReceived && data.fillPrice
+          ? `Sold for ${data.solReceived?.toFixed(4)} SOL at ${data.fillPrice?.toFixed(6)} SOL!`
+          : 'Sell order executed.'
+      );
+      refreshWallet();
+      fetchUserSummary();
       setSellAmount("");
-      if (sellOrderType === 'limit') {
-        setSellLimitPrice('');
-      }
       fetchToken();
     } catch (err: any) {
       setError(err.message || "Sell failed");
@@ -365,10 +452,6 @@ export default function TokenDetailPage() {
   const topHolders = remote?.topHolders || [];
   const remoteTrades = remote?.trades || [];
   const marketActivity = remote?.marketActivity;
-  const fallbackActivity = useMemo(
-    () => selectMarketActivityBucket(marketActivity),
-    [marketActivity],
-  );
 
   if (!mintAddress) {
     return null;
@@ -403,24 +486,64 @@ export default function TokenDetailPage() {
   const marketCapUsd = token.marketCapUsd ?? (remote?.coin?.usd_market_cap ? Number(remote.coin.usd_market_cap) : undefined);
   const marketCapSol = token.marketCapSol ?? (remote?.coin?.market_cap ? Number(remote.coin.market_cap) : undefined);
 
-  const displayTotalVolumeUsd = token.stats.totalVolume && token.stats.totalVolume > 0
-    ? token.stats.totalVolume
-    : fallbackActivity?.volumeUSD ?? 0;
-  const displayBuyVolumeUsd = token.stats.buyVolume && token.stats.buyVolume > 0
-    ? token.stats.buyVolume
-    : fallbackActivity?.buyVolumeUSD ?? 0;
-  const displaySellVolumeUsd = token.stats.sellVolume && token.stats.sellVolume > 0
-    ? token.stats.sellVolume
-    : fallbackActivity?.sellVolumeUSD ?? 0;
-  const displayUniqueTraders = token.stats.uniqueTraders && token.stats.uniqueTraders > 0
-    ? token.stats.uniqueTraders
-    : fallbackActivity?.numUsers ?? fallbackActivity?.numBuyers ?? fallbackActivity?.numSellers ?? 0;
-
   const sortedTopHolders = [...topHolders].sort((a, b) => (b.amountTokens ?? b.amount ?? 0) - (a.amountTokens ?? a.amount ?? 0));
   const sortedRemoteTrades = [...remoteTrades].sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
 
   const pumpCoinUrl = `https://pump.fun/coin/${token.mintAddress}`;
   const poolAddress = remote?.poolAddress || null;
+
+  const solBalanceAvailable = userSummary?.solBalance ?? 0;
+  const userPosition = userSummary?.position ?? null;
+  const userTrades = userSummary?.trades ?? [];
+  const userSolPriceUsd = userSummary?.solPriceUsd ?? (priceSol > 0 && priceUsdDisplay > 0 ? priceUsdDisplay / priceSol : 0);
+  const tokensHeld = userPosition?.amountTokens ?? 0;
+  const tokenValueSol = userPosition?.currentValueSol ?? 0;
+  const tokenValueUsd = userPosition?.currentValueUsd ?? 0;
+  const unrealizedUsd = userPosition?.unrealizedUsd ?? 0;
+  const unrealizedSol = userPosition?.unrealizedSol ?? 0;
+  const pnlPct = userPosition?.pnlPct ?? 0;
+  const avgPriceSol = userPosition?.avgPriceSol ?? 0;
+
+  const bondingCurveVirtualSol = remote?.coin?.virtual_sol_reserves
+    ? Number(remote.coin.virtual_sol_reserves) / 1_000_000_000
+    : 0;
+  const bondingCurveTargetSol = 69;
+  const bondingCurveProgress = Math.min(
+    bondingCurveTargetSol > 0 ? (bondingCurveVirtualSol / bondingCurveTargetSol) * 100 : 0,
+    100,
+  );
+  const bondingCurveRemainingSol = Math.max(bondingCurveTargetSol - bondingCurveVirtualSol, 0);
+  const bondingCurveRemainingUsd =
+    userSolPriceUsd > 0 ? bondingCurveRemainingSol * userSolPriceUsd : undefined;
+  const bondingCurveCompleted = token.completed;
+  const bondingCurveCompletedAt = token.kingOfTheHillTimestamp
+    ? new Date(token.kingOfTheHillTimestamp).toLocaleString()
+    : remote?.coin?.updated_at
+      ? new Date(Number(remote.coin.updated_at)).toLocaleString()
+      : null;
+
+  const BUY_PRESETS = [0.1, 0.5, 1];
+  const SELL_PRESETS = [25, 50, 75, 100];
+  const normalizedPnl = Number.isFinite(pnlPct) ? Math.max(Math.min(pnlPct, 200), -200) : 0;
+  const pnlBarValue = Math.max(Math.min(((normalizedPnl + 200) / 4), 100), 0);
+
+  const handleBuyPreset = (value: number) => {
+    if (!solBalanceAvailable) {
+      setBuyAmount('');
+      return;
+    }
+    const amount = Math.min(value, solBalanceAvailable);
+    setBuyAmount(amount > 0 ? amount.toFixed(3) : '');
+  };
+
+  const handleSellPercent = (percent: number) => {
+    if (!tokensHeld) {
+      setSellAmount('');
+      return;
+    }
+    const amount = (tokensHeld * percent) / 100;
+    setSellAmount(amount > 0 ? amount.toFixed(4) : '');
+  };
 
   return (
     <Container maxWidth="lg">
@@ -786,70 +909,6 @@ export default function TokenDetailPage() {
             </Paper>
           )}
 
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Simulation Snapshot
-            </Typography>
-            <Grid container spacing={2} sx={{ mb: 2 }}>
-              <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="body2" color="text.secondary">
-                  Total Volume (USD)
-                </Typography>
-                <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                  {formatUsd(displayTotalVolumeUsd)}
-                </Typography>
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="body2" color="text.secondary">
-                  Buy Volume
-                </Typography>
-                <Typography variant="body1">{formatUsd(displayBuyVolumeUsd)}</Typography>
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="body2" color="text.secondary">
-                  Sell Volume
-                </Typography>
-                <Typography variant="body1">{formatUsd(displaySellVolumeUsd)}</Typography>
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="body2" color="text.secondary">
-                  Unique Traders
-                </Typography>
-                <Typography variant="body1">{displayUniqueTraders}</Typography>
-              </Grid>
-            </Grid>
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Type</TableCell>
-                    <TableCell>Amount (SOL)</TableCell>
-                    <TableCell>Amount (USD)</TableCell>
-                    <TableCell>Time</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {token.recentTrades.map((trade, idx) => (
-                    <TableRow key={idx}>
-                      <TableCell>
-                        <Chip
-                          label={trade.type.toUpperCase()}
-                          color={trade.type === "buy" ? "success" : "error"}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>{trade.amountSol.toFixed(4)}</TableCell>
-                      <TableCell>{formatUsd(trade.amountUsd)}</TableCell>
-                      <TableCell>
-                        {new Date(parseInt(trade.timestamp, 10)).toLocaleTimeString()}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Paper>
-
           {(metadata?.description || metadata?.summary || metadata?.details || metadata?.about || metadata?.story || metadata?.biography || metadata?.background || remote?.coin?.description) && (
             <Paper sx={{ p: 3, mb: 3 }}>
               <Typography variant="h6" gutterBottom>
@@ -892,8 +951,279 @@ export default function TokenDetailPage() {
         </Grid>
 
         <Grid item xs={12} md={4}>
+          <Paper sx={{ p: 3, mb: 2 }}>
+            <Stack
+              direction="row"
+              justifyContent="space-between"
+              alignItems="center"
+              spacing={1}
+              sx={{ mb: 2 }}
+            >
+              <Typography variant="h6">Trade</Typography>
+              <ToggleButtonGroup
+                color="primary"
+                value={activeTab}
+                exclusive
+                size="small"
+                onChange={(_, value) => {
+                  if (value) {
+                    setActiveTab(value);
+                  }
+                }}
+              >
+                <ToggleButton value="buy">Buy</ToggleButton>
+                <ToggleButton value="sell">Sell</ToggleButton>
+              </ToggleButtonGroup>
+            </Stack>
+            <Stack spacing={2}>
+              <Box>
+                <Typography variant="caption" color="text.secondary">
+                  Available SOL
+                </Typography>
+                <Typography variant="body1" fontWeight={600}>
+                  {formatSolFull(solBalanceAvailable, 4)}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="caption" color="text.secondary">
+                  Holdings
+                </Typography>
+                <Typography variant="body1" fontWeight={600}>
+                  {tokensHeld > 0 ? `${tokensHeld.toFixed(4)} ${token.symbol}` : `0 ${token.symbol}`}
+                </Typography>
+              </Box>
+              {activeTab === 'buy' ? (
+                <>
+                  <TextField
+                    fullWidth
+                    label="Amount (SOL)"
+                    type="number"
+                    value={buyAmount}
+                    onChange={(e) => setBuyAmount(e.target.value)}
+                  />
+                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    <Button size="small" variant="outlined" onClick={() => setBuyAmount('')}>
+                      Reset
+                    </Button>
+                    {BUY_PRESETS.map((preset) => (
+                      <Button
+                        key={preset}
+                        size="small"
+                        variant="outlined"
+                        onClick={() => handleBuyPreset(preset)}
+                      >
+                        {preset} SOL
+                      </Button>
+                    ))}
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() =>
+                        setBuyAmount(solBalanceAvailable > 0 ? solBalanceAvailable.toFixed(4) : '')
+                      }
+                    >
+                      Max
+                    </Button>
+                  </Box>
+                </>
+              ) : (
+                <>
+                  <TextField
+                    fullWidth
+                    label="Amount (Tokens)"
+                    type="number"
+                    value={sellAmount}
+                    onChange={(e) => setSellAmount(e.target.value)}
+                  />
+                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    <Button size="small" variant="outlined" onClick={() => setSellAmount('')}>
+                      Reset
+                    </Button>
+                    {SELL_PRESETS.map((pct) => (
+                      <Button
+                        key={pct}
+                        size="small"
+                        variant="outlined"
+                        onClick={() => handleSellPercent(pct)}
+                      >
+                        {pct}%
+                      </Button>
+                    ))}
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => setSellAmount(tokensHeld > 0 ? tokensHeld.toFixed(4) : '')}
+                    >
+                      100%
+                    </Button>
+                  </Box>
+                </>
+              )}
+              <Button
+                fullWidth
+                variant="contained"
+                color={activeTab === 'buy' ? 'success' : 'error'}
+                startIcon={activeTab === 'buy' ? <ShoppingCart /> : <Sell />}
+                onClick={activeTab === 'buy' ? handleBuy : handleSell}
+                disabled={
+                  trading ||
+                  (activeTab === 'buy'
+                    ? !buyAmount ||
+                      parseFloat(buyAmount) <= 0 ||
+                      parseFloat(buyAmount) > solBalanceAvailable
+                    : !sellAmount ||
+                      parseFloat(sellAmount) <= 0 ||
+                      parseFloat(sellAmount) > tokensHeld)
+                }
+              >
+                {trading ? 'Processing...' : activeTab === 'buy' ? 'Buy' : 'Sell'}
+              </Button>
+            </Stack>
+          </Paper>
+
+          <Paper sx={{ p: 3, mb: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Your Position
+            </Typography>
+            {userSummaryLoading ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <CircularProgress size={18} />
+                <Typography variant="body2" color="text.secondary">
+                  Loading wallet...
+                </Typography>
+              </Box>
+            ) : (
+              <>
+                <Box sx={{ mb: 1 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Current Value
+                  </Typography>
+                  <Typography variant="body1" fontWeight={600}>
+                    {tokenValueSol > 0 ? `${tokenValueSol.toFixed(4)} SOL` : '0 SOL'} (
+                    {tokenValueUsd > 0 ? formatUsdFull(tokenValueUsd) : '$0.00'})
+                  </Typography>
+                </Box>
+                <Box sx={{ mb: 1 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Average Cost
+                  </Typography>
+                  <Typography variant="body1">
+                    {avgPriceSol > 0 ? `${avgPriceSol.toFixed(6)} SOL` : 'N/A'}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Unrealized P/L
+                  </Typography>
+                  <Typography
+                    variant="body1"
+                    color={unrealizedUsd >= 0 ? 'success.main' : 'error.main'}
+                    fontWeight={600}
+                  >
+                    {formatCurrencyWithSign(unrealizedUsd)} ({formatPercentWithSign(pnlPct)})
+                  </Typography>
+                  <LinearProgress
+                    variant="determinate"
+                    value={pnlBarValue}
+                    sx={{ height: 8, borderRadius: 4, mt: 1 }}
+                    color={unrealizedUsd >= 0 ? 'success' : 'error'}
+                  />
+                </Box>
+                <Divider sx={{ my: 2 }}>Your Trades</Divider>
+                {userTrades.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    No trades yet.
+                  </Typography>
+                ) : (
+                  <TableContainer>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Type</TableCell>
+                          <TableCell align="right">Amount (SOL)</TableCell>
+                          <TableCell align="right">Amount (USD)</TableCell>
+                          <TableCell align="right">Price (SOL)</TableCell>
+                          <TableCell>Time</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {userTrades.slice(0, 10).map((trade) => (
+                          <TableRow key={trade.id}>
+                            <TableCell>
+                              <Chip
+                                label={trade.type.toUpperCase()}
+                                color={trade.type === 'buy' ? 'success' : 'error'}
+                                size="small"
+                              />
+                            </TableCell>
+                            <TableCell align="right">{trade.amountSol.toFixed(4)}</TableCell>
+                            <TableCell align="right">{formatUsdFull(trade.amountUsd)}</TableCell>
+                            <TableCell align="right">{trade.priceSol.toFixed(6)}</TableCell>
+                            <TableCell>{formatTimestamp(trade.timestamp)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+                {userSummary?.openOrders?.length ? (
+                  <>
+                    <Divider sx={{ my: 2 }}>Open Orders</Divider>
+                    <Stack spacing={1}>
+                      {userSummary.openOrders.map((order) => (
+                        <Box
+                          key={order.id}
+                          sx={{
+                            border: '1px solid',
+                            borderColor: 'divider',
+                            borderRadius: 1,
+                            p: 1.5,
+                          }}
+                        >
+                          <Typography variant="body2" fontWeight={600}>
+                            {order.side.toUpperCase()} • {order.status}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            Created {formatTimestamp(Date.parse(order.createdAt))}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Stack>
+                  </>
+                ) : null}
+              </>
+            )}
+          </Paper>
+
+          <Paper sx={{ p: 3, mb: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Bonding Curve Progress
+            </Typography>
+            {bondingCurveCompleted ? (
+              <Typography variant="body2" color="text.secondary">
+                Graduated{bondingCurveCompletedAt ? ` on ${bondingCurveCompletedAt}` : ''}
+              </Typography>
+            ) : (
+              <>
+                <LinearProgress
+                  variant="determinate"
+                  value={bondingCurveProgress}
+                  sx={{ height: 8, borderRadius: 4, mb: 1 }}
+                />
+                <Typography variant="body2" color="text.secondary">
+                  {formatSolFull(bondingCurveVirtualSol, 3)} in bonding curve
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {bondingCurveRemainingUsd !== undefined
+                    ? `${formatUsdFull(bondingCurveRemainingUsd)} to graduate`
+                    : `${formatSolFull(bondingCurveRemainingSol, 3)} remaining to graduate`}
+                </Typography>
+              </>
+            )}
+          </Paper>
+
           {(remote?.creator || token.creatorAddress) && (
-            <Paper sx={{ p: 3, mb: 2 }}>
+            <Paper sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom>
                 Creator
               </Typography>
@@ -934,116 +1264,6 @@ export default function TokenDetailPage() {
               </Stack>
             </Paper>
           )}
-
-          <Paper sx={{ p: 3, mb: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Buy
-            </Typography>
-            <Stack spacing={2}>
-              <ToggleButtonGroup
-                color="primary"
-                value={buyOrderType}
-                exclusive
-                size="small"
-                onChange={(_, value) => {
-                  if (value) {
-                    setBuyOrderType(value);
-                    if (value === 'market') {
-                      setBuyLimitPrice('');
-                    }
-                  }
-                }}
-              >
-                <ToggleButton value="market">Market</ToggleButton>
-                <ToggleButton value="limit">Limit</ToggleButton>
-              </ToggleButtonGroup>
-              {buyOrderType === 'limit' ? (
-                <TextField
-                  fullWidth
-                  label="Limit Price (SOL)"
-                  type="number"
-                  value={buyLimitPrice}
-                  onChange={(e) => setBuyLimitPrice(e.target.value)}
-                />
-              ) : null}
-              <TextField
-                fullWidth
-                label="Amount (SOL)"
-                type="number"
-                value={buyAmount}
-                onChange={(e) => setBuyAmount(e.target.value)}
-              />
-              <Button
-                fullWidth
-                variant="contained"
-                color="success"
-                startIcon={<ShoppingCart />}
-                onClick={handleBuy}
-                disabled={
-                  trading ||
-                  !buyAmount ||
-                  (buyOrderType === 'limit' && (!buyLimitPrice || parseFloat(buyLimitPrice) <= 0))
-                }
-              >
-                {trading ? "Buying..." : buyOrderType === 'limit' ? 'Place Buy Order' : 'Buy'}
-              </Button>
-            </Stack>
-          </Paper>
-
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Sell
-            </Typography>
-            <Stack spacing={2}>
-              <ToggleButtonGroup
-                color="primary"
-                value={sellOrderType}
-                exclusive
-                size="small"
-                onChange={(_, value) => {
-                  if (value) {
-                    setSellOrderType(value);
-                    if (value === 'market') {
-                      setSellLimitPrice('');
-                    }
-                  }
-                }}
-              >
-                <ToggleButton value="market">Market</ToggleButton>
-                <ToggleButton value="limit">Limit</ToggleButton>
-              </ToggleButtonGroup>
-              {sellOrderType === 'limit' ? (
-                <TextField
-                  fullWidth
-                  label="Limit Price (SOL)"
-                  type="number"
-                  value={sellLimitPrice}
-                  onChange={(e) => setSellLimitPrice(e.target.value)}
-                />
-              ) : null}
-              <TextField
-                fullWidth
-                label="Amount (Tokens)"
-                type="number"
-                value={sellAmount}
-                onChange={(e) => setSellAmount(e.target.value)}
-              />
-              <Button
-                fullWidth
-                variant="contained"
-                color="error"
-                startIcon={<Sell />}
-                onClick={handleSell}
-                disabled={
-                  trading ||
-                  !sellAmount ||
-                  (sellOrderType === 'limit' && (!sellLimitPrice || parseFloat(sellLimitPrice) <= 0))
-                }
-              >
-                {trading ? "Selling..." : sellOrderType === 'limit' ? 'Place Sell Order' : 'Sell'}
-              </Button>
-            </Stack>
-          </Paper>
         </Grid>
       </Grid>
     </Container>

@@ -23,7 +23,11 @@ import { formatDistanceToNow } from 'date-fns'
 export default async function DashboardPage() {
   const session = await requireAuth()
 
-  const snapshot = session ? await getDashboardSnapshot(session.user.id) : null
+  if (!session) {
+    return null
+  }
+
+  const snapshot = await getDashboardSnapshot(session.user.id)
   if (!snapshot) {
     return (
       <Container maxWidth="lg">
@@ -276,6 +280,8 @@ export default async function DashboardPage() {
                   return (
                     <Box
                       key={position.id}
+                      component={Link}
+                      href={`/dashboard/tokens/${position.tokenMint}`}
                       sx={{
                         display: 'flex',
                         justifyContent: 'space-between',
@@ -284,6 +290,12 @@ export default async function DashboardPage() {
                         border: '1px solid',
                         borderColor: 'divider',
                         borderRadius: 1,
+                        textDecoration: 'none',
+                        color: 'inherit',
+                        transition: 'box-shadow 0.2s ease',
+                        '&:hover': {
+                          boxShadow: 4,
+                        },
                       }}
                     >
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
