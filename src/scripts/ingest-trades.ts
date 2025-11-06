@@ -136,23 +136,21 @@ async function processTrade(tradeData: TradeCreatedEvent) {
       token = await prisma.token.upsert({
         where: { mintAddress: tradeData.mint },
         update: {
-          // Update price info if we have it
-          price: tradeData.last_trade_timestamp
-            ? {
-                upsert: {
-                  create: {
-                    priceSol,
-                    priceUsd,
-                    lastTradeTimestamp: BigInt(tradeData.last_trade_timestamp),
-                  },
-                  update: {
-                    priceSol,
-                    priceUsd,
-                    lastTradeTimestamp: BigInt(tradeData.last_trade_timestamp),
-                  },
-                },
-              }
-            : undefined,
+          // Always update price info from the latest trade
+          price: {
+            upsert: {
+              create: {
+                priceSol,
+                priceUsd,
+                lastTradeTimestamp: BigInt((tradeData.last_trade_timestamp || tradeData.timestamp || Date.now() / 1000) * 1000),
+              },
+              update: {
+                priceSol,
+                priceUsd,
+                lastTradeTimestamp: BigInt((tradeData.last_trade_timestamp || tradeData.timestamp || Date.now() / 1000) * 1000),
+              },
+            },
+          },
         },
         create: {
           mintAddress: tradeData.mint,
@@ -164,15 +162,13 @@ async function processTrade(tradeData: TradeCreatedEvent) {
           creatorAddress: tradeData.creator || 'unknown',
           createdAt: BigInt((tradeData.created_timestamp || tradeData.timestamp || Date.now() / 1000) * 1000),
           totalSupply: new Decimal(tradeData.total_supply?.toString() || '0'),
-          price: tradeData.last_trade_timestamp
-            ? {
-                create: {
-                  priceSol,
-                  priceUsd,
-                  lastTradeTimestamp: BigInt(tradeData.last_trade_timestamp),
-                },
-              }
-            : undefined,
+          price: {
+            create: {
+              priceSol,
+              priceUsd,
+              lastTradeTimestamp: BigInt(tradeData.last_trade_timestamp || tradeData.timestamp || Date.now() / 1000),
+            },
+          },
         },
         select: {
           id: true,
