@@ -1,5 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { Decimal } from '@prisma/client/runtime/library'
+
+const PUMP_HEADERS = {
+  accept: 'application/json, text/plain, */*',
+  origin: 'https://pump.fun',
+  referer: 'https://pump.fun',
+  'user-agent': 'PumpFunMockTrader/1.0 (+https://pump.fun)',
+};
+
+async function fetchPumpJson<T>(url: string, init: RequestInit = {}): Promise<T | null> {
+  try {
+    const res = await fetch(url, {
+      cache: 'no-store',
+      ...init,
+      headers: {
+        ...PUMP_HEADERS,
+        ...(init.headers || {}),
+      },
+    });
+
+    if (!res.ok) {
+      console.error(`Pump.fun request failed: ${url} :: ${res.status} ${res.statusText}`);
+      return null;
+    }
+
+    return (await res.json()) as T;
+  } catch (error: any) {
+    console.error(`Pump.fun request error: ${url} ::`, error.message || error);
+    return null;
+  }
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,6 +64,8 @@ export async function GET(request: NextRequest) {
       }),
       prisma.token.count({ where }),
     ])
+
+    const TOKEN_DECIMALS = new Decimal('1e9')
 
     // Calculate volume and price changes for each token
     const tokensWithStats = await Promise.all(
@@ -129,6 +162,33 @@ export async function GET(request: NextRequest) {
           }
         }
 
+        let totalSupplyTokens = 0
+        if (token.totalSupply) {
+          try {
+            const totalSupplyRaw = new Decimal(token.totalSupply.toString())
+            if (totalSupplyRaw.gt(0)) {
+              totalSupplyTokens = Number(totalSupplyRaw.div(TOKEN_DECIMALS))
+            }
+          } catch (error) {
+            console.warn(`Failed to calculate total supply for token ${token.mintAddress}`)
+          }
+        }
+
+        let marketCapUsd = 0
+        let marketCapSol = 0
+        if (totalSupplyTokens > 0) {
+          if (priceUsd > 0) {
+            marketCapUsd = priceUsd * totalSupplyTokens
+            marketCapSol = marketCapUsd / solPriceUsd
+          }
+          if (priceSol > 0) {
+            marketCapSol = priceSol * totalSupplyTokens
+            if (marketCapUsd === 0 && solPriceUsd > 0) {
+              marketCapUsd = marketCapSol * solPriceUsd
+            }
+          }
+        }
+
         return {
           id: token.id,
           mintAddress: token.mintAddress,
@@ -149,6 +209,9 @@ export async function GET(request: NextRequest) {
               }
             : null,
           lastTradeTimestamp: token.price?.lastTradeTimestamp ? Number(token.price.lastTradeTimestamp) : null,
+          totalSupplyTokens,
+          marketCapUsd,
+          marketCapSol,
           buyVolume,
           sellVolume,
           totalVolume,

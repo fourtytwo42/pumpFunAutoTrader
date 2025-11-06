@@ -1,6 +1,6 @@
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect } from "react";
 import {
   Container,
   Typography,
@@ -19,200 +19,247 @@ import {
   MenuItem,
   InputLabel,
   Paper,
-} from '@mui/material'
-import SearchIcon from '@mui/icons-material/Search'
-import TrendingUpIcon from '@mui/icons-material/TrendingUp'
-import TrendingDownIcon from '@mui/icons-material/TrendingDown'
-import TwitterIcon from '@mui/icons-material/Twitter'
-import TelegramIcon from '@mui/icons-material/Telegram'
-import LanguageIcon from '@mui/icons-material/Language'
-import { useRouter } from 'next/navigation'
-import IconButton from '@mui/material/IconButton'
+  Divider,
+  Stack,
+} from "@mui/material";
+import SearchIcon from "@mui/icons-material/Search";
+import TrendingUpIcon from "@mui/icons-material/TrendingUp";
+import TrendingDownIcon from "@mui/icons-material/TrendingDown";
+import TwitterIcon from "@mui/icons-material/Twitter";
+import TelegramIcon from "@mui/icons-material/Telegram";
+import LanguageIcon from "@mui/icons-material/Language";
+import { useRouter } from "next/navigation";
+import IconButton from "@mui/material/IconButton";
 
 interface Token {
-  id: string
-  mintAddress: string
-  symbol: string
-  name: string
-  imageUri: string | null
-  twitter: string | null
-  telegram: string | null
-  website: string | null
-  price: { priceSol: number; priceUsd: number; lastTradeTimestamp: number | null } | null
-  createdAt: number
-  lastTradeTimestamp: number | null
-  kingOfTheHillTimestamp: number | null
-  completed: boolean
-  buyVolume: number
-  sellVolume: number
-  totalVolume: number
-  volumeRatio: number
-  uniqueTraders: number
-  buyVolumeSol?: number
-  sellVolumeSol?: number
-  totalVolumeSol?: number
+  id: string;
+  mintAddress: string;
+  symbol: string;
+  name: string;
+  imageUri: string | null;
+  twitter: string | null;
+  telegram: string | null;
+  website: string | null;
+  price: {
+    priceSol: number;
+    priceUsd: number;
+    lastTradeTimestamp: number | null;
+  } | null;
+  createdAt: number;
+  lastTradeTimestamp: number | null;
+  kingOfTheHillTimestamp: number | null;
+  completed: boolean;
+  buyVolume: number;
+  sellVolume: number;
+  totalVolume: number;
+  volumeRatio: number;
+  uniqueTraders: number;
+  buyVolumeSol?: number;
+  sellVolumeSol?: number;
+  totalVolumeSol?: number;
+  totalSupplyTokens?: number;
+  marketCapUsd?: number;
+  marketCapSol?: number;
 }
 
 export default function TokensPage() {
-  const router = useRouter()
-  const [tokens, setTokens] = useState<Token[]>([])
-  const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [sortBy, setSortBy] = useState('volume')
+  const router = useRouter();
+  const [tokens, setTokens] = useState<Token[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [sortBy, setSortBy] = useState("volume");
 
   useEffect(() => {
     // Initial fetch with loading indicator
-    fetchTokens(true)
-    
+    fetchTokens(true);
+
     // Poll for updates every 5 seconds for real-time data (without loading indicator)
     const interval = setInterval(() => {
-      fetchTokens(false)
-    }, 5000)
-    
-    return () => clearInterval(interval)
-  }, [page, search, sortBy])
+      fetchTokens(false);
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [page, search, sortBy]);
 
   const fetchTokens = async (showLoading = true) => {
-    if (showLoading) setLoading(true)
+    if (showLoading) setLoading(true);
     try {
       const params = new URLSearchParams({
         page: page.toString(),
-        limit: '20',
-      })
+        limit: "20",
+      });
       if (search) {
-        params.append('search', search)
+        params.append("search", search);
       }
       if (sortBy) {
-        params.append('sortBy', sortBy)
+        params.append("sortBy", sortBy);
       }
 
-      const response = await fetch(`/api/tokens?${params}`)
-      const data = await response.json()
-      setTokens(data.tokens || [])
-      setTotalPages(data.pagination?.totalPages || 1)
+      const response = await fetch(`/api/tokens?${params}`);
+      const data = await response.json();
+      setTokens(data.tokens || []);
+      setTotalPages(data.pagination?.totalPages || 1);
     } catch (error) {
-      console.error('Error fetching tokens:', error)
+      console.error("Error fetching tokens:", error);
     } finally {
-      if (showLoading) setLoading(false)
+      if (showLoading) setLoading(false);
     }
-  }
+  };
 
   const getCardColor = (volumeRatio: number) => {
     if (volumeRatio > 0.6) {
       // More green for higher buy volume - pump.fun style
-      const intensity = Math.min((volumeRatio - 0.6) / 0.4, 1)
-      return `rgba(0, 255, 136, ${0.15 + intensity * 0.25})`
+      const intensity = Math.min((volumeRatio - 0.6) / 0.4, 1);
+      return `rgba(0, 255, 136, ${0.15 + intensity * 0.25})`;
     } else if (volumeRatio < 0.4) {
       // More red for higher sell volume
-      const intensity = Math.min((0.4 - volumeRatio) / 0.4, 1)
-      return `rgba(255, 68, 68, ${0.15 + intensity * 0.25})`
+      const intensity = Math.min((0.4 - volumeRatio) / 0.4, 1);
+      return `rgba(255, 68, 68, ${0.15 + intensity * 0.25})`;
     }
-    return 'rgba(26, 26, 26, 1)'
-  }
+    return "rgba(26, 26, 26, 1)";
+  };
 
   const formatPricePerMillion = (priceUsd: number | null | undefined) => {
     // Check for null/undefined/NaN/zero
     if (priceUsd == null || isNaN(priceUsd) || priceUsd <= 0) {
-      return 'N/A'
+      return "N/A";
     }
-    
+
     // Convert to price per million tokens
-    const pricePerMillion = priceUsd * 1_000_000
-    
+    const pricePerMillion = priceUsd * 1_000_000;
+
     // Handle extremely small values (less than $0.000001 per million)
-    if (pricePerMillion < 0.000001 || isNaN(pricePerMillion) || !isFinite(pricePerMillion)) {
-      return 'N/A'
+    if (
+      pricePerMillion < 0.000001 ||
+      isNaN(pricePerMillion) ||
+      !isFinite(pricePerMillion)
+    ) {
+      return "N/A";
     }
-    
+
     // Format the price
     if (pricePerMillion < 0.01) {
       // Show more precision for very small values - use scientific notation if too small
       if (pricePerMillion < 0.0001) {
-        return `$${pricePerMillion.toExponential(2)}`
+        return `$${pricePerMillion.toExponential(2)}`;
       }
-      return `$${pricePerMillion.toFixed(6).replace(/\.?0+$/, '')}`
+      return `$${pricePerMillion.toFixed(6).replace(/\.?0+$/, "")}`;
     } else if (pricePerMillion < 1000) {
-      return `$${pricePerMillion.toFixed(2)}`
+      return `$${pricePerMillion.toFixed(2)}`;
     } else if (pricePerMillion < 1000000) {
-      return `$${(pricePerMillion / 1000).toFixed(2)}K`
+      return `$${(pricePerMillion / 1000).toFixed(2)}K`;
     } else {
-      return `$${(pricePerMillion / 1000000).toFixed(2)}M`
+      return `$${(pricePerMillion / 1000000).toFixed(2)}M`;
     }
-  }
+  };
 
   const formatSolPerMillion = (priceSol: number | null | undefined) => {
     if (priceSol == null || isNaN(priceSol) || priceSol <= 0) {
-      return 'N/A'
+      return "N/A";
     }
 
-    const solPerMillion = priceSol * 1_000_000
+    const solPerMillion = priceSol * 1_000_000;
 
     if (!isFinite(solPerMillion) || solPerMillion <= 0) {
-      return 'N/A'
+      return "N/A";
     }
 
     if (solPerMillion >= 1000) {
-      return `${(solPerMillion / 1000).toFixed(2)}K SOL`
+      return `${(solPerMillion / 1000).toFixed(2)}K SOL`;
     }
     if (solPerMillion >= 1) {
-      return `${solPerMillion.toFixed(2)} SOL`
+      return `${solPerMillion.toFixed(2)} SOL`;
     }
     if (solPerMillion >= 0.01) {
-      return `${solPerMillion.toFixed(4)} SOL`
+      return `${solPerMillion.toFixed(4)} SOL`;
     }
-    return `${solPerMillion.toExponential(2)} SOL`
-  }
+    return `${solPerMillion.toExponential(2)} SOL`;
+  };
 
-  const formatTimeAgo = (timestamp: number | null | undefined, fallback = 'N/A') => {
-    if (!timestamp || Number.isNaN(timestamp)) return fallback
+  const formatTimeAgo = (
+    timestamp: number | null | undefined,
+    fallback = "N/A",
+  ) => {
+    if (!timestamp || Number.isNaN(timestamp)) return fallback;
 
-    const diff = Date.now() - timestamp
-    if (diff < 0) return 'just now'
+    const diff = Date.now() - timestamp;
+    if (diff < 0) return "just now";
 
     const units = [
-      { label: 'day', ms: 86_400_000 },
-      { label: 'hour', ms: 3_600_000 },
-      { label: 'minute', ms: 60_000 },
-      { label: 'second', ms: 1_000 },
-    ]
+      { label: "day", ms: 86_400_000 },
+      { label: "hour", ms: 3_600_000 },
+      { label: "minute", ms: 60_000 },
+      { label: "second", ms: 1_000 },
+    ];
 
     for (const unit of units) {
       if (diff >= unit.ms) {
-        const value = Math.floor(diff / unit.ms)
-        return `${value} ${unit.label}${value !== 1 ? 's' : ''} ago`
+        const value = Math.floor(diff / unit.ms);
+        return `${value} ${unit.label}${value !== 1 ? "s" : ""} ago`;
       }
     }
 
-    return 'just now'
-  }
+    return "just now";
+  };
+
+  const getKothLabel = (token: Token) => {
+    if (token.completed) {
+      return "Graduated";
+    }
+    if (token.kingOfTheHillTimestamp) {
+      return `KOTH: Reached ${formatTimeAgo(token.kingOfTheHillTimestamp)}`;
+    }
+    return "KOTH: Not reached";
+  };
 
   const formatVolume = (volume: number) => {
-    if (volume === 0 || !volume) return '$0.00'
-    if (volume < 0.01) return `$${volume.toFixed(4)}`
-    if (volume < 1000) return `$${volume.toFixed(2)}`
-    if (volume < 1000000) return `$${(volume / 1000).toFixed(2)}K`
-    return `$${(volume / 1000000).toFixed(2)}M`
-  }
-  
+    if (volume === 0 || !volume) return "$0.00";
+    if (volume < 0.01) return `$${volume.toFixed(4)}`;
+    if (volume < 1000) return `$${volume.toFixed(2)}`;
+    if (volume < 1000000) return `$${(volume / 1000).toFixed(2)}K`;
+    return `$${(volume / 1000000).toFixed(2)}M`;
+  };
+
   const formatVolumeSol = (volumeSol: number | undefined) => {
-    if (!volumeSol || volumeSol === 0) return '0 SOL'
-    if (volumeSol < 0.001) return `${volumeSol.toFixed(6)} SOL`
-    if (volumeSol < 1) return `${volumeSol.toFixed(4)} SOL`
-    if (volumeSol < 1000) return `${volumeSol.toFixed(2)} SOL`
-    return `${(volumeSol / 1000).toFixed(2)}K SOL`
-  }
+    if (!volumeSol || volumeSol === 0) return "0 SOL";
+    if (volumeSol < 0.001) return `${volumeSol.toFixed(6)} SOL`;
+    if (volumeSol < 1) return `${volumeSol.toFixed(4)} SOL`;
+    if (volumeSol < 1000) return `${volumeSol.toFixed(2)} SOL`;
+    return `${(volumeSol / 1000).toFixed(2)}K SOL`;
+  };
+
+  const formatMarketCapUsd = (value?: number) => {
+    if (!value || value <= 0) return "N/A";
+    return formatVolume(value);
+  };
+
+  const formatMarketCapSol = (value?: number) => {
+    if (!value || value <= 0) return "N/A";
+    return formatVolumeSol(value);
+  };
 
   return (
     <Container maxWidth="lg">
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          mb: 3,
+        }}
+      >
         <Typography variant="h4" component="h1">
           Tokens
         </Typography>
         <FormControl size="small" sx={{ minWidth: 150 }}>
           <InputLabel>Sort By</InputLabel>
-          <Select value={sortBy} label="Sort By" onChange={(e) => setSortBy(e.target.value)}>
+          <Select
+            value={sortBy}
+            label="Sort By"
+            onChange={(e) => setSortBy(e.target.value)}
+          >
             <MenuItem value="volume">Volume</MenuItem>
             <MenuItem value="traders">Traders</MenuItem>
             <MenuItem value="price">Price</MenuItem>
@@ -225,8 +272,8 @@ export default function TokensPage() {
         placeholder="Search tokens..."
         value={search}
         onChange={(e) => {
-          setSearch(e.target.value)
-          setPage(1)
+          setSearch(e.target.value);
+          setPage(1);
         }}
         sx={{ mb: 3 }}
         InputProps={{
@@ -241,26 +288,28 @@ export default function TokensPage() {
       {loading ? (
         <Box
           sx={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
             p: 8,
-            flexDirection: 'column',
+            flexDirection: "column",
             gap: 2,
           }}
         >
-          <CircularProgress size={48} sx={{ color: '#00ff88' }} />
+          <CircularProgress size={48} sx={{ color: "#00ff88" }} />
           <Typography variant="body2" color="text.secondary">
             Loading tokens...
           </Typography>
         </Box>
       ) : tokens.length === 0 ? (
-        <Paper sx={{ p: 4, textAlign: 'center' }}>
+        <Paper sx={{ p: 4, textAlign: "center" }}>
           <Typography variant="h6" color="text.secondary" gutterBottom>
             No tokens found
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            {search ? 'Try adjusting your search terms' : 'Tokens will appear here once data is loaded'}
+            {search
+              ? "Try adjusting your search terms"
+              : "Tokens will appear here once data is loaded"}
           </Typography>
         </Paper>
       ) : (
@@ -270,50 +319,65 @@ export default function TokensPage() {
               <Grid item xs={12} sm={6} md={4} lg={3} key={token.id}>
                 <Card
                   sx={{
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    '&:hover': {
-                      transform: 'translateY(-4px)',
-                      boxShadow: '0 8px 24px rgba(0, 255, 136, 0.2)',
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                    "&:hover": {
+                      transform: "translateY(-4px)",
+                      boxShadow: "0 8px 24px rgba(0, 255, 136, 0.2)",
                     },
                     backgroundColor: getCardColor(token.volumeRatio),
-                    border: '2px solid',
-                    borderColor: token.volumeRatio > 0.6 ? 'rgba(0, 255, 136, 0.3)' : token.volumeRatio < 0.4 ? 'rgba(255, 68, 68, 0.3)' : '#333',
-                    position: 'relative',
+                    border: "2px solid",
+                    borderColor:
+                      token.volumeRatio > 0.6
+                        ? "rgba(0, 255, 136, 0.3)"
+                        : token.volumeRatio < 0.4
+                          ? "rgba(255, 68, 68, 0.3)"
+                          : "#333",
+                    position: "relative",
                   }}
-                  onClick={() => router.push(`/dashboard/tokens/${token.mintAddress}`)}
+                  onClick={() =>
+                    router.push(`/dashboard/tokens/${token.mintAddress}`)
+                  }
                 >
                   {token.completed && (
                     <Chip
                       label="Graduated"
                       color="primary"
                       size="small"
-                      sx={{ position: 'absolute', top: 12, right: 12 }}
+                      sx={{ position: "absolute", top: 12, right: 12 }}
                     />
                   )}
-                  <CardContent sx={{ p: 2 }}>
-                    {/* Large token image at top */}
-                    <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+                  <CardContent
+                    sx={{
+                      p: 2,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 1.5,
+                    }}
+                  >
+                    <Box sx={{ display: "flex", justifyContent: "center" }}>
                       {token.imageUri ? (
                         <Box
                           component="img"
                           src={token.imageUri}
                           alt={token.name}
                           sx={{
-                            width: 100,
-                            height: 100,
-                            borderRadius: '12px',
-                            objectFit: 'cover',
-                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                            border: '2px solid rgba(255, 255, 255, 0.1)',
-                            display: 'block',
+                            width: 84,
+                            height: 84,
+                            borderRadius: "12px",
+                            objectFit: "cover",
+                            backgroundColor: "rgba(255, 255, 255, 0.06)",
+                            border: "2px solid rgba(255, 255, 255, 0.08)",
+                            display: "block",
                           }}
                           onError={(e: any) => {
-                            // Hide image and show fallback
-                            e.target.style.display = 'none'
-                            const fallback = e.target.parentElement?.querySelector('.token-fallback')
+                            e.target.style.display = "none";
+                            const fallback =
+                              e.target.parentElement?.querySelector(
+                                ".token-fallback",
+                              );
                             if (fallback) {
-                              (fallback as HTMLElement).style.display = 'flex'
+                              (fallback as HTMLElement).style.display = "flex";
                             }
                           }}
                         />
@@ -321,46 +385,55 @@ export default function TokensPage() {
                       <Box
                         className="token-fallback"
                         sx={{
-                          width: 100,
-                          height: 100,
-                          borderRadius: '12px',
-                          backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                          border: '2px solid rgba(255, 255, 255, 0.1)',
-                          display: token.imageUri ? 'none' : 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '36px',
-                          fontWeight: 'bold',
-                          color: 'text.secondary',
+                          width: 84,
+                          height: 84,
+                          borderRadius: "12px",
+                          backgroundColor: "rgba(255, 255, 255, 0.06)",
+                          border: "2px solid rgba(255, 255, 255, 0.08)",
+                          display: token.imageUri ? "none" : "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: "30px",
+                          fontWeight: "bold",
+                          color: "text.secondary",
                         }}
                       >
                         {token.symbol.charAt(0)}
                       </Box>
                     </Box>
 
-                    {/* Token name and symbol */}
-                    <Box sx={{ textAlign: 'center', mb: 2 }}>
-                      <Typography variant="h6" noWrap sx={{ fontWeight: 'bold', mb: 0.5 }}>
+                    <Stack spacing={0.6} alignItems="center">
+                      <Typography
+                        variant="h6"
+                        noWrap
+                        sx={{ fontWeight: "bold" }}
+                      >
                         {token.name}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary" noWrap sx={{ mb: 1 }}>
+                      <Typography variant="body2" color="text.secondary" noWrap>
                         {token.symbol}
                       </Typography>
-                      
-                      {/* Social media icons */}
                       {(token.twitter || token.telegram || token.website) && (
-                        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.5, mt: 1 }}>
+                        <Stack
+                          direction="row"
+                          spacing={0.75}
+                          justifyContent="center"
+                        >
                           {token.twitter && (
                             <IconButton
                               size="small"
                               onClick={(e) => {
-                                e.stopPropagation()
-                                window.open(token.twitter!, '_blank', 'noopener,noreferrer')
+                                e.stopPropagation();
+                                window.open(
+                                  token.twitter!,
+                                  "_blank",
+                                  "noopener,noreferrer",
+                                );
                               }}
-                              sx={{ 
-                                color: 'text.secondary',
-                                '&:hover': { color: '#1DA1F2' },
-                                p: 0.5,
+                              sx={{
+                                color: "text.secondary",
+                                "&:hover": { color: "#1DA1F2" },
+                                p: 0.4,
                               }}
                             >
                               <TwitterIcon fontSize="small" />
@@ -370,13 +443,17 @@ export default function TokensPage() {
                             <IconButton
                               size="small"
                               onClick={(e) => {
-                                e.stopPropagation()
-                                window.open(token.telegram!, '_blank', 'noopener,noreferrer')
+                                e.stopPropagation();
+                                window.open(
+                                  token.telegram!,
+                                  "_blank",
+                                  "noopener,noreferrer",
+                                );
                               }}
-                              sx={{ 
-                                color: 'text.secondary',
-                                '&:hover': { color: '#0088cc' },
-                                p: 0.5,
+                              sx={{
+                                color: "text.secondary",
+                                "&:hover": { color: "#0088cc" },
+                                p: 0.4,
                               }}
                             >
                               <TelegramIcon fontSize="small" />
@@ -386,73 +463,152 @@ export default function TokensPage() {
                             <IconButton
                               size="small"
                               onClick={(e) => {
-                                e.stopPropagation()
-                                window.open(token.website!, '_blank', 'noopener,noreferrer')
+                                e.stopPropagation();
+                                window.open(
+                                  token.website!,
+                                  "_blank",
+                                  "noopener,noreferrer",
+                                );
                               }}
-                              sx={{ 
-                                color: 'text.secondary',
-                                '&:hover': { color: 'primary.main' },
-                                p: 0.5,
+                              sx={{
+                                color: "text.secondary",
+                                "&:hover": { color: "primary.main" },
+                                p: 0.4,
                               }}
                             >
                               <LanguageIcon fontSize="small" />
                             </IconButton>
                           )}
-                        </Box>
+                        </Stack>
                       )}
-                    </Box>
+                    </Stack>
 
-                    {/* Price */}
-                    <Box sx={{ mb: 2, textAlign: 'center' }}>
-                      <Typography variant="body2" color="text.secondary" gutterBottom>
-                        Price (per 1M tokens)
-                      </Typography>
-                      <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 'bold' }}>
-                        {token.price && token.price.priceUsd != null
-                          ? formatPricePerMillion(Number(token.price.priceUsd))
-                          : 'N/A'}
-                      </Typography>
-                      {token.price && token.price.priceSol && Number(token.price.priceSol) > 0 && (
+                    <Stack
+                      direction="row"
+                      spacing={1.5}
+                      justifyContent="center"
+                      flexWrap="wrap"
+                    >
+                      <Box sx={{ textAlign: "center" }}>
                         <Typography variant="caption" color="text.secondary">
-                          {formatSolPerMillion(Number(token.price.priceSol))} / 1M tokens
+                          Price (per 1M)
                         </Typography>
-                      )}
-                    </Box>
+                        <Typography
+                          variant="subtitle2"
+                          sx={{ fontWeight: 600 }}
+                        >
+                          {token.price && token.price.priceUsd != null
+                            ? formatPricePerMillion(
+                                Number(token.price.priceUsd),
+                              )
+                            : "N/A"}
+                        </Typography>
+                        {token.price &&
+                          token.price.priceSol &&
+                          Number(token.price.priceSol) > 0 && (
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              {formatSolPerMillion(
+                                Number(token.price.priceSol),
+                              )}
+                            </Typography>
+                          )}
+                      </Box>
+                      <Box sx={{ textAlign: "center" }}>
+                        <Typography variant="caption" color="text.secondary">
+                          Market Cap
+                        </Typography>
+                        <Typography
+                          variant="subtitle2"
+                          sx={{ fontWeight: 600 }}
+                        >
+                          {token.marketCapUsd
+                            ? formatMarketCapUsd(token.marketCapUsd)
+                            : "N/A"}
+                        </Typography>
+                        {token.marketCapSol ? (
+                          <Typography variant="caption" color="text.secondary">
+                            {formatMarketCapSol(token.marketCapSol)}
+                          </Typography>
+                        ) : null}
+                      </Box>
+                    </Stack>
 
-                    <Box sx={{ textAlign: 'center', mb: 2 }}>
+                    <Stack spacing={0.25} alignItems="center">
                       <Typography variant="caption" color="text.secondary">
-                        Age: {formatTimeAgo(token.createdAt)}
+                        Age: {formatTimeAgo(token.createdAt)} • Last:{" "}
+                        {formatTimeAgo(token.lastTradeTimestamp, "No trades")}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        Last trade: {formatTimeAgo(token.lastTradeTimestamp, 'No trades')}
+                        {getKothLabel(token)}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {token.completed ? 'Graduated' : 'KOTH: ' + (token.kingOfTheHillTimestamp ? `Reached ${formatTimeAgo(token.kingOfTheHillTimestamp)}` : 'Not reached')}
-                      </Typography>
-                    </Box>
+                    </Stack>
 
-                    {/* Volume info */}
-                    <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
-                      <Chip
-                        label={`Buy: ${formatVolume(token.buyVolume)}`}
-                        size="small"
-                        color="success"
-                        variant="outlined"
-                      />
-                      <Chip
-                        label={`Sell: ${formatVolume(token.sellVolume)}`}
-                        size="small"
-                        color="error"
-                        variant="outlined"
-                      />
-                    </Box>
-
-                    <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
-                      {token.uniqueTraders} traders • Vol: {formatVolume(token.totalVolume)}
-                      {token.totalVolumeSol !== undefined && token.totalVolumeSol > 0 && (
-                        <span> ({formatVolumeSol(token.totalVolumeSol)})</span>
-                      )}
-                    </Typography>
+                    <Grid container spacing={1} columns={12}>
+                      <Grid item xs={6}>
+                        <Stack
+                          spacing={0.25}
+                          alignItems={{ xs: "center", sm: "flex-start" }}
+                        >
+                          <Typography variant="caption" color="text.secondary">
+                            Buy
+                          </Typography>
+                          <Typography variant="body2">
+                            {formatVolume(token.buyVolume)}
+                            {token.buyVolumeSol
+                              ? ` (${formatVolumeSol(token.buyVolumeSol)})`
+                              : ""}
+                          </Typography>
+                        </Stack>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Stack
+                          spacing={0.25}
+                          alignItems={{ xs: "center", sm: "flex-start" }}
+                        >
+                          <Typography variant="caption" color="text.secondary">
+                            Sell
+                          </Typography>
+                          <Typography variant="body2">
+                            {formatVolume(token.sellVolume)}
+                            {token.sellVolumeSol
+                              ? ` (${formatVolumeSol(token.sellVolumeSol)})`
+                              : ""}
+                          </Typography>
+                        </Stack>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Stack
+                          spacing={0.25}
+                          alignItems={{ xs: "center", sm: "flex-start" }}
+                        >
+                          <Typography variant="caption" color="text.secondary">
+                            Total Vol
+                          </Typography>
+                          <Typography variant="body2">
+                            {formatVolume(token.totalVolume)}
+                            {token.totalVolumeSol
+                              ? ` (${formatVolumeSol(token.totalVolumeSol)})`
+                              : ""}
+                          </Typography>
+                        </Stack>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Stack
+                          spacing={0.25}
+                          alignItems={{ xs: "center", sm: "flex-start" }}
+                        >
+                          <Typography variant="caption" color="text.secondary">
+                            Traders
+                          </Typography>
+                          <Typography variant="body2">
+                            {token.uniqueTraders}
+                          </Typography>
+                        </Stack>
+                      </Grid>
+                    </Grid>
                   </CardContent>
                 </Card>
               </Grid>
@@ -460,7 +616,7 @@ export default function TokensPage() {
           </Grid>
 
           {totalPages > 1 && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+            <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
               <Pagination
                 count={totalPages}
                 page={page}
@@ -472,6 +628,5 @@ export default function TokensPage() {
         </>
       )}
     </Container>
-  )
+  );
 }
-
