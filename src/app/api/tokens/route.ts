@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
     const search = searchParams.get('search') || ''
+    const sortBy = searchParams.get('sortBy') || 'volume'
     const skip = (page - 1) * limit
 
     const where: any = {}
@@ -36,31 +37,53 @@ export async function GET(request: NextRequest) {
     // Calculate volume and price changes for each token
     const tokensWithStats = await Promise.all(
       tokens.map(async (token) => {
-        // Get recent trades for volume calculation (last 10 minutes in simulated time)
-        // For now, we'll use a simplified approach
-        const recentTrades = await prisma.trade.findMany({
+        // Get all trades for the token (24h volume)
+        // Volume is calculated in SOL for consistency with pump.fun
+        const twentyFourHoursAgo = BigInt(Date.now() - 24 * 60 * 60 * 1000)
+        
+        const allTrades = await prisma.trade.findMany({
+          where: {
+            tokenId: token.id,
+            timestamp: {
+              gte: twentyFourHoursAgo,
+            },
+          },
+        })
+
+        // Also get all trades for unique traders count
+        const allTradesForTraders = await prisma.trade.findMany({
           where: {
             tokenId: token.id,
           },
-          orderBy: {
-            timestamp: 'desc',
+          select: {
+            userAddress: true,
           },
-          take: 100,
         })
 
-        let buyVolume = 0
-        let sellVolume = 0
+        let buyVolumeSol = 0
+        let sellVolumeSol = 0
         let uniqueTraders = new Set<string>()
 
-        recentTrades.forEach((trade) => {
-          uniqueTraders.add(trade.userAddress)
+        // Calculate volume in SOL (more accurate than USD)
+        allTrades.forEach((trade) => {
           if (trade.type === 1) {
-            buyVolume += Number(trade.amountUsd)
+            // Buy - volume is SOL spent
+            buyVolumeSol += Number(trade.amountSol)
           } else {
-            sellVolume += Number(trade.amountUsd)
+            // Sell - volume is SOL received
+            sellVolumeSol += Number(trade.amountSol)
           }
         })
 
+        // Count unique traders from all trades
+        allTradesForTraders.forEach((trade) => {
+          uniqueTraders.add(trade.userAddress)
+        })
+
+        // Convert SOL volume to USD for display (rough estimate: 1 SOL = $160)
+        const SOL_PRICE_USD = 160
+        const buyVolume = buyVolumeSol * SOL_PRICE_USD
+        const sellVolume = sellVolumeSol * SOL_PRICE_USD
         const totalVolume = buyVolume + sellVolume
         const volumeRatio = totalVolume > 0 ? buyVolume / totalVolume : 0.5
 
@@ -81,12 +104,29 @@ export async function GET(request: NextRequest) {
           totalVolume,
           volumeRatio,
           uniqueTraders: uniqueTraders.size,
+          buyVolumeSol,
+          sellVolumeSol,
+          totalVolumeSol: buyVolumeSol + sellVolumeSol,
         }
       })
     )
 
+    // Sort tokens based on sortBy parameter
+    let sortedTokens = tokensWithStats
+    if (sortBy === 'volume') {
+      sortedTokens.sort((a, b) => b.totalVolume - a.totalVolume)
+    } else if (sortBy === 'traders') {
+      sortedTokens.sort((a, b) => b.uniqueTraders - a.uniqueTraders)
+    } else if (sortBy === 'price') {
+      sortedTokens.sort((a, b) => {
+        const priceA = a.price?.priceSol || 0
+        const priceB = b.price?.priceSol || 0
+        return priceB - priceA
+      })
+    }
+
     return NextResponse.json({
-      tokens: tokensWithStats,
+      tokens: sortedTokens,
       pagination: {
         page,
         limit,

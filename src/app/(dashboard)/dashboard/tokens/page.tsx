@@ -37,6 +37,9 @@ interface Token {
   totalVolume: number
   volumeRatio: number
   uniqueTraders: number
+  buyVolumeSol?: number
+  sellVolumeSol?: number
+  totalVolumeSol?: number
 }
 
 export default function TokensPage() {
@@ -49,11 +52,19 @@ export default function TokensPage() {
   const [sortBy, setSortBy] = useState('volume')
 
   useEffect(() => {
-    fetchTokens()
+    // Initial fetch with loading indicator
+    fetchTokens(true)
+    
+    // Poll for updates every 5 seconds for real-time data (without loading indicator)
+    const interval = setInterval(() => {
+      fetchTokens(false)
+    }, 5000)
+    
+    return () => clearInterval(interval)
   }, [page, search, sortBy])
 
-  const fetchTokens = async () => {
-    setLoading(true)
+  const fetchTokens = async (showLoading = true) => {
+    if (showLoading) setLoading(true)
     try {
       const params = new URLSearchParams({
         page: page.toString(),
@@ -61,6 +72,9 @@ export default function TokensPage() {
       })
       if (search) {
         params.append('search', search)
+      }
+      if (sortBy) {
+        params.append('sortBy', sortBy)
       }
 
       const response = await fetch(`/api/tokens?${params}`)
@@ -70,7 +84,7 @@ export default function TokensPage() {
     } catch (error) {
       console.error('Error fetching tokens:', error)
     } finally {
-      setLoading(false)
+      if (showLoading) setLoading(false)
     }
   }
 
@@ -88,15 +102,43 @@ export default function TokensPage() {
   }
 
   const formatPrice = (price: number | null) => {
-    if (!price) return 'N/A'
-    if (price < 0.0001) return price.toExponential(2)
-    return price.toFixed(8)
+    if (!price || price === 0) return 'N/A'
+    
+    // Format small prices better
+    if (price < 0.000001) {
+      // For very small prices, show scientific notation but cleaner
+      const exp = Math.floor(Math.log10(price))
+      const mantissa = price / Math.pow(10, exp)
+      return `${mantissa.toFixed(2)}e${exp}`
+    } else if (price < 0.0001) {
+      // For small prices, show more precision
+      return price.toFixed(8).replace(/\.?0+$/, '')
+    } else if (price < 1) {
+      // For prices less than 1, show 6 decimals
+      return price.toFixed(6).replace(/\.?0+$/, '')
+    } else if (price < 1000) {
+      // For prices 1-1000, show 4 decimals
+      return price.toFixed(4).replace(/\.?0+$/, '')
+    } else {
+      // For larger prices, show 2 decimals
+      return price.toFixed(2).replace(/\.?0+$/, '')
+    }
   }
 
   const formatVolume = (volume: number) => {
+    if (volume === 0 || !volume) return '$0.00'
+    if (volume < 0.01) return `$${volume.toFixed(4)}`
     if (volume < 1000) return `$${volume.toFixed(2)}`
     if (volume < 1000000) return `$${(volume / 1000).toFixed(2)}K`
     return `$${(volume / 1000000).toFixed(2)}M`
+  }
+  
+  const formatVolumeSol = (volumeSol: number | undefined) => {
+    if (!volumeSol || volumeSol === 0) return '0 SOL'
+    if (volumeSol < 0.001) return `${volumeSol.toFixed(6)} SOL`
+    if (volumeSol < 1) return `${volumeSol.toFixed(4)} SOL`
+    if (volumeSol < 1000) return `${volumeSol.toFixed(2)} SOL`
+    return `${(volumeSol / 1000).toFixed(2)}K SOL`
   }
 
   return (
@@ -199,12 +241,12 @@ export default function TokensPage() {
                       <Typography variant="body2" color="text.secondary">
                         Price
                       </Typography>
-                      <Typography variant="h6">
+                      <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 'bold' }}>
                         {token.price ? `${formatPrice(token.price.priceSol)} SOL` : 'N/A'}
                       </Typography>
-                      {token.price && (
+                      {token.price && token.price.priceUsd > 0 && (
                         <Typography variant="body2" color="text.secondary">
-                          ${token.price.priceUsd.toFixed(4)}
+                          ${formatPrice(token.price.priceUsd)}
                         </Typography>
                       )}
                     </Box>
@@ -226,6 +268,9 @@ export default function TokensPage() {
 
                     <Typography variant="body2" color="text.secondary">
                       {token.uniqueTraders} traders • Vol: {formatVolume(token.totalVolume)}
+                      {token.totalVolumeSol !== undefined && token.totalVolumeSol > 0 && (
+                        <span> ({formatVolumeSol(token.totalVolumeSol)})</span>
+                      )}
                     </Typography>
                   </CardContent>
                 </Card>
