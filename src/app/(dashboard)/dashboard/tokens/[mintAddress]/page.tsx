@@ -34,7 +34,9 @@ interface TokenData {
   symbol: string
   name: string
   imageUri: string | null
-  price: { priceSol: number; priceUsd: number } | null
+  createdAt: number
+  kingOfTheHillTimestamp: number | null
+  price: { priceSol: number; priceUsd: number; lastTradeTimestamp: number | null } | null
   stats: {
     buyVolume: number
     sellVolume: number
@@ -86,6 +88,29 @@ export default function TokenDetailPage() {
       return `${solPerMillion.toFixed(4)} SOL`
     }
     return `${solPerMillion.toExponential(2)} SOL`
+  }
+
+  const formatTimeAgo = (timestamp?: number | null, fallback = 'N/A') => {
+    if (!timestamp || Number.isNaN(timestamp)) return fallback
+
+    const diff = Date.now() - timestamp
+    if (diff < 0) return 'just now'
+
+    const units = [
+      { label: 'day', ms: 86_400_000 },
+      { label: 'hour', ms: 3_600_000 },
+      { label: 'minute', ms: 60_000 },
+      { label: 'second', ms: 1_000 },
+    ]
+
+    for (const unit of units) {
+      if (diff >= unit.ms) {
+        const value = Math.floor(diff / unit.ms)
+        return `${value} ${unit.label}${value !== 1 ? 's' : ''} ago`
+      }
+    }
+
+    return 'just now'
   }
 
   useEffect(() => {
@@ -265,7 +290,7 @@ export default function TokenDetailPage() {
                 </Typography>
                 <Typography variant="h5">
                   {token.price && token.price.priceSol > 0
-                    ? `${formatSolPerMillion(token.price.priceSol)}`
+                    ? `${formatSolPerMillion(Number(token.price.priceSol))}`
                     : 'N/A'}
                 </Typography>
               </Box>
@@ -283,6 +308,36 @@ export default function TokenDetailPage() {
                 </Typography>
                 <Typography variant="h5">
                   {token.price ? token.price.priceSol.toFixed(8) : 'N/A'}
+                </Typography>
+              </Box>
+            </Box>
+            <Box sx={{ display: 'flex', gap: 4, flexWrap: 'wrap', mb: 3 }}>
+              <Box>
+                <Typography variant="body2" color="text.secondary">
+                  Age
+                </Typography>
+                <Typography variant="h5">
+                  {formatTimeAgo(token.createdAt)}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="body2" color="text.secondary">
+                  Last Trade
+                </Typography>
+                <Typography variant="h5">
+                  {token.price?.lastTradeTimestamp
+                    ? formatTimeAgo(token.price.lastTradeTimestamp)
+                    : 'No trades'}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="body2" color="text.secondary">
+                  King of the Hill
+                </Typography>
+                <Typography variant="h5">
+                  {token.kingOfTheHillTimestamp
+                    ? `Reached ${formatTimeAgo(token.kingOfTheHillTimestamp)}`
+                    : 'Not reached'}
                 </Typography>
               </Box>
             </Box>

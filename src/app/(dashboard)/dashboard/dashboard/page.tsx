@@ -34,6 +34,11 @@ export default async function DashboardPage() {
     return sum + (currentValue - costBasis)
   }, 0)
 
+const portfolioValue = portfolio.reduce((sum, p) => {
+    const currentValue = p.token.price ? p.amount * p.token.price.priceSol : 0
+    return sum + currentValue
+  }, 0)
+
   const formatSolPerMillion = (priceSol?: number | null) => {
     if (priceSol == null || isNaN(priceSol) || priceSol <= 0) {
       return 'N/A'
@@ -383,7 +388,7 @@ export default async function DashboardPage() {
                   </Typography>
                   {token.price && (
                     <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>
-                      {formatSolPerMillion(token.price.priceSol)} / 1M tokens
+                      {formatSolPerMillion(Number(token.price.priceSol))} / 1M tokens
                     </Typography>
                   )}
                 </Card>

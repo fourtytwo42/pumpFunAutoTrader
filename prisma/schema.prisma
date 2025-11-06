@@ -67,6 +67,7 @@ model Token {
   telegram        String?
   website         String?
   createdAt       BigInt    @map("created_timestamp")
+  kingOfTheHillTimestamp BigInt? @map("king_of_the_hill_timestamp")
   creatorAddress  String    @map("creator_address")
   totalSupply     Decimal   @map("total_supply") @db.Decimal(30, 9)
 

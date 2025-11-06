@@ -44,10 +44,13 @@ export async function GET(
 
     return NextResponse.json({
       ...token,
+      createdAt: Number(token.createdAt),
+      kingOfTheHillTimestamp: token.kingOfTheHillTimestamp ? Number(token.kingOfTheHillTimestamp) : null,
       price: token.price
         ? {
             priceSol: Number(token.price.priceSol),
             priceUsd: Number(token.price.priceUsd),
+            lastTradeTimestamp: token.price.lastTradeTimestamp ? Number(token.price.lastTradeTimestamp) : null,
           }
         : null,
       stats: {

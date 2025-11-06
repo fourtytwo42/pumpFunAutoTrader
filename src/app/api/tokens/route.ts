@@ -138,12 +138,16 @@ export async function GET(request: NextRequest) {
           twitter: token.twitter,
           telegram: token.telegram,
           website: token.website,
+          createdAt: Number(token.createdAt),
+          kingOfTheHillTimestamp: token.kingOfTheHillTimestamp ? Number(token.kingOfTheHillTimestamp) : null,
           price: token.price
             ? {
                 priceSol,
                 priceUsd,
+                lastTradeTimestamp: token.price.lastTradeTimestamp ? Number(token.price.lastTradeTimestamp) : null,
               }
             : null,
+          lastTradeTimestamp: token.price?.lastTradeTimestamp ? Number(token.price.lastTradeTimestamp) : null,
           buyVolume,
           sellVolume,
           totalVolume,

@@ -38,7 +38,10 @@ interface Token {
   twitter: string | null
   telegram: string | null
   website: string | null
-  price: { priceSol: number; priceUsd: number } | null
+  price: { priceSol: number; priceUsd: number; lastTradeTimestamp: number | null } | null
+  createdAt: number
+  lastTradeTimestamp: number | null
+  kingOfTheHillTimestamp: number | null
   buyVolume: number
   sellVolume: number
   totalVolume: number
@@ -159,6 +162,29 @@ export default function TokensPage() {
       return `${solPerMillion.toFixed(4)} SOL`
     }
     return `${solPerMillion.toExponential(2)} SOL`
+  }
+
+  const formatTimeAgo = (timestamp: number | null | undefined, fallback = 'N/A') => {
+    if (!timestamp || Number.isNaN(timestamp)) return fallback
+
+    const diff = Date.now() - timestamp
+    if (diff < 0) return 'just now'
+
+    const units = [
+      { label: 'day', ms: 86_400_000 },
+      { label: 'hour', ms: 3_600_000 },
+      { label: 'minute', ms: 60_000 },
+      { label: 'second', ms: 1_000 },
+    ]
+
+    for (const unit of units) {
+      if (diff >= unit.ms) {
+        const value = Math.floor(diff / unit.ms)
+        return `${value} ${unit.label}${value !== 1 ? 's' : ''} ago`
+      }
+    }
+
+    return 'just now'
   }
 
   const formatVolume = (volume: number) => {
@@ -381,6 +407,18 @@ export default function TokensPage() {
                           {formatSolPerMillion(Number(token.price.priceSol))} / 1M tokens
                         </Typography>
                       )}
+                    </Box>
+
+                    <Box sx={{ textAlign: 'center', mb: 2 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        Age: {formatTimeAgo(token.createdAt)}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Last trade: {formatTimeAgo(token.lastTradeTimestamp, 'No trades')}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        KOTH: {token.kingOfTheHillTimestamp ? `Reached ${formatTimeAgo(token.kingOfTheHillTimestamp)}` : 'Not reached'}
+                      </Typography>
                     </Box>
 
                     {/* Volume info */}
