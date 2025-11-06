@@ -17,24 +17,24 @@ enum UserRole {
 }
 
 model User {
-  id            String    @id @default(uuid())
-  username      String    @unique
-  passwordHash  String    @map("password_hash")
-  role          UserRole  @default(user)
-  isActive      Boolean   @default(true) @map("is_active")
-  isAiAgent     Boolean   @default(false) @map("is_ai_agent")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  createdById   String?   @map("created_by_id")
-  createdBy     User?     @relation("UserCreatedBy", fields: [createdById], references: [id])
-  createdUsers  User[]    @relation("UserCreatedBy")
+  id           String   @id @default(uuid())
+  username     String   @unique
+  passwordHash String   @map("password_hash")
+  role         UserRole @default(user)
+  isActive     Boolean  @default(true) @map("is_active")
+  isAiAgent    Boolean  @default(false) @map("is_ai_agent")
+  createdAt    DateTime @default(now()) @map("created_at")
+  createdById  String?  @map("created_by_id")
+  createdBy    User?    @relation("UserCreatedBy", fields: [createdById], references: [id])
+  createdUsers User[]   @relation("UserCreatedBy")
 
   // Relations
-  apiKeys       UserApiKey[]
-  portfolios    UserPortfolio[]
-  trades        UserTrade[]
-  session       UserSession?
-  aiLogs        AiTraderLog[]
-  aiConfig      AiTraderConfig?
+  apiKeys          UserApiKey[]
+  portfolios       UserPortfolio[]
+  trades           UserTrade[]
+  session          UserSession?
+  aiLogs           AiTraderLog[]
+  aiConfig         AiTraderConfig?
   createdAiConfigs AiTraderConfig[] @relation("AiConfigCreatedBy")
 
   @@index([role, isActive])
@@ -43,14 +43,14 @@ model User {
 }
 
 model UserApiKey {
-  id          String    @id @default(uuid())
-  userId      String    @map("user_id")
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  apiKeyHash  String    @unique @map("api_key_hash")
-  name        String
-  lastUsedAt  DateTime? @map("last_used_at")
-  expiresAt   DateTime? @map("expires_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apiKeyHash String    @unique @map("api_key_hash")
+  name       String
+  lastUsedAt DateTime? @map("last_used_at")
+  expiresAt  DateTime? @map("expires_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
 
   @@index([apiKeyHash])
   @@index([userId])
@@ -58,26 +58,33 @@ model UserApiKey {
 }
 
 model Token {
-  id              String    @id @default(uuid())
-  mintAddress     String    @unique @map("mint_address")
-  symbol          String
-  name            String
-  imageUri        String?   @map("image_uri")
-  twitter         String?
-  telegram        String?
-  website         String?
-  createdAt       BigInt    @map("created_timestamp")
+  id                     String  @id @default(uuid())
+  mintAddress            String  @unique @map("mint_address")
+  symbol                 String
+  name                   String
+  imageUri               String? @map("image_uri")
+  twitter                String?
+  telegram               String?
+  website                String?
+  createdAt              BigInt  @map("created_timestamp")
   kingOfTheHillTimestamp BigInt? @map("king_of_the_hill_timestamp")
-  completed       Boolean   @default(false) @map("complete")
-  creatorAddress  String    @map("creator_address")
-  totalSupply     Decimal   @map("total_supply") @db.Decimal(30, 9)
+  completed              Boolean @default(false) @map("complete")
+  creatorAddress         String  @map("creator_address")
+  totalSupply            Decimal @map("total_supply") @db.Decimal(30, 9)
 
   // Relations
-  trades          Trade[]
-  candles         Candle[]
-  price           TokenPrice?
-  portfolios      UserPortfolio[]
-  userTrades      UserTrade[]
+  trades                  Trade[]
+  candles                 Candle[]
+  price                   TokenPrice?
+  portfolios              UserPortfolio[]
+  userTrades              UserTrade[]
+  tokenStat               TokenStat?
+  agentWatchlist          AgentWatchlist[]
+  positions               Position[]
+  orders                  Order[]
+  tradeTapes              TradeTape[]
+  holderSnapshots         HolderSnapshot[]
+  marketActivitySnapshots MarketActivitySnapshot[]
 
   @@index([mintAddress])
   @@index([symbol])
@@ -86,12 +93,12 @@ model Token {
 }
 
 model TokenPrice {
-  tokenId           String    @id
-  token             Token     @relation(fields: [tokenId], references: [id], onDelete: Cascade)
-  priceSol          Decimal   @map("price_sol") @db.Decimal(30, 18)
-  priceUsd          Decimal   @map("price_usd") @db.Decimal(20, 2)
+  tokenId            String   @id
+  token              Token    @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  priceSol           Decimal  @map("price_sol") @db.Decimal(30, 18)
+  priceUsd           Decimal  @map("price_usd") @db.Decimal(20, 2)
   lastTradeTimestamp BigInt   @map("last_trade_timestamp")
-  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at")
+  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@index([updatedAt])
   @@map("token_prices")
@@ -103,7 +110,7 @@ model Trade {
   token       Token    @relation(fields: [tokenId], references: [id], onDelete: Cascade)
   txSignature String   @unique @map("tx_signature")
   userAddress String   @map("user_address")
-  type        Int      // 1=buy, 2=sell
+  type        Int // 1=buy, 2=sell
   amountSol   Decimal  @map("amount_sol") @db.Decimal(20, 9)
   amountUsd   Decimal  @map("amount_usd") @db.Decimal(20, 2)
   baseAmount  Decimal  @map("base_amount") @db.Decimal(30, 9)
@@ -121,7 +128,7 @@ model Candle {
   id        BigInt   @id @default(autoincrement())
   tokenId   String   @map("token_id")
   token     Token    @relation(fields: [tokenId], references: [id], onDelete: Cascade)
-  interval  Int      // minutes
+  interval  Int // minutes
   timestamp BigInt
   open      Decimal  @db.Decimal(30, 18)
   high      Decimal  @db.Decimal(30, 18)
@@ -150,17 +157,17 @@ model UserPortfolio {
 }
 
 model UserTrade {
-  id                BigInt   @id @default(autoincrement())
-  userId            String   @map("user_id")
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenId           String   @map("token_id")
-  token             Token    @relation(fields: [tokenId], references: [id], onDelete: Cascade)
-  type              Int      // 1=buy, 2=sell
-  amountSol         Decimal  @map("amount_sol") @db.Decimal(20, 9)
-  amountTokens      Decimal  @map("amount_tokens") @db.Decimal(30, 9)
-  priceSol          Decimal  @map("price_sol") @db.Decimal(30, 18)
-  simulatedTimestamp BigInt  @map("simulated_timestamp")
-  createdAt         DateTime @default(now()) @map("created_at")
+  id                 BigInt   @id @default(autoincrement())
+  userId             String   @map("user_id")
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenId            String   @map("token_id")
+  token              Token    @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  type               Int // 1=buy, 2=sell
+  amountSol          Decimal  @map("amount_sol") @db.Decimal(20, 9)
+  amountTokens       Decimal  @map("amount_tokens") @db.Decimal(30, 9)
+  priceSol           Decimal  @map("price_sol") @db.Decimal(30, 18)
+  simulatedTimestamp BigInt   @map("simulated_timestamp")
+  createdAt          DateTime @default(now()) @map("created_at")
 
   @@index([userId, simulatedTimestamp(sort: Desc)])
   @@index([tokenId, simulatedTimestamp(sort: Desc)])
@@ -168,14 +175,14 @@ model UserTrade {
 }
 
 model UserSession {
-  userId            String   @id @map("user_id")
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  startTimestamp    BigInt   @map("start_timestamp")
-  currentTimestamp  BigInt   @map("current_timestamp")
-  playbackSpeed     Decimal  @map("playback_speed") @db.Decimal(4, 2)
-  solBalanceStart   Decimal  @map("sol_balance_start") @db.Decimal(20, 9)
-  isActive          Boolean  @default(true) @map("is_active")
-  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at")
+  userId           String   @id @map("user_id")
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startTimestamp   BigInt   @map("start_timestamp")
+  currentTimestamp BigInt   @map("current_timestamp")
+  playbackSpeed    Decimal  @map("playback_speed") @db.Decimal(4, 2)
+  solBalanceStart  Decimal  @map("sol_balance_start") @db.Decimal(20, 9)
+  isActive         Boolean  @default(true) @map("is_active")
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@index([isActive, currentTimestamp])
   @@map("user_sessions")
@@ -197,17 +204,17 @@ model AiTraderLog {
 }
 
 model AiTraderConfig {
-  userId          String   @id @map("user_id")
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  configName      String   @map("config_name")
-  strategyType    String   @map("strategy_type")
-  configJson      Json     @map("config_json")
-  isRunning       Boolean  @default(false) @map("is_running")
-  startedAt       DateTime? @map("started_at")
-  lastActivityAt  DateTime? @map("last_activity_at")
-  createdById     String   @map("created_by_id")
-  createdBy       User     @relation("AiConfigCreatedBy", fields: [createdById], references: [id])
-  createdAt       DateTime @default(now()) @map("created_at")
+  userId         String    @id @map("user_id")
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  configName     String    @map("config_name")
+  strategyType   String    @map("strategy_type")
+  configJson     Json      @map("config_json")
+  isRunning      Boolean   @default(false) @map("is_running")
+  startedAt      DateTime? @map("started_at")
+  lastActivityAt DateTime? @map("last_activity_at")
+  createdById    String    @map("created_by_id")
+  createdBy      User      @relation("AiConfigCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime  @default(now()) @map("created_at")
 
   @@index([isRunning, lastActivityAt])
   @@map("ai_trader_configs")
@@ -216,10 +223,235 @@ model AiTraderConfig {
 model SolPrice {
   id        BigInt   @id @default(autoincrement())
   priceUsd  Decimal  @map("price_usd") @db.Decimal(10, 2)
-  timestamp BigInt   // Unix timestamp in milliseconds
+  timestamp BigInt // Unix timestamp in milliseconds
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([timestamp(sort: Desc)])
   @@map("sol_prices")
 }
 
+model TokenStat {
+  mint              String   @id
+  token             Token?   @relation(fields: [mint], references: [mintAddress], onDelete: Cascade)
+  px                Decimal? @db.Decimal(30, 18)
+  priceChange30sPct Decimal? @map("price_change_30s_pct") @db.Decimal(18, 6)
+  volumeSol30s      Decimal? @map("volume_sol_30s") @db.Decimal(20, 9)
+  volumeSol1m       Decimal? @map("volume_sol_1m") @db.Decimal(20, 9)
+  volumeSol5m       Decimal? @map("volume_sol_5m") @db.Decimal(20, 9)
+  buysPerSec        Decimal? @map("buys_per_sec") @db.Decimal(18, 6)
+  sellsPerSec       Decimal? @map("sells_per_sec") @db.Decimal(18, 6)
+  buySellImbalance  Decimal? @map("buy_sell_imbalance") @db.Decimal(18, 6)
+  uniqueTraders30s  Int?     @map("unique_traders_30s")
+  uniqueTraders1m   Int?     @map("unique_traders_1m")
+  m1vs5mVelocity    Decimal? @map("m1_vs_5m_velocity") @db.Decimal(18, 6)
+  vSol              Decimal? @db.Decimal(30, 18)
+  vTok              Decimal? @db.Decimal(30, 18)
+  estFillBps005     Decimal? @map("est_fill_bps_005") @db.Decimal(18, 6)
+  estFillBps010     Decimal? @map("est_fill_bps_010") @db.Decimal(18, 6)
+  estFillBps015     Decimal? @map("est_fill_bps_015") @db.Decimal(18, 6)
+  ddFromATHPct      Decimal? @map("dd_from_ath_pct") @db.Decimal(18, 6)
+  ema20             Decimal? @map("ema_20") @db.Decimal(30, 18)
+  ema50             Decimal? @map("ema_50") @db.Decimal(30, 18)
+  atr14             Decimal? @map("atr_14") @db.Decimal(30, 18)
+  vwap1h            Decimal? @map("vwap_1h") @db.Decimal(30, 18)
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("token_stats")
+}
+
+model AgentWatchlist {
+  mint            String   @id
+  tokenId         String?  @map("token_id")
+  token           Token?   @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  maxEntrySol     Decimal? @map("max_entry_sol") @db.Decimal(20, 9)
+  minUsers1m      Int?     @map("min_users_1m")
+  maxImpactBps010 Int?     @map("max_impact_bps_010")
+  enabled         Boolean  @default(true)
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("agent_watchlist")
+}
+
+model AgentRule {
+  id          String   @id
+  mint        String?
+  expression  Json     @map("expression_json")
+  enabled     Boolean  @default(true)
+  cooldownSec Int?     @map("cooldown_sec")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([mint])
+  @@map("agent_rules")
+}
+
+model AgentSignal {
+  id        String   @id
+  kind      String
+  mint      String?
+  payload   Json     @map("payload_json")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([mint, createdAt])
+  @@map("agent_signals")
+}
+
+model CacheEntry {
+  key       String   @id @map("k")
+  value     String   @map("v")
+  expiresAt DateTime @map("expires_at")
+
+  @@map("cache_kv")
+}
+
+model Wallet {
+  id         String      @id @default(cuid())
+  label      String?
+  pubkey     String      @unique
+  signerBlob Bytes?
+  createdAt  DateTime    @default(now())
+  positions  Position[]
+  orders     Order[]
+  trades     TradeTape[]
+  pnlLedgers PnLLedger[]
+
+  @@map("wallets")
+}
+
+model Position {
+  id         String   @id @default(cuid())
+  walletId   String
+  tokenMint  String
+  qty        Decimal  @db.Decimal(30, 18)
+  avgCostUsd Decimal  @map("avg_cost_usd") @db.Decimal(30, 18)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+  wallet     Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  token      Token    @relation(fields: [tokenMint], references: [mintAddress])
+
+  @@unique([walletId, tokenMint])
+  @@map("positions")
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  walletId      String
+  tokenMint     String
+  side          String
+  status        String
+  qtyTokens     Decimal?    @map("qty_tokens") @db.Decimal(30, 18)
+  qtySol        Decimal?    @map("qty_sol") @db.Decimal(30, 18)
+  limitPriceUsd Decimal?    @map("limit_price_usd") @db.Decimal(30, 18)
+  slippageBps   Int?        @map("slippage_bps")
+  reason        String?
+  txSig         String?     @map("tx_sig")
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @default(now()) @updatedAt
+  wallet        Wallet      @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  token         Token       @relation(fields: [tokenMint], references: [mintAddress])
+  executions    Execution[]
+
+  @@index([walletId, status])
+  @@map("orders")
+}
+
+model Execution {
+  id       String   @id @default(cuid())
+  orderId  String
+  ts       DateTime @default(now())
+  fillQty  Decimal  @map("fill_qty") @db.Decimal(30, 18)
+  costSol  Decimal  @map("cost_sol") @db.Decimal(30, 18)
+  feeSol   Decimal  @map("fee_sol") @db.Decimal(30, 18)
+  priceUsd Decimal? @map("price_usd") @db.Decimal(30, 18)
+  txSig    String?  @map("tx_sig")
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("executions")
+}
+
+model TradeTape {
+  id          String   @id @default(cuid())
+  walletId    String?
+  tokenMint   String
+  txSig       String   @unique @map("tx_sig")
+  ts          DateTime @default(now())
+  isBuy       Boolean  @map("is_buy")
+  baseAmount  Decimal  @map("base_amount") @db.Decimal(30, 18)
+  quoteSol    Decimal  @map("quote_sol") @db.Decimal(30, 18)
+  priceUsd    Decimal? @map("price_usd") @db.Decimal(30, 18)
+  priceSol    Decimal? @map("price_sol") @db.Decimal(30, 18)
+  userAddress String?  @map("user_address")
+  slot        BigInt?
+  raw         Json?
+  wallet      Wallet?  @relation(fields: [walletId], references: [id], onDelete: SetNull)
+  token       Token    @relation(fields: [tokenMint], references: [mintAddress])
+
+  @@index([tokenMint, ts])
+  @@map("trade_tape")
+}
+
+model PnLLedger {
+  id        String   @id @default(cuid())
+  walletId  String
+  tokenMint String?
+  ts        DateTime @default(now())
+  type      String
+  amountUsd Decimal  @map("amount_usd") @db.Decimal(30, 18)
+  meta      Json?
+  wallet    Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@map("pnl_ledger")
+}
+
+model HolderSnapshot {
+  id        String   @id @default(cuid())
+  tokenMint String
+  ts        DateTime @default(now())
+  topJson   Json     @map("top_json")
+  total     Int
+  token     Token    @relation(fields: [tokenMint], references: [mintAddress])
+
+  @@index([tokenMint, ts])
+  @@map("holder_snapshots")
+}
+
+model MarketActivitySnapshot {
+  id        String   @id @default(cuid())
+  tokenMint String
+  ts        DateTime @default(now())
+  window    String
+  payload   Json
+  token     Token    @relation(fields: [tokenMint], references: [mintAddress])
+
+  @@index([tokenMint, window, ts])
+  @@map("market_activity_snapshots")
+}
+
+model AgentEvent {
+  id        String   @id @default(cuid())
+  ts        DateTime @default(now())
+  kind      String
+  level     String
+  walletId  String?
+  tokenMint String?
+  traceId   String?
+  rationale String?
+  input     Json?
+  output    Json?
+  metrics   Json?
+  toolName  String?  @map("tool_name")
+
+  @@index([ts])
+  @@map("agent_events")
+}
+
+model ChatMessage {
+  id      String   @id @default(cuid())
+  ts      DateTime @default(now())
+  role    String
+  content String   @db.Text
+  meta    Json?
+
+  @@index([ts])
+  @@map("chat_messages")
+}

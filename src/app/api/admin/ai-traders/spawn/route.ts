@@ -6,6 +6,9 @@ import bcrypt from 'bcryptjs'
 export async function POST(request: NextRequest) {
   try {
     const session = await requireAdminOrPowerUser()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     const { username, configName, strategyType, initialBalance } = await request.json()
 
     if (!username || !configName) {

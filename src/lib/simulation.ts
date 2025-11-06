@@ -1,3 +1,4 @@
+import type { Prisma, PrismaClient, UserSession } from '@prisma/client'
 import { prisma } from './db'
 
 export interface SimulationState {
@@ -7,10 +8,55 @@ export interface SimulationState {
   isActive: boolean
 }
 
-export async function getSimulationState(userId: string): Promise<SimulationState | null> {
-  const session = await prisma.userSession.findUnique({
+type PrismaLikeClient = PrismaClient | Prisma.TransactionClient
+
+async function advanceSimulationSession(
+  userId: string,
+  client: PrismaLikeClient = prisma
+): Promise<UserSession | null> {
+  const session = await client.userSession.findUnique({
     where: { userId },
   })
+
+  if (!session) {
+    return null
+  }
+
+  if (!session.isActive) {
+    return session
+  }
+
+  const playbackSpeed = Number(session.playbackSpeed)
+  if (!Number.isFinite(playbackSpeed) || playbackSpeed <= 0) {
+    return session
+  }
+
+  const lastRealUpdate = session.updatedAt.getTime()
+  const now = Date.now()
+  if (now <= lastRealUpdate) {
+    return session
+  }
+
+  const elapsedMs = now - lastRealUpdate
+  const advanceMsNumber = Math.round(elapsedMs * playbackSpeed)
+
+  if (!Number.isFinite(advanceMsNumber) || advanceMsNumber <= 0) {
+    return session
+  }
+
+  const updated = await client.userSession.update({
+    where: { userId },
+    data: {
+      currentTimestamp: session.currentTimestamp + BigInt(advanceMsNumber),
+      updatedAt: new Date(now),
+    },
+  })
+
+  return updated
+}
+
+export async function getSimulationState(userId: string): Promise<SimulationState | null> {
+  const session = await advanceSimulationSession(userId)
 
   if (!session) {
     return null
@@ -64,27 +110,49 @@ export async function setSimulationTime(
   userId: string,
   timestamp: bigint
 ): Promise<void> {
-  await initializeSimulation(userId, timestamp)
+  const session = await prisma.userSession.findUnique({
+    where: { userId },
+    select: { solBalanceStart: true },
+  })
+
+  await initializeSimulation(userId, timestamp, session ? Number(session.solBalanceStart) : 10)
 }
 
 export async function setPlaybackSpeed(
   userId: string,
   speed: number
 ): Promise<void> {
-  await prisma.userSession.update({
-    where: { userId },
-    data: {
-      playbackSpeed: speed,
-      updatedAt: new Date(),
-    },
+  await prisma.$transaction(async (tx) => {
+    const session = await advanceSimulationSession(userId, tx)
+
+    if (!session) {
+      await tx.userSession.create({
+        data: {
+          userId,
+          startTimestamp: BigInt(Date.now()),
+          currentTimestamp: BigInt(Date.now()),
+          playbackSpeed: speed,
+          solBalanceStart: 10,
+          isActive: speed > 0,
+        },
+      })
+      return
+    }
+
+    await tx.userSession.update({
+      where: { userId },
+      data: {
+        playbackSpeed: speed,
+        isActive: speed > 0,
+        updatedAt: new Date(),
+      },
+    })
   })
 }
 
 export async function getCurrentSimulationTime(userId: string): Promise<bigint | null> {
-  const session = await prisma.userSession.findUnique({
-    where: { userId },
-    select: { currentTimestamp: true },
-  })
+  const session = await advanceSimulationSession(userId)
   return session?.currentTimestamp ?? null
 }
 
+export { advanceSimulationSession }

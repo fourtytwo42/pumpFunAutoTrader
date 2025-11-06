@@ -1,0 +1,91 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/db'
+import { eventBus } from '@/lib/events'
+
+export async function GET(request: NextRequest) {
+  try {
+    const params = request.nextUrl.searchParams
+    const walletId = params.get('walletId')
+    const status = params.get('status')
+
+    if (!walletId) {
+      return NextResponse.json({ error: 'walletId is required' }, { status: 400 })
+    }
+
+    const orders = await prisma.order.findMany({
+      where: {
+        walletId,
+        status: status ?? undefined,
+      },
+      include: {
+        executions: {
+          orderBy: { ts: 'desc' },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    return NextResponse.json({
+      orders: orders.map((order) => ({
+        id: order.id,
+        tokenMint: order.tokenMint,
+        side: order.side,
+        status: order.status,
+        qtyTokens: order.qtyTokens ? Number(order.qtyTokens) : null,
+        qtySol: order.qtySol ? Number(order.qtySol) : null,
+        limitPriceUsd: order.limitPriceUsd ? Number(order.limitPriceUsd) : null,
+        slippageBps: order.slippageBps,
+        reason: order.reason,
+        txSig: order.txSig,
+        createdAt: order.createdAt,
+        updatedAt: order.updatedAt,
+        executions: order.executions.map((execution) => ({
+          id: execution.id,
+          ts: execution.ts,
+          fillQty: Number(execution.fillQty),
+          costSol: Number(execution.costSol),
+          feeSol: Number(execution.feeSol),
+          priceUsd: execution.priceUsd ? Number(execution.priceUsd) : null,
+          txSig: execution.txSig,
+        })),
+      })),
+    })
+  } catch (error) {
+    console.error('Get orders error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { walletId, mint, side, qtyTokens, qtySol, slippageBps, limitUsd } = body || {}
+
+    if (!walletId || !mint || !side) {
+      return NextResponse.json({ error: 'walletId, mint and side are required' }, { status: 400 })
+    }
+
+    const order = await prisma.order.create({
+      data: {
+        walletId,
+        tokenMint: mint,
+        side,
+        status: 'pending',
+        qtyTokens: qtyTokens != null ? qtyTokens : undefined,
+        qtySol: qtySol != null ? qtySol : undefined,
+        limitPriceUsd: limitUsd != null ? limitUsd : undefined,
+        slippageBps: slippageBps ?? null,
+      },
+    })
+
+    eventBus.emitEvent({
+      type: 'order:update',
+      payload: { orderId: order.id, status: order.status },
+    })
+
+    return NextResponse.json({ ok: true, order })
+  } catch (error) {
+    console.error('Create order error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}

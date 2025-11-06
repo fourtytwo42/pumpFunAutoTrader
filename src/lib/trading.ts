@@ -1,10 +1,15 @@
-import { prisma } from './db'
+import type { UserSession } from '@prisma/client'
 import { Decimal } from '@prisma/client/runtime/library'
+import { prisma } from './db'
+import { advanceSimulationSession } from './simulation'
 
-export async function getUserBalance(userId: string, timestamp?: bigint): Promise<number> {
-  const session = await prisma.userSession.findUnique({
-    where: { userId },
-  })
+export async function getUserBalance(
+  userId: string,
+  timestamp?: bigint,
+  sessionOverride?: UserSession | null
+): Promise<number> {
+  const session =
+    sessionOverride !== undefined ? sessionOverride : await advanceSimulationSession(userId)
 
   if (!session) {
     return 10.0 // Default starting balance
@@ -100,15 +105,13 @@ export async function executeBuyOrder(
   tokenId: string,
   amountSol: number
 ): Promise<{ success: boolean; error?: string; tokensReceived?: number }> {
-  const session = await prisma.userSession.findUnique({
-    where: { userId },
-  })
+  const session = await advanceSimulationSession(userId)
 
   if (!session) {
     return { success: false, error: 'No active simulation session' }
   }
 
-  const balance = await getUserBalance(userId)
+  const balance = await getUserBalance(userId, undefined, session)
   if (balance < amountSol) {
     return { success: false, error: 'Insufficient SOL balance' }
   }
@@ -194,9 +197,7 @@ export async function executeSellOrder(
   tokenId: string,
   amountTokens: number
 ): Promise<{ success: boolean; error?: string; solReceived?: number }> {
-  const session = await prisma.userSession.findUnique({
-    where: { userId },
-  })
+  const session = await advanceSimulationSession(userId)
 
   if (!session) {
     return { success: false, error: 'No active simulation session' }
@@ -276,4 +277,3 @@ export async function executeSellOrder(
 
   return { success: true, solReceived }
 }
-

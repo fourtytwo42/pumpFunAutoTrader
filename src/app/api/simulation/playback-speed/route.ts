@@ -4,7 +4,16 @@ import { setPlaybackSpeed } from '@/lib/simulation'
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await requireAuth()
+    const session = await requireAuth({ redirectOnFail: false })
+
+    if (!session) {
+      console.warn('Set playback speed unauthorized')
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
     const { speed } = await request.json()
 
     if (!speed || typeof speed !== 'number' || speed <= 0 || speed > 100) {

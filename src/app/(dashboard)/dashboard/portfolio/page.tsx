@@ -1,10 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import {
-  Container,
-  Typography,
+  Avatar,
   Box,
+  Chip,
+  CircularProgress,
+  Container,
   Paper,
   Table,
   TableBody,
@@ -12,56 +15,65 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  CircularProgress,
-  Avatar,
-  Chip,
+  Typography,
 } from '@mui/material'
-import { useRouter } from 'next/navigation'
+import { useEventStream } from '@/hooks/useEventStream'
 
-interface PortfolioPosition {
-  tokenId: string
-  token: {
-    mintAddress: string
-    symbol: string
-    name: string
-    imageUri: string | null
-    price: { priceSol: number; priceUsd: number } | null
-  }
-  amount: number
-  avgBuyPrice: number
-  currentValue: number
-  costBasis: number
-  pnl: number
-  pnlPercent: number
+interface SnapshotPosition {
+  mint: string
+  qty: number
+  avgCostUsd: number
+  priceUsd: number
+  mtmUsd: number
+  pnlUsd: number
+  pnlPct: number
 }
 
-interface PortfolioData {
-  balance: number
-  portfolio: PortfolioPosition[]
-  totalPnL: number
+interface PortfolioSnapshot {
+  walletId: string
+  equityUsd: number
+  realizedUsd: number
+  unrealizedUsd: number
+  positions: SnapshotPosition[]
 }
 
 export default function PortfolioPage() {
   const router = useRouter()
-  const [data, setData] = useState<PortfolioData | null>(null)
+  const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    fetchPortfolio()
-  }, [])
-
-  const fetchPortfolio = async () => {
-    setLoading(true)
+  const fetchSnapshot = async () => {
     try {
-      const response = await fetch('/api/portfolio')
-      const portfolioData = await response.json()
-      setData(portfolioData)
+      const res = await fetch('/api/portfolio')
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        setError(data?.error || 'Failed to load portfolio')
+        setSnapshot(null)
+        return
+      }
+
+      const json = await res.json()
+      setSnapshot(json)
+      setError(null)
     } catch (error) {
-      console.error('Error fetching portfolio:', error)
+      console.error('Failed to load portfolio snapshot', error)
+      setSnapshot(null)
+      setError('Failed to load portfolio')
     } finally {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    fetchSnapshot()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEventStream({
+    'portfolio:update': () => fetchSnapshot(),
+  })
 
   if (loading) {
     return (
@@ -73,7 +85,25 @@ export default function PortfolioPage() {
     )
   }
 
-  if (!data) return null
+  if (!snapshot) {
+    return (
+      <Container maxWidth="lg">
+        <Typography variant="h4" component="h1" gutterBottom>
+          Portfolio
+        </Typography>
+        <Paper sx={{ p: 4, textAlign: 'center' }}>
+          <Typography variant="h6" color="text.secondary">
+            {error || 'No portfolio data available'}
+          </Typography>
+          {error ? (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              Please try again later.
+            </Typography>
+          ) : null}
+        </Paper>
+      </Container>
+    )
+  }
 
   return (
     <Container maxWidth="lg">
@@ -84,98 +114,83 @@ export default function PortfolioPage() {
       <Box sx={{ display: 'flex', gap: 2, mb: 4, flexWrap: 'wrap' }}>
         <Paper sx={{ p: 3, flex: 1, minWidth: 200 }}>
           <Typography variant="h6" gutterBottom color="text.secondary">
-            SOL Balance
+            Equity (USD)
           </Typography>
           <Typography variant="h4" color="primary">
-            {data.balance.toFixed(4)} SOL
+            ${snapshot.equityUsd.toFixed(2)}
           </Typography>
         </Paper>
 
         <Paper sx={{ p: 3, flex: 1, minWidth: 200 }}>
           <Typography variant="h6" gutterBottom color="text.secondary">
-            Total P/L
+            Realized P/L
           </Typography>
           <Typography
             variant="h4"
-            color={data.totalPnL >= 0 ? 'success.main' : 'error.main'}
+            color={snapshot.realizedUsd >= 0 ? 'success.main' : 'error.main'}
           >
-            {data.totalPnL >= 0 ? '+' : ''}
-            {data.totalPnL.toFixed(4)} SOL
+            {snapshot.realizedUsd >= 0 ? '+' : '-'}${Math.abs(snapshot.realizedUsd).toFixed(2)}
           </Typography>
         </Paper>
 
         <Paper sx={{ p: 3, flex: 1, minWidth: 200 }}>
           <Typography variant="h6" gutterBottom color="text.secondary">
-            Positions
+            Unrealized P/L
           </Typography>
-          <Typography variant="h4">{data.portfolio.length}</Typography>
+          <Typography
+            variant="h4"
+            color={snapshot.unrealizedUsd >= 0 ? 'success.main' : 'error.main'}
+          >
+            {snapshot.unrealizedUsd >= 0 ? '+' : '-'}${Math.abs(snapshot.unrealizedUsd).toFixed(2)}
+          </Typography>
         </Paper>
       </Box>
 
-      {data.portfolio.length > 0 ? (
+      {snapshot.positions.length > 0 ? (
         <TableContainer component={Paper}>
           <Table>
             <TableHead>
               <TableRow>
                 <TableCell>Token</TableCell>
-                <TableCell align="right">Amount</TableCell>
-                <TableCell align="right">Avg Buy Price</TableCell>
-                <TableCell align="right">Current Price</TableCell>
-                <TableCell align="right">Current Value</TableCell>
-                <TableCell align="right">P/L</TableCell>
+                <TableCell align="right">Quantity</TableCell>
+                <TableCell align="right">Avg Cost (USD)</TableCell>
+                <TableCell align="right">Price (USD)</TableCell>
+                <TableCell align="right">MTM (USD)</TableCell>
+                <TableCell align="right">P/L (USD)</TableCell>
                 <TableCell align="right">P/L %</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {data.portfolio.map((position) => (
+              {snapshot.positions.map((position) => (
                 <TableRow
-                  key={position.tokenId}
-                  sx={{ cursor: 'pointer' }}
-                  onClick={() =>
-                    router.push(`/dashboard/tokens/${position.token.mintAddress}`)
-                  }
+                  key={position.mint}
                   hover
+                  sx={{ cursor: 'pointer' }}
+                  onClick={() => router.push(`/dashboard/tokens/${position.mint}`)}
                 >
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Avatar
-                        src={position.token.imageUri || undefined}
-                        sx={{ width: 32, height: 32 }}
-                      >
-                        {position.token.symbol.charAt(0)}
+                      <Avatar sx={{ width: 32, height: 32 }}>
+                        {position.mint.slice(0, 2).toUpperCase()}
                       </Avatar>
                       <Box>
-                        <Typography variant="body2">{position.token.name}</Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {position.token.symbol}
-                        </Typography>
+                        <Typography variant="body2">{position.mint}</Typography>
                       </Box>
                     </Box>
                   </TableCell>
-                  <TableCell align="right">{position.amount.toFixed(2)}</TableCell>
+                  <TableCell align="right">{position.qty.toFixed(2)}</TableCell>
+                  <TableCell align="right">${position.avgCostUsd.toFixed(6)}</TableCell>
+                  <TableCell align="right">${position.priceUsd.toFixed(6)}</TableCell>
+                  <TableCell align="right">${position.mtmUsd.toFixed(2)}</TableCell>
                   <TableCell align="right">
-                    {position.avgBuyPrice.toFixed(8)} SOL
-                  </TableCell>
-                  <TableCell align="right">
-                    {position.token.price
-                      ? `${position.token.price.priceSol.toFixed(8)} SOL`
-                      : 'N/A'}
-                  </TableCell>
-                  <TableCell align="right">
-                    {position.currentValue.toFixed(4)} SOL
-                  </TableCell>
-                  <TableCell align="right">
-                    <Typography
-                      color={position.pnl >= 0 ? 'success.main' : 'error.main'}
-                    >
-                      {position.pnl >= 0 ? '+' : ''}
-                      {position.pnl.toFixed(4)} SOL
+                    <Typography color={position.pnlUsd >= 0 ? 'success.main' : 'error.main'}>
+                      {position.pnlUsd >= 0 ? '+' : '-'}${Math.abs(position.pnlUsd).toFixed(2)}
                     </Typography>
                   </TableCell>
                   <TableCell align="right">
                     <Chip
-                      label={`${position.pnl >= 0 ? '+' : ''}${position.pnlPercent.toFixed(2)}%`}
-                      color={position.pnl >= 0 ? 'success' : 'error'}
+                      label={`${position.pnlPct >= 0 ? '+' : ''}${position.pnlPct.toFixed(2)}%`}
+                      color={position.pnlPct >= 0 ? 'success' : 'error'}
                       size="small"
                     />
                   </TableCell>
@@ -197,4 +212,3 @@ export default function PortfolioPage() {
     </Container>
   )
 }
-

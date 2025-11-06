@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import {
   Container,
@@ -51,21 +51,18 @@ interface AiTraderDetail {
 }
 
 export default function AiTraderDetailPage() {
-  const params = useParams()
+  const params = useParams<{ id?: string }>()
   const router = useRouter()
-  const traderId = params.id as string
+  const traderId = params?.id
 
   const [trader, setTrader] = useState<AiTraderDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState(0)
 
-  useEffect(() => {
-    fetchTrader()
-    const interval = setInterval(fetchTrader, 5000) // Refresh every 5 seconds
-    return () => clearInterval(interval)
-  }, [traderId])
-
-  const fetchTrader = async () => {
+  const fetchTrader = useCallback(async () => {
+    if (!traderId) {
+      return
+    }
     try {
       const response = await fetch(`/api/admin/ai-traders/${traderId}`)
       if (response.ok) {
@@ -77,6 +74,19 @@ export default function AiTraderDetailPage() {
     } finally {
       setLoading(false)
     }
+  }, [traderId])
+
+  useEffect(() => {
+    if (!traderId) {
+      return
+    }
+    fetchTrader()
+    const interval = setInterval(fetchTrader, 5000) // Refresh every 5 seconds
+    return () => clearInterval(interval)
+  }, [fetchTrader, traderId])
+
+  if (!traderId) {
+    return null
   }
 
   if (loading && !trader) {

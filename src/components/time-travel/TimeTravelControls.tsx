@@ -10,14 +10,9 @@ import {
   Slider,
   IconButton,
   Chip,
+  Alert,
 } from '@mui/material'
-import {
-  PlayArrow,
-  Pause,
-  FastForward,
-  Replay,
-  Speed,
-} from '@mui/icons-material'
+import { Replay, Speed } from '@mui/icons-material'
 
 interface SimulationState {
   currentTimestamp: bigint
@@ -31,6 +26,7 @@ export default function TimeTravelControls() {
   const [loading, setLoading] = useState(true)
   const [timeInput, setTimeInput] = useState('')
   const [speedInput, setSpeedInput] = useState(1)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchState()
@@ -40,43 +36,70 @@ export default function TimeTravelControls() {
 
   const fetchState = async () => {
     try {
-      const response = await fetch('/api/simulation/time')
+      const response = await fetch('/api/simulation/time', {
+        credentials: 'include',
+      })
       if (response.ok) {
         const data = await response.json()
         if (data) {
           setState({
-            currentTimestamp: BigInt(data.currentTimestamp || 0),
-            startTimestamp: BigInt(data.startTimestamp || 0),
-            playbackSpeed: data.playbackSpeed || 1,
-            isActive: data.isActive || false,
+            currentTimestamp: BigInt(data.currentTimestamp ?? 0),
+            startTimestamp: BigInt(data.startTimestamp ?? 0),
+            playbackSpeed: Number(data.playbackSpeed ?? 1),
+            isActive: Boolean(data.isActive),
           })
-          setSpeedInput(data.playbackSpeed || 1)
+          setSpeedInput(Number(data.playbackSpeed ?? 1))
+          setError(null)
+        } else {
+          setState(null)
         }
+      } else {
+        const errorText = await response.text().catch(() => '')
+        console.error('Failed to fetch simulation state', {
+          status: response.status,
+          body: errorText,
+        })
+        setError('Failed to fetch simulation state')
       }
-    } catch (error) {
-      console.error('Error fetching simulation state:', error)
+    } catch (fetchErr) {
+      console.error('Error fetching simulation state:', fetchErr)
+      setError('Failed to fetch simulation state')
     } finally {
       setLoading(false)
     }
   }
 
   const handleSetTime = async () => {
-    if (!timeInput) return
+    if (!timeInput) {
+      setError('Please choose a date and time to jump to')
+      return
+    }
+
+    const parsedTimestamp = new Date(timeInput).getTime()
+    if (!Number.isFinite(parsedTimestamp)) {
+      setError('Please choose a valid date and time')
+      return
+    }
 
     try {
-      const timestamp = new Date(timeInput).getTime()
       const response = await fetch('/api/simulation/time', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ timestamp: timestamp.toString() }),
+        credentials: 'include',
+        body: JSON.stringify({ timestamp: Math.max(parsedTimestamp, 0).toString() }),
       })
 
       if (response.ok) {
+        setError(null)
         fetchState()
-        window.location.reload() // Reload to reset portfolio
+        window.location.reload()
+      } else {
+        const data = await response.json().catch(() => null)
+        setError(data?.error || 'Failed to update simulation time')
       }
-    } catch (error) {
-      console.error('Error setting time:', error)
+    } catch (setErr) {
+      console.error('Error setting time:', setErr)
+      setError('Failed to update simulation time')
     }
   }
 
@@ -85,21 +108,49 @@ export default function TimeTravelControls() {
       const response = await fetch('/api/simulation/playback-speed', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ speed }),
       })
 
       if (response.ok) {
         setSpeedInput(speed)
+        setError(null)
         fetchState()
+      } else {
+        const data = await response.json().catch(() => null)
+        setError(data?.error || 'Failed to update playback speed')
       }
-    } catch (error) {
-      console.error('Error setting speed:', error)
+    } catch (setErr) {
+      console.error('Error setting speed:', setErr)
+      setError('Failed to update playback speed')
     }
   }
 
   const handleReset = async () => {
-    if (!state) return
-    await handleSetTime()
+    if (!state) {
+      return
+    }
+
+    try {
+      const response = await fetch('/api/simulation/time', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ timestamp: state.startTimestamp.toString() }),
+      })
+
+      if (response.ok) {
+        setError(null)
+        fetchState()
+        window.location.reload()
+      } else {
+        const data = await response.json().catch(() => null)
+        setError(data?.error || 'Failed to reset simulation time')
+      }
+    } catch (resetErr) {
+      console.error('Error resetting simulation time:', resetErr)
+      setError('Failed to reset simulation time')
+    }
   }
 
   if (loading || !state) {
@@ -124,6 +175,12 @@ export default function TimeTravelControls() {
             Start Time: {startDate.toLocaleString()}
           </Typography>
         </Box>
+
+        {error ? (
+          <Alert severity="error" onClose={() => setError(null)}>
+            {error}
+          </Alert>
+        ) : null}
 
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
           <TextField
@@ -176,4 +233,3 @@ export default function TimeTravelControls() {
     </Paper>
   )
 }
-

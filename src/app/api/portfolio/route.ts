@@ -1,38 +1,77 @@
-import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/middleware'
-import { getUserPortfolio, getUserBalance } from '@/lib/trading'
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/db'
+import { getLatestSolPrice, getTokenUsdPrice } from '@/lib/metrics'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const session = await requireAuth()
-    const [portfolio, balance] = await Promise.all([
-      getUserPortfolio(session.user.id),
-      getUserBalance(session.user.id),
-    ])
+    const { searchParams } = request.nextUrl
+    const walletId = searchParams.get('walletId')
+    const wallet = walletId
+      ? await prisma.wallet.findUnique({
+          where: { id: walletId },
+          include: {
+            positions: true,
+          },
+        })
+      : await prisma.wallet.findFirst({
+          include: {
+            positions: true,
+          },
+        })
 
-    // Calculate total P/L
-    let totalPnL = 0
-    const positions = portfolio.map((p) => {
-      const currentValue = p.token.price
-        ? p.amount * p.token.price.priceSol
-        : 0
-      const costBasis = p.amount * p.avgBuyPrice
-      const pnl = currentValue - costBasis
-      totalPnL += pnl
+    if (!wallet) {
+      return NextResponse.json(
+        { error: 'Wallet not found' },
+        { status: 404 }
+      )
+    }
 
-      return {
-        ...p,
-        currentValue,
-        costBasis,
-        pnl,
-        pnlPercent: costBasis > 0 ? (pnl / costBasis) * 100 : 0,
-      }
+    const solUsd = (await getLatestSolPrice()) ?? 0
+
+    const positions = []
+    let unrealizedUsd = 0
+
+    for (const position of wallet.positions) {
+      const priceUsd = (await getTokenUsdPrice(position.tokenMint)) ?? 0
+      const qty = Number(position.qty)
+      const avgCost = Number(position.avgCostUsd)
+      const mtmUsd = qty * priceUsd
+      const costUsd = qty * avgCost
+      const pnlUsd = mtmUsd - costUsd
+
+      unrealizedUsd += pnlUsd
+
+      positions.push({
+        mint: position.tokenMint,
+        qty,
+        avgCostUsd: avgCost,
+        priceUsd,
+        mtmUsd,
+        pnlUsd,
+        pnlPct: costUsd > 0 ? (pnlUsd / costUsd) * 100 : 0,
+      })
+    }
+
+    const realizedLedger = await prisma.pnLLedger.aggregate({
+      _sum: { amountUsd: true },
+      where: {
+        walletId: wallet.id,
+        type: {
+          in: ['realized', 'fee'],
+        },
+      },
     })
 
+    const realizedUsd = Number(realizedLedger._sum.amountUsd ?? 0)
+    const equityUsd = realizedUsd + unrealizedUsd
+
     return NextResponse.json({
-      balance,
-      portfolio: positions,
-      totalPnL,
+      walletId: wallet.id,
+      solUsd,
+      equityUsd,
+      realizedUsd,
+      unrealizedUsd,
+      positions,
     })
   } catch (error) {
     console.error('Get portfolio error:', error)
@@ -42,4 +81,3 @@ export async function GET() {
     )
   }
 }
-

@@ -9,6 +9,9 @@ export async function PUT(
 ) {
   try {
     const session = await requireAdminOrPowerUser()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     const { username, password, role } = await request.json()
 
     const user = await prisma.user.findUnique({

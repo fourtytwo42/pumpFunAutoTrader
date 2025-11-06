@@ -1,10 +1,14 @@
 import { requireAdminOrPowerUser } from '@/lib/middleware'
-import { Container, Typography, Box, Paper, Grid, Button } from '@mui/material'
-import { useRouter } from 'next/navigation'
-import { AdminPanelSettings, People, SmartToy } from '@mui/icons-material'
+import Link from 'next/link'
+import { Container, Typography, Box, Paper, Grid } from '@mui/material'
+import { People, SmartToy } from '@mui/icons-material'
 
 export default async function AdminPage() {
   const session = await requireAdminOrPowerUser()
+  if (!session) {
+    return null
+  }
+
   const isAdmin = session.user.role === 'admin'
 
   return (
@@ -17,33 +21,43 @@ export default async function AdminPage() {
       </Typography>
 
       <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
-          <Paper
-            sx={{
-              p: 3,
-              cursor: 'pointer',
-              '&:hover': { boxShadow: 4 },
-            }}
-            onClick={() => (window.location.href = '/dashboard/admin/users')}
-          >
-            <People sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-            <Typography variant="h6" gutterBottom>
-              User Management
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Create, edit, and manage user accounts
-            </Typography>
-          </Paper>
-        </Grid>
+        {isAdmin && (
+          <Grid item xs={12} md={6}>
+            <Paper
+              component={Link}
+              href="/dashboard/admin/users"
+              sx={{
+                p: 3,
+                cursor: 'pointer',
+                textDecoration: 'none',
+                color: 'inherit',
+                display: 'block',
+                '&:hover': { boxShadow: 4 },
+              }}
+            >
+              <People sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+              <Typography variant="h6" gutterBottom>
+                User Management
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Create, edit, and manage user accounts
+              </Typography>
+            </Paper>
+          </Grid>
+        )}
 
         <Grid item xs={12} md={6}>
           <Paper
+            component={Link}
+            href="/dashboard/admin/ai-traders"
             sx={{
               p: 3,
               cursor: 'pointer',
+              textDecoration: 'none',
+              color: 'inherit',
+              display: 'block',
               '&:hover': { boxShadow: 4 },
             }}
-            onClick={() => (window.location.href = '/dashboard/admin/ai-traders')}
           >
             <SmartToy sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
             <Typography variant="h6" gutterBottom>

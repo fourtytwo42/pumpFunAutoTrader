@@ -1,10 +1,17 @@
 import { getServerSession } from 'next-auth'
-import { authOptions } from './auth'
 import { redirect } from 'next/navigation'
+import { authOptions } from './auth'
 
-export async function requireAuth() {
+interface RequireAuthOptions {
+  redirectOnFail?: boolean
+}
+
+export async function requireAuth(options: RequireAuthOptions = {}) {
   const session = await getServerSession(authOptions)
   if (!session) {
+    if (options.redirectOnFail === false) {
+      return null
+    }
     redirect('/login')
   }
   return session
@@ -12,6 +19,9 @@ export async function requireAuth() {
 
 export async function requireRole(allowedRoles: string[]) {
   const session = await requireAuth()
+  if (!session) {
+    throw new Error('Invariant: requireAuth returned null when redirectOnFail not disabled')
+  }
   if (!allowedRoles.includes(session.user.role)) {
     redirect('/dashboard')
   }

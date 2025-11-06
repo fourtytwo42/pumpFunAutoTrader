@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import {
   BarChart,
   Bar,
@@ -32,11 +32,7 @@ export default function VolumeChart({ tokenAddress, interval = '1m', height = 20
   const [data, setData] = useState<CandleData[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    fetchChartData()
-  }, [tokenAddress, interval])
-
-  const fetchChartData = async () => {
+  const fetchChartData = useCallback(async () => {
     setLoading(true)
     try {
       let simulationTime: string | null = null
@@ -67,7 +63,11 @@ export default function VolumeChart({ tokenAddress, interval = '1m', height = 20
     } finally {
       setLoading(false)
     }
-  }
+  }, [interval, tokenAddress])
+
+  useEffect(() => {
+    fetchChartData()
+  }, [fetchChartData])
 
   if (loading) {
     return (

@@ -1,65 +1,66 @@
 import { requireAuth } from '@/lib/middleware'
-import { Container, Typography, Box, Paper, Grid, Card, CardContent, Button, Link } from '@mui/material'
-import { getUserBalance, getUserPortfolio } from '@/lib/trading'
-import { TrendingUp, AccountBalanceWallet, Science, ShowChart, Timeline } from '@mui/icons-material'
+import {
+  Container,
+  Typography,
+  Box,
+  Paper,
+  Grid,
+  Card,
+  CardContent,
+  Button,
+  Link,
+} from '@mui/material'
+import {
+  TrendingUp,
+  AccountBalanceWallet,
+  Science,
+  ShowChart,
+  Timeline,
+} from '@mui/icons-material'
 import { prisma } from '@/lib/db'
+import { getDashboardSnapshot } from '@/lib/dashboard'
 
 export default async function DashboardPage() {
   const session = await requireAuth()
-  const [balance, portfolio] = await Promise.all([
-    getUserBalance(session.user.id),
-    getUserPortfolio(session.user.id),
-  ])
+  const snapshot = await getDashboardSnapshot()
 
-  // Get recent tokens
-  const recentTokens = await prisma.token.findMany({
-    include: { price: true },
-    orderBy: { createdAt: 'desc' },
-    take: 6,
+  if (!session) {
+    return null
+  }
+
+  if (!snapshot) {
+    return (
+      <Container maxWidth="lg">
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 10 }}>
+          <Typography variant="h4" gutterBottom>
+            Dashboard
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Welcome, {session.user.username}! Configure a wallet to begin monitoring activity.
+          </Typography>
+        </Box>
+      </Container>
+    )
+  }
+
+  const { wallet, solUsd, portfolioValueSol, realizedUsd, unrealizedUsd, totalTrades, totalTokens } =
+    snapshot
+
+  const recentPositions = await prisma.position.findMany({
+    where: { walletId: wallet.id },
+    include: {
+      token: {
+        include: {
+          price: true,
+        },
+      },
+    },
+    orderBy: { updatedAt: 'desc' },
+    take: 5,
   })
 
-  // Get market stats
-  const totalTokens = await prisma.token.count()
-  const totalTrades = await prisma.trade.count()
-
-  const totalPnL = portfolio.reduce((sum, p) => {
-    const currentValue = p.token.price ? p.amount * p.token.price.priceSol : 0
-    const costBasis = p.amount * p.avgBuyPrice
-    return sum + (currentValue - costBasis)
-  }, 0)
-
-  const totalPnLUsd = portfolio.reduce((sum, p) => {
-    const currentValue = p.token.price ? p.amount * p.token.price.priceUsd : 0
-    const costBasis = p.amount * p.avgBuyPrice * (p.token.price?.priceUsd || 0) / (p.token.price?.priceSol || 1)
-    return sum + (currentValue - costBasis)
-  }, 0)
-
-const portfolioValue = portfolio.reduce((sum, p) => {
-    const currentValue = p.token.price ? p.amount * p.token.price.priceSol : 0
-    return sum + currentValue
-  }, 0)
-
-  const formatSolPerMillion = (priceSol?: number | null) => {
-    if (priceSol == null || isNaN(priceSol) || priceSol <= 0) {
-      return 'N/A'
-    }
-
-    const solPerMillion = priceSol * 1_000_000
-    if (!isFinite(solPerMillion) || solPerMillion <= 0) {
-      return 'N/A'
-    }
-
-    if (solPerMillion >= 1000) {
-      return `${(solPerMillion / 1000).toFixed(2)}K SOL`
-    }
-    if (solPerMillion >= 1) {
-      return `${solPerMillion.toFixed(2)} SOL`
-    }
-    if (solPerMillion >= 0.01) {
-      return `${solPerMillion.toFixed(4)} SOL`
-    }
-    return `${solPerMillion.toExponential(2)} SOL`
-  }
+  const formatCurrency = (value: number) =>
+    `${value >= 0 ? '+' : ''}${value.toFixed(2)}`
 
   return (
     <Container maxWidth="lg">
@@ -72,7 +73,6 @@ const portfolioValue = portfolio.reduce((sum, p) => {
         </Typography>
       </Box>
 
-      {/* Stats Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
           <Card>
@@ -80,10 +80,10 @@ const portfolioValue = portfolio.reduce((sum, p) => {
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Box>
                   <Typography variant="body2" color="text.secondary" gutterBottom>
-                    SOL Balance
+                    Portfolio (SOL)
                   </Typography>
                   <Typography variant="h4" color="primary">
-                    {balance.toFixed(4)} SOL
+                    {portfolioValueSol.toFixed(3)} SOL
                   </Typography>
                 </Box>
                 <AccountBalanceWallet sx={{ fontSize: 40, color: 'primary.main', opacity: 0.7 }} />
@@ -98,20 +98,19 @@ const portfolioValue = portfolio.reduce((sum, p) => {
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Box>
                   <Typography variant="body2" color="text.secondary" gutterBottom>
-                    Total P/L
+                    Realized P/L
                   </Typography>
                   <Typography
                     variant="h4"
-                    color={totalPnLUsd >= 0 ? 'success.main' : 'error.main'}
+                    color={realizedUsd >= 0 ? 'success.main' : 'error.main'}
                   >
-                    ${totalPnLUsd >= 0 ? '+' : ''}
-                    {totalPnLUsd.toFixed(2)}
+                    ${formatCurrency(realizedUsd)}
                   </Typography>
                 </Box>
                 <TrendingUp
                   sx={{
                     fontSize: 40,
-                    color: totalPnLUsd >= 0 ? 'success.main' : 'error.main',
+                    color: realizedUsd >= 0 ? 'success.main' : 'error.main',
                     opacity: 0.7,
                   }}
                 />
@@ -126,10 +125,13 @@ const portfolioValue = portfolio.reduce((sum, p) => {
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Box>
                   <Typography variant="body2" color="text.secondary" gutterBottom>
-                    Portfolio Value
+                    Unrealized P/L
                   </Typography>
-                  <Typography variant="h4">
-                    {portfolioValue.toFixed(4)} SOL
+                  <Typography
+                    variant="h4"
+                    color={unrealizedUsd >= 0 ? 'success.main' : 'error.main'}
+                  >
+                    ${formatCurrency(unrealizedUsd)}
                   </Typography>
                 </Box>
                 <ShowChart sx={{ fontSize: 40, color: 'primary.main', opacity: 0.7 }} />
@@ -146,7 +148,7 @@ const portfolioValue = portfolio.reduce((sum, p) => {
                   <Typography variant="body2" color="text.secondary" gutterBottom>
                     Active Positions
                   </Typography>
-                  <Typography variant="h4">{portfolio.length}</Typography>
+                  <Typography variant="h4">{totalTokens}</Typography>
                 </Box>
                 <Timeline sx={{ fontSize: 40, color: 'primary.main', opacity: 0.7 }} />
               </Box>
@@ -155,25 +157,16 @@ const portfolioValue = portfolio.reduce((sum, p) => {
         </Grid>
       </Grid>
 
-      {/* Quick Actions */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} md={4}>
-          <Card
-            component={Link}
-            href="/dashboard/tokens"
-            sx={{
-              textDecoration: 'none',
-              cursor: 'pointer',
-              '&:hover': { boxShadow: 4 },
-            }}
-          >
+          <Card component={Link} href="/dashboard/tokens" sx={{ textDecoration: 'none', '&:hover': { boxShadow: 4 } }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <TrendingUp sx={{ fontSize: 48, color: 'primary.main' }} />
                 <Box>
                   <Typography variant="h6">Browse Tokens</Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Explore available tokens to trade
+                    Explore discovery watchlist
                   </Typography>
                 </Box>
               </Box>
@@ -182,22 +175,14 @@ const portfolioValue = portfolio.reduce((sum, p) => {
         </Grid>
 
         <Grid item xs={12} md={4}>
-          <Card
-            component={Link}
-            href="/dashboard/portfolio"
-            sx={{
-              textDecoration: 'none',
-              cursor: 'pointer',
-              '&:hover': { boxShadow: 4 },
-            }}
-          >
+          <Card component={Link} href="/dashboard/positions" sx={{ textDecoration: 'none', '&:hover': { boxShadow: 4 } }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <AccountBalanceWallet sx={{ fontSize: 48, color: 'primary.main' }} />
                 <Box>
-                  <Typography variant="h6">View Portfolio</Typography>
+                  <Typography variant="h6">View Positions</Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Check your positions and P/L
+                    Drill into MTM and flows
                   </Typography>
                 </Box>
               </Box>
@@ -206,22 +191,14 @@ const portfolioValue = portfolio.reduce((sum, p) => {
         </Grid>
 
         <Grid item xs={12} md={4}>
-          <Card
-            component={Link}
-            href="/dashboard/faucet"
-            sx={{
-              textDecoration: 'none',
-              cursor: 'pointer',
-              '&:hover': { boxShadow: 4 },
-            }}
-          >
+          <Card component={Link} href="/dashboard/faucet" sx={{ textDecoration: 'none', '&:hover': { boxShadow: 4 } }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Science sx={{ fontSize: 48, color: 'primary.main' }} />
                 <Box>
-                  <Typography variant="h6">Get SOL</Typography>
+                  <Typography variant="h6">Risk Controls</Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Request SOL from the faucet
+                    Configure risk limits and alerts
                   </Typography>
                 </Box>
               </Box>
@@ -230,7 +207,6 @@ const portfolioValue = portfolio.reduce((sum, p) => {
         </Grid>
       </Grid>
 
-      {/* Market Overview */}
       <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
           <Paper sx={{ p: 3 }}>
@@ -240,7 +216,7 @@ const portfolioValue = portfolio.reduce((sum, p) => {
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">
-                  Total Tokens:
+                  Total Positions
                 </Typography>
                 <Typography variant="body1" fontWeight="bold">
                   {totalTokens}
@@ -248,29 +224,23 @@ const portfolioValue = portfolio.reduce((sum, p) => {
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">
-                  Total Trades:
+                  Total Trades
                 </Typography>
                 <Typography variant="body1" fontWeight="bold">
-                  {totalTrades.toLocaleString()}
+                  {totalTrades}
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">
-                  Your Positions:
+                  SOL Price
                 </Typography>
                 <Typography variant="body1" fontWeight="bold">
-                  {portfolio.length}
+                  ${solUsd.toFixed(2)}
                 </Typography>
               </Box>
             </Box>
-            <Button
-              variant="contained"
-              fullWidth
-              sx={{ mt: 2 }}
-              component={Link}
-              href="/dashboard/tokens"
-            >
-              Browse All Tokens
+            <Button variant="contained" fullWidth sx={{ mt: 2 }} component={Link} href="/dashboard/positions">
+              View Positions
             </Button>
           </Paper>
         </Grid>
@@ -278,19 +248,18 @@ const portfolioValue = portfolio.reduce((sum, p) => {
         <Grid item xs={12} md={6}>
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
-              Your Positions
+              Recent Positions
             </Typography>
-            {portfolio.length > 0 ? (
+            {recentPositions.length > 0 ? (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
-                {portfolio.slice(0, 5).map((p) => {
-                  const currentValue = p.token.price ? p.amount * p.token.price.priceSol : 0
-                  const costBasis = p.amount * p.avgBuyPrice
-                  const pnl = currentValue - costBasis
-                  const pnlPercent = costBasis > 0 ? (pnl / costBasis) * 100 : 0
+                {recentPositions.map((position) => {
+                  const priceSol = position.token.price ? Number(position.token.price.priceSol) : 0
+                  const qty = Number(position.qty)
+                  const mtmSol = priceSol * qty
 
                   return (
                     <Box
-                      key={p.tokenId}
+                      key={position.id}
                       sx={{
                         display: 'flex',
                         justifyContent: 'space-between',
@@ -303,100 +272,32 @@ const portfolioValue = portfolio.reduce((sum, p) => {
                     >
                       <Box>
                         <Typography variant="body1" fontWeight="bold">
-                          {p.token.name}
+                          {position.token.name}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                          {p.amount.toFixed(2)} {p.token.symbol}
+                          {qty.toFixed(2)} {position.token.symbol}
                         </Typography>
                       </Box>
                       <Box sx={{ textAlign: 'right' }}>
-                        <Typography
-                          variant="body2"
-                          color={pnl >= 0 ? 'success.main' : 'error.main'}
-                          fontWeight="bold"
-                        >
-                          {pnl >= 0 ? '+' : ''}
-                          {pnl.toFixed(4)} SOL
+                        <Typography variant="body2" color="text.secondary">
+                          {mtmSol.toFixed(4)} SOL
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                          {pnlPercent >= 0 ? '+' : ''}
-                          {pnlPercent.toFixed(2)}%
+                          Updated {position.updatedAt.toLocaleString()}
                         </Typography>
                       </Box>
                     </Box>
                   )
                 })}
-                {portfolio.length > 5 && (
-                  <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center' }}>
-                    +{portfolio.length - 5} more positions
-                  </Typography>
-                )}
               </Box>
             ) : (
-              <Box sx={{ textAlign: 'center', py: 4 }}>
-                <Typography variant="body2" color="text.secondary" gutterBottom>
-                  No positions yet
-                </Typography>
-                <Button
-                  variant="outlined"
-                  component={Link}
-                  href="/dashboard/tokens"
-                  sx={{ mt: 2 }}
-                >
-                  Start Trading
-                </Button>
-              </Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                No active positions yet.
+              </Typography>
             )}
-            <Button
-              variant="outlined"
-              fullWidth
-              sx={{ mt: 2 }}
-              component={Link}
-              href="/dashboard/portfolio"
-            >
-              View Full Portfolio
-            </Button>
           </Paper>
         </Grid>
       </Grid>
-
-      {/* Recent Tokens */}
-      {recentTokens.length > 0 && (
-        <Paper sx={{ p: 3, mt: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Recent Tokens
-          </Typography>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            {recentTokens.map((token) => (
-              <Grid item xs={6} sm={4} md={2} key={token.id}>
-                <Card
-                  component={Link}
-                  href={`/dashboard/tokens/${token.mintAddress}`}
-                  sx={{
-                    textDecoration: 'none',
-                    cursor: 'pointer',
-                    '&:hover': { boxShadow: 4 },
-                    p: 2,
-                    textAlign: 'center',
-                  }}
-                >
-                  <Typography variant="body2" fontWeight="bold" noWrap>
-                    {token.symbol}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" noWrap>
-                    {token.name}
-                  </Typography>
-                  {token.price && (
-                    <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>
-                      {formatSolPerMillion(Number(token.price.priceSol))} / 1M tokens
-                    </Typography>
-                  )}
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        </Paper>
-      )}
     </Container>
   )
 }

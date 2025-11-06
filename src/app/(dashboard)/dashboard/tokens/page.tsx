@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Container,
   Typography,
@@ -83,19 +83,7 @@ export default function TokensPage() {
   const [sortBy, setSortBy] = useState("volume");
   const [timeframe, setTimeframe] = useState<TimeframeOption>('24h');
 
-  useEffect(() => {
-    // Initial fetch with loading indicator
-    fetchTokens(true);
-
-    // Poll for updates every 5 seconds for real-time data (without loading indicator)
-    const interval = setInterval(() => {
-      fetchTokens(false);
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [page, search, sortBy, timeframe]);
-
-  const fetchTokens = async (showLoading = true) => {
+  const fetchTokens = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -121,7 +109,19 @@ export default function TokensPage() {
     } finally {
       if (showLoading) setLoading(false);
     }
-  };
+  }, [page, search, sortBy, timeframe]);
+
+  useEffect(() => {
+    // Initial fetch with loading indicator
+    fetchTokens(true);
+
+    // Poll for updates every 5 seconds for real-time data (without loading indicator)
+    const interval = setInterval(() => {
+      fetchTokens(false);
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [fetchTokens]);
 
   const handleTimeframeChange = (value: TimeframeOption) => {
     setTimeframe(value);

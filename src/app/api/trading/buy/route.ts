@@ -5,6 +5,9 @@ import { executeBuyOrder } from '@/lib/trading'
 export async function POST(request: NextRequest) {
   try {
     const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     const { tokenId, amountSol } = await request.json()
 
     if (!tokenId || !amountSol) {

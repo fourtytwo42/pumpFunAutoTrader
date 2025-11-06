@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   Container,
@@ -117,6 +117,17 @@ interface TokenData {
   remote?: RemoteData;
 }
 
+interface TokenMetrics {
+  priceUsd: number | null;
+  priceSol: number | null;
+  drawdownPct: number | null;
+  holders?: {
+    total: number;
+    topJson: any;
+  } | null;
+  activity?: Record<string, any>;
+}
+
 const formatCompactNumber = (value?: number, options: Intl.NumberFormatOptions = {}) => {
   if (value === undefined || value === null || Number.isNaN(value)) return "N/A";
   if (!Number.isFinite(value)) return "N/A";
@@ -181,9 +192,9 @@ const selectMarketActivityBucket = (activity?: Record<string, MarketActivityBuck
 };
 
 export default function TokenDetailPage() {
-  const params = useParams();
+  const params = useParams<{ mintAddress?: string }>();
   const router = useRouter();
-  const mintAddress = params.mintAddress as string;
+  const mintAddress = params?.mintAddress;
 
   const [token, setToken] = useState<TokenData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -193,6 +204,7 @@ export default function TokenDetailPage() {
   const [trading, setTrading] = useState(false);
   const [tradeSuccess, setTradeSuccess] = useState("");
   const [candleInterval, setCandleInterval] = useState<(typeof CANDLE_INTERVALS)[number]>('1m');
+  const [metrics, setMetrics] = useState<TokenMetrics | null>(null);
   const handleCandleIntervalChange = (_: unknown, value: (typeof CANDLE_INTERVALS)[number] | null) => {
     if (value) {
       setCandleInterval(value);
@@ -200,12 +212,10 @@ export default function TokenDetailPage() {
   };
 
 
-  useEffect(() => {
-    fetchToken();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mintAddress]);
-
-  const fetchToken = async () => {
+  const fetchToken = useCallback(async () => {
+    if (!mintAddress) {
+      return;
+    }
     setLoading(true);
     try {
       const response = await fetch(`/api/tokens/${mintAddress}`);
@@ -214,12 +224,31 @@ export default function TokenDetailPage() {
       }
       const data = await response.json();
       setToken(data);
+      try {
+        const metricsRes = await fetch(`/api/tokens/${mintAddress}/metrics`);
+        if (metricsRes.ok) {
+          const metricsData = await metricsRes.json();
+          setMetrics(metricsData);
+        } else {
+          setMetrics(null);
+        }
+      } catch (metricsError) {
+        console.error('Failed to load token metrics', metricsError);
+        setMetrics(null);
+      }
     } catch (err: any) {
       setError(err.message || "Failed to load token");
     } finally {
       setLoading(false);
     }
-  };
+  }, [mintAddress]);
+
+  useEffect(() => {
+    if (!mintAddress) {
+      return;
+    }
+    fetchToken();
+  }, [fetchToken, mintAddress]);
 
   const handleBuy = async () => {
     if (!buyAmount || parseFloat(buyAmount) <= 0 || !token) return;
@@ -293,6 +322,10 @@ export default function TokenDetailPage() {
     [marketActivity],
   );
 
+  if (!mintAddress) {
+    return null;
+  }
+
   if (loading || !token) {
     return (
       <Container maxWidth="lg">
@@ -318,6 +351,7 @@ export default function TokenDetailPage() {
   const totalSupplyTokens = token.totalSupplyTokens ?? (remote?.coin?.total_supply ? Number(remote.coin.total_supply) / 1_000_000_000 : undefined);
   const priceSol = token.price?.priceSol ?? 0;
   const priceUsd = token.price?.priceUsd ?? 0;
+  const priceUsdDisplay = metrics?.priceUsd ?? priceUsd;
   const marketCapUsd = token.marketCapUsd ?? (remote?.coin?.usd_market_cap ? Number(remote.coin.usd_market_cap) : undefined);
   const marketCapSol = token.marketCapSol ?? (remote?.coin?.market_cap ? Number(remote.coin.market_cap) : undefined);
 
@@ -410,6 +444,13 @@ export default function TokenDetailPage() {
         {poolAddress ? (
           <Chip label={`Pool: ${shortenAddress(poolAddress)}`} variant="outlined" />
         ) : null}
+        {metrics?.drawdownPct != null ? (
+          <Chip
+            label={`Drawdown: ${metrics.drawdownPct.toFixed(2)}%`}
+            variant="outlined"
+            color={metrics.drawdownPct <= 0 ? 'success' : 'warning'}
+          />
+        ) : null}
       </Stack>
 
       <Divider sx={{ mb: 3 }} />
@@ -463,7 +504,7 @@ export default function TokenDetailPage() {
                   Price (per 1M tokens)
                 </Typography>
                 <Typography variant="h5">
-                  {priceUsd > 0 ? formatUsd(priceUsd * 1_000_000) : "N/A"}
+                  {priceUsdDisplay && priceUsdDisplay > 0 ? formatUsd(priceUsdDisplay * 1_000_000) : "N/A"}
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
@@ -489,7 +530,7 @@ export default function TokenDetailPage() {
                   Price per Token (USD)
                 </Typography>
                 <Typography variant="h6">
-                  {priceUsd > 0 ? formatUsd(priceUsd) : "N/A"}
+                  {priceUsdDisplay && priceUsdDisplay > 0 ? formatUsd(priceUsdDisplay) : "N/A"}
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
 import { prisma } from '@/lib/db'
+import { Prisma } from '@prisma/client'
 
 const MAX_AMOUNT = 10
 const DEFAULT_AMOUNT = 5
@@ -8,10 +9,26 @@ const MAX_REQUESTS_PER_DAY = 10
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await requireAuth()
+    const session = await requireAuth({ redirectOnFail: false })
+
+    if (!session) {
+      console.warn('Faucet request unauthorized')
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
     const { amount } = await request.json()
 
-    const requestAmount = amount || DEFAULT_AMOUNT
+    const requestAmount = typeof amount === 'number' && !Number.isNaN(amount)
+      ? amount
+      : DEFAULT_AMOUNT
+
+    console.info('Faucet request received', {
+      userId: session.user.id,
+      requestAmount,
+    })
 
     if (requestAmount > MAX_AMOUNT) {
       return NextResponse.json(
@@ -61,10 +78,14 @@ export async function POST(request: NextRequest) {
     })
 
     if (session_data) {
+      const newBalance = session_data.solBalanceStart
+        ? session_data.solBalanceStart.plus(requestAmount)
+        : new Prisma.Decimal(requestAmount)
+
       await prisma.userSession.update({
         where: { userId: session.user.id },
         data: {
-          solBalanceStart: session_data.solBalanceStart + requestAmount,
+          solBalanceStart: newBalance,
         },
       })
     } else {
@@ -75,7 +96,7 @@ export async function POST(request: NextRequest) {
           startTimestamp: BigInt(Date.now()),
           currentTimestamp: BigInt(Date.now()),
           playbackSpeed: 1.0,
-          solBalanceStart: 10 + requestAmount, // Default 10 + faucet amount
+          solBalanceStart: new Prisma.Decimal(10).plus(requestAmount), // Default 10 + faucet amount
           isActive: true,
         },
       })

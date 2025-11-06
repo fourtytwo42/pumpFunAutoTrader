@@ -230,13 +230,21 @@ export async function GET(
       }
     }
 
-    const mergedCandles = Array.from(candleMap.values())
-      .sort((a, b) => {
-        if (a.timestamp < b.timestamp) return -1
-        if (a.timestamp > b.timestamp) return 1
-        return 0
-      })
-      .slice(-limit)
+    let mergedCandles = Array.from(candleMap.values()).sort((a, b) => {
+      if (a.timestamp < b.timestamp) return -1
+      if (a.timestamp > b.timestamp) return 1
+      return 0
+    })
+
+    if (startTimestamp !== undefined) {
+      mergedCandles = mergedCandles.filter((candle) => candle.timestamp >= startTimestamp)
+    }
+
+    if (endTimestamp !== undefined) {
+      mergedCandles = mergedCandles.filter((candle) => candle.timestamp <= endTimestamp)
+    }
+
+    mergedCandles = mergedCandles.slice(-limit)
 
     return NextResponse.json({
       candles: mergedCandles.map((c) => ({
