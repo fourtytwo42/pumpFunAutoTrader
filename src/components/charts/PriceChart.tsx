@@ -145,43 +145,31 @@ export default function PriceChart({ tokenAddress, interval = '1m', height = 300
     })
   }, [data])
 
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height, flexDirection: 'column', gap: 2 }}>
-        <CircularProgress />
-        <Typography variant="body2" color="text.secondary">
-          Loading chart data...
-        </Typography>
-      </Box>
-    )
-  }
+  const priceExtent = useMemo(() => {
+    if (chartData.length === 0) {
+      return { min: 0, max: 1 }
+    }
+    const values = chartData.flatMap((d) => [d.open, d.close, d.high, d.low])
+    let min = Math.min(...values)
+    let max = Math.max(...values)
+    if (!Number.isFinite(min) || !Number.isFinite(max)) {
+      min = 0
+      max = 1
+    }
+    if (min === max) {
+      const adjustment = Math.abs(min) * 0.05 || 0.00000001
+      min -= adjustment
+      max += adjustment
+    }
+    return { min, max }
+  }, [chartData])
 
-  if (error) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height, flexDirection: 'column', gap: 2 }}>
-        <Typography variant="body2" color="error">
-          {error}
-        </Typography>
-      </Box>
-    )
-  }
+  const domain = useMemo(() => {
+    const padding = (priceExtent.max - priceExtent.min) * 0.1 || Math.abs(priceExtent.min) * 0.1 || 0.00000001
+    return [priceExtent.min - padding, priceExtent.max + padding] as [number, number]
+  }, [priceExtent])
 
-  if (chartData.length === 0) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height }}>
-        <Typography variant="body2" color="text.secondary">
-          No chart data available
-        </Typography>
-      </Box>
-    )
-  }
-
-  const prices = chartData.flatMap((d) => [d.open, d.close, d.high, d.low])
-  const minPrice = Math.min(...prices)
-  const maxPrice = Math.max(...prices)
-  const padding = (maxPrice - minPrice) * 0.1 || minPrice * 0.1 || 0.00000001
-  const domain: [number, number] = [minPrice - padding, maxPrice + padding]
-  const chartHeight = Math.max(height - CHART_MARGIN.top - CHART_MARGIN.bottom, 1)
+  const chartHeight = useMemo(() => Math.max(height - CHART_MARGIN.top - CHART_MARGIN.bottom, 1), [height])
 
   const scaleY = useMemo(() => {
     const [domainMin, domainMax] = domain
@@ -229,6 +217,37 @@ export default function PriceChart({ tokenAddress, interval = '1m', height = 300
       </g>
     )
   }, [scaleY])
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height, flexDirection: 'column', gap: 2 }}>
+        <CircularProgress />
+        <Typography variant="body2" color="text.secondary">
+          Loading chart data...
+        </Typography>
+      </Box>
+    )
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height, flexDirection: 'column', gap: 2 }}>
+        <Typography variant="body2" color="error">
+          {error}
+        </Typography>
+      </Box>
+    )
+  }
+
+  if (chartData.length === 0) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height }}>
+        <Typography variant="body2" color="text.secondary">
+          No chart data available
+        </Typography>
+      </Box>
+    )
+  }
 
   return (
     <ResponsiveContainer width="100%" height={height}>
