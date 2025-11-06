@@ -117,21 +117,23 @@ async function processTrade(tradeData: TradeCreatedEvent) {
     }
 
     let priceUsd: Decimal
+    // Prioritize priceUsd from trade data, then market cap calculation, then SOL price calculation
     if (tradeData.priceUsd) {
       priceUsd = new Decimal(tradeData.priceUsd)
     } else if (tradeData.usd_market_cap && tradeData.total_supply) {
-      // Use market cap / total supply for more accurate price
+      // Use market cap / total supply for more accurate price (this is the most reliable)
       const totalSupply = new Decimal(tradeData.total_supply.toString())
+      const marketCap = new Decimal(tradeData.usd_market_cap.toString())
       priceUsd = totalSupply.gt(0) 
-        ? new Decimal(tradeData.usd_market_cap.toString()).div(totalSupply)
+        ? marketCap.div(totalSupply)
         : new Decimal(0)
     } else {
-      // Calculate from SOL price: priceUsd = priceSol * solPriceUsd
+      // Fallback: Calculate from SOL price: priceUsd = priceSol * solPriceUsd
       priceUsd = priceSol.mul(solPriceUsd)
     }
     
-    // If priceUsd is still 0 or very small, try to recalculate from priceSol
-    if (priceUsd.eq(0) || priceUsd.lt(0.000000001)) {
+    // If priceUsd is still 0 or extremely small, recalculate from priceSol as last resort
+    if (priceUsd.eq(0) || (priceUsd.lt(0.000000001) && priceSol.gt(0))) {
       priceUsd = priceSol.mul(solPriceUsd)
     }
 
