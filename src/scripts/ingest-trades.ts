@@ -113,28 +113,30 @@ async function processTrade(tradeData: TradeCreatedEvent) {
 
     const amountUsd = amountSol.mul(priceUsd)
 
-    // Upsert token metadata (async, don't wait)
-    prisma.token.upsert({
-      where: { mintAddress: tradeData.mint },
-      update: {
-        // Update price info if we have it
-        price: tradeData.last_trade_timestamp
-          ? {
-              upsert: {
-                create: {
-                  priceSol,
-                  priceUsd,
-                  lastTradeTimestamp: BigInt(tradeData.last_trade_timestamp),
+    // Upsert token metadata and get token ID (must await to avoid race condition)
+    let token
+    try {
+      token = await prisma.token.upsert({
+        where: { mintAddress: tradeData.mint },
+        update: {
+          // Update price info if we have it
+          price: tradeData.last_trade_timestamp
+            ? {
+                upsert: {
+                  create: {
+                    priceSol,
+                    priceUsd,
+                    lastTradeTimestamp: BigInt(tradeData.last_trade_timestamp),
+                  },
+                  update: {
+                    priceSol,
+                    priceUsd,
+                    lastTradeTimestamp: BigInt(tradeData.last_trade_timestamp),
+                  },
                 },
-                update: {
-                  priceSol,
-                  priceUsd,
-                  lastTradeTimestamp: BigInt(tradeData.last_trade_timestamp),
-                },
-              },
-            }
-          : undefined,
-      },
+              }
+            : undefined,
+        },
         create: {
           mintAddress: tradeData.mint,
           symbol: tradeData.symbol || 'UNKNOWN',
@@ -145,32 +147,23 @@ async function processTrade(tradeData: TradeCreatedEvent) {
           creatorAddress: tradeData.creator || 'unknown',
           createdAt: BigInt((tradeData.created_timestamp || tradeData.timestamp || Date.now() / 1000) * 1000),
           totalSupply: new Decimal(tradeData.total_supply?.toString() || '0'),
-        price: tradeData.last_trade_timestamp
-          ? {
-              create: {
-                priceSol,
-                priceUsd,
-                lastTradeTimestamp: BigInt(tradeData.last_trade_timestamp),
-              },
-            }
-          : undefined,
-      },
-    })
-      .catch((err) => {
-        console.error(`Error upserting token ${tradeData.mint}:`, err.message)
+          price: tradeData.last_trade_timestamp
+            ? {
+                create: {
+                  priceSol,
+                  priceUsd,
+                  lastTradeTimestamp: BigInt(tradeData.last_trade_timestamp),
+                },
+              }
+            : undefined,
+        },
+        select: {
+          id: true,
+        },
       })
-      .then(() => {
-        // Continue processing
-      })
-
-    // Get or create token ID
-    const token = await prisma.token.findUnique({
-      where: { mintAddress: tradeData.mint },
-      select: { id: true },
-    })
-
-    if (!token) {
-      console.error(`Token ${tradeData.mint} not found after upsert`)
+    } catch (error: any) {
+      console.error(`❌ Error upserting token ${tradeData.mint}:`, error.message)
+      // If token upsert fails, we can't create the trade
       return
     }
 
