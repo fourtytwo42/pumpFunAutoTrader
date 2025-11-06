@@ -15,10 +15,15 @@ sudo npm install -g pm2
 The `ecosystem.config.js` file defines all processes:
 
 - **autotrader-web**: Production web server
-- **autotrader-dev**: Development web server
+
+**Note**: Development mode (`npm run dev`) should be run manually, not via PM2. PM2 is only for production deployments.
+
+Ingestion services (commented out in ecosystem config):
 - **autotrader-ingest-tokens**: Token data ingestion (runs every 6 hours)
 - **autotrader-ingest-trades**: Trade data ingestion (runs every 15 minutes)
 - **autotrader-ingest-candles**: Candle/OHLCV data ingestion (runs every 30 minutes)
+
+These will be enabled once the ingestion scripts are fully implemented.
 
 ## Quick Start
 
@@ -28,11 +33,7 @@ The `ecosystem.config.js` file defines all processes:
 npm run pm2:start
 ```
 
-### Start Development Server
-
-```bash
-npm run pm2:start:dev
-```
+**Note**: For development, run `npm run dev` directly (not via PM2).
 
 ### Start All Services (including ingestion)
 
@@ -117,19 +118,16 @@ pm2 monit
 
 ## Production vs Development
 
-- **Production**: Use `autotrader-web` (runs `npm run start`)
-- **Development**: Use `autotrader-dev` (runs `npm run dev`)
+- **Production**: Use PM2 with `autotrader-web` (runs `npm run start`)
+  ```bash
+  npm run build
+  npm run pm2:start
+  ```
 
-Only run one at a time. For production, use:
+- **Development**: Run directly with `npm run dev` (not via PM2)
+  ```bash
+  npm run dev
+  ```
 
-```bash
-npm run build
-npm run pm2:start
-```
-
-For development:
-
-```bash
-npm run pm2:start:dev
-```
+PM2 is only for production deployments. During development, run the dev server directly for better debugging and hot-reloading.
 
