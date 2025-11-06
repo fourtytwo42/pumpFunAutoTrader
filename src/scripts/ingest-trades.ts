@@ -120,12 +120,18 @@ async function processTrade(tradeData: TradeCreatedEvent) {
     if (tradeData.priceUsd) {
       priceUsd = new Decimal(tradeData.priceUsd)
     } else if (tradeData.usd_market_cap && tradeData.total_supply) {
+      // Use market cap / total supply for more accurate price
       const totalSupply = new Decimal(tradeData.total_supply.toString())
       priceUsd = totalSupply.gt(0) 
         ? new Decimal(tradeData.usd_market_cap.toString()).div(totalSupply)
         : new Decimal(0)
     } else {
       // Calculate from SOL price: priceUsd = priceSol * solPriceUsd
+      priceUsd = priceSol.mul(solPriceUsd)
+    }
+    
+    // If priceUsd is still 0 or very small, try to recalculate from priceSol
+    if (priceUsd.eq(0) || priceUsd.lt(0.000000001)) {
       priceUsd = priceSol.mul(solPriceUsd)
     }
 
