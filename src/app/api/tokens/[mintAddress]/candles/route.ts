@@ -172,15 +172,26 @@ export async function GET(
     }
 
     if (candleMap.size < limit) {
-      const remoteCandles = await fetchPumpJson<any[]>(
-        `https://swap-api.pump.fun/v2/coins/${params.mintAddress}/candles?interval=${interval}&limit=${limit}&currency=USD&createdTs=${token.createdAt}`
+      const createdAtMs = token.createdAt ? Number(token.createdAt) : 0
+      const createdTs = createdAtMs > 0 ? Math.floor(createdAtMs / 1000) : undefined
+      const remoteCandles = await fetchPumpJson<any>(
+        `https://swap-api.pump.fun/v2/coins/${params.mintAddress}/candles?interval=${interval}&limit=${limit}&currency=USD${createdTs ? `&createdTs=${createdTs}` : ''}`
       )
 
-      if (Array.isArray(remoteCandles)) {
-        for (const candle of remoteCandles) {
+      const remoteCandleArray = Array.isArray(remoteCandles?.candles)
+        ? remoteCandles.candles
+        : Array.isArray(remoteCandles)
+          ? remoteCandles
+          : []
+
+      if (remoteCandleArray.length > 0) {
+        for (const candle of remoteCandleArray) {
           const timestamp = candle?.timestamp ?? candle?.time
           if (timestamp === undefined || timestamp === null) continue
-          const tsBigInt = BigInt(Math.floor(Number(timestamp)))
+          const tsNumber = Number(timestamp)
+          if (!Number.isFinite(tsNumber)) continue
+          const needsMillis = tsNumber < 1_000_000_000_000
+          const tsBigInt = BigInt(Math.floor(needsMillis ? tsNumber * 1000 : tsNumber))
           const key = tsBigInt.toString()
           if (candleMap.has(key)) continue
 
