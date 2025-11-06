@@ -65,6 +65,29 @@ export default function TokenDetailPage() {
   const [trading, setTrading] = useState(false)
   const [tradeSuccess, setTradeSuccess] = useState('')
 
+  const formatSolPerMillion = (priceSol?: number | null) => {
+    if (priceSol == null || isNaN(priceSol) || priceSol <= 0) {
+      return 'N/A'
+    }
+
+    const solPerMillion = priceSol * 1_000_000
+
+    if (!isFinite(solPerMillion) || solPerMillion <= 0) {
+      return 'N/A'
+    }
+
+    if (solPerMillion >= 1000) {
+      return `${(solPerMillion / 1000).toFixed(2)}K SOL`
+    }
+    if (solPerMillion >= 1) {
+      return `${solPerMillion.toFixed(2)} SOL`
+    }
+    if (solPerMillion >= 0.01) {
+      return `${solPerMillion.toFixed(4)} SOL`
+    }
+    return `${solPerMillion.toExponential(2)} SOL`
+  }
+
   useEffect(() => {
     fetchToken()
   }, [mintAddress])
@@ -238,10 +261,12 @@ export default function TokenDetailPage() {
               </Box>
               <Box>
                 <Typography variant="body2" color="text.secondary">
-                  Price per Token (SOL)
+                  Price (per 1M tokens - SOL)
                 </Typography>
                 <Typography variant="h5">
-                  {token.price ? token.price.priceSol.toFixed(8) : 'N/A'}
+                  {token.price && token.price.priceSol > 0
+                    ? `${formatSolPerMillion(token.price.priceSol)}`
+                    : 'N/A'}
                 </Typography>
               </Box>
               <Box>
@@ -250,6 +275,14 @@ export default function TokenDetailPage() {
                 </Typography>
                 <Typography variant="h5">
                   {token.price ? `$${token.price.priceUsd.toFixed(6)}` : 'N/A'}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="body2" color="text.secondary">
+                  Price per Token (SOL)
+                </Typography>
+                <Typography variant="h5">
+                  {token.price ? token.price.priceSol.toFixed(8) : 'N/A'}
                 </Typography>
               </Box>
             </Box>

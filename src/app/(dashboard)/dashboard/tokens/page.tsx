@@ -138,6 +138,29 @@ export default function TokensPage() {
     }
   }
 
+  const formatSolPerMillion = (priceSol: number | null | undefined) => {
+    if (priceSol == null || isNaN(priceSol) || priceSol <= 0) {
+      return 'N/A'
+    }
+
+    const solPerMillion = priceSol * 1_000_000
+
+    if (!isFinite(solPerMillion) || solPerMillion <= 0) {
+      return 'N/A'
+    }
+
+    if (solPerMillion >= 1000) {
+      return `${(solPerMillion / 1000).toFixed(2)}K SOL`
+    }
+    if (solPerMillion >= 1) {
+      return `${solPerMillion.toFixed(2)} SOL`
+    }
+    if (solPerMillion >= 0.01) {
+      return `${solPerMillion.toFixed(4)} SOL`
+    }
+    return `${solPerMillion.toExponential(2)} SOL`
+  }
+
   const formatVolume = (volume: number) => {
     if (volume === 0 || !volume) return '$0.00'
     if (volume < 0.01) return `$${volume.toFixed(4)}`
@@ -355,7 +378,7 @@ export default function TokensPage() {
                       </Typography>
                       {token.price && token.price.priceSol && Number(token.price.priceSol) > 0 && (
                         <Typography variant="caption" color="text.secondary">
-                          {Number(token.price.priceSol).toFixed(8)} SOL/token
+                          {formatSolPerMillion(Number(token.price.priceSol))} / 1M tokens
                         </Typography>
                       )}
                     </Box>

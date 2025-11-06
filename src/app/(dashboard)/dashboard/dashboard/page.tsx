@@ -34,10 +34,27 @@ export default async function DashboardPage() {
     return sum + (currentValue - costBasis)
   }, 0)
 
-  const portfolioValue = portfolio.reduce((sum, p) => {
-    const currentValue = p.token.price ? p.amount * p.token.price.priceSol : 0
-    return sum + currentValue
-  }, 0)
+  const formatSolPerMillion = (priceSol?: number | null) => {
+    if (priceSol == null || isNaN(priceSol) || priceSol <= 0) {
+      return 'N/A'
+    }
+
+    const solPerMillion = priceSol * 1_000_000
+    if (!isFinite(solPerMillion) || solPerMillion <= 0) {
+      return 'N/A'
+    }
+
+    if (solPerMillion >= 1000) {
+      return `${(solPerMillion / 1000).toFixed(2)}K SOL`
+    }
+    if (solPerMillion >= 1) {
+      return `${solPerMillion.toFixed(2)} SOL`
+    }
+    if (solPerMillion >= 0.01) {
+      return `${solPerMillion.toFixed(4)} SOL`
+    }
+    return `${solPerMillion.toExponential(2)} SOL`
+  }
 
   return (
     <Container maxWidth="lg">
@@ -366,7 +383,7 @@ export default async function DashboardPage() {
                   </Typography>
                   {token.price && (
                     <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>
-                      {Number(token.price.priceSol).toFixed(8)} SOL
+                      {formatSolPerMillion(token.price.priceSol)} / 1M tokens
                     </Typography>
                   )}
                 </Card>
