@@ -1,0 +1,744 @@
+MCP SERVER — PUMP.FUN TRADING AGENT
+Official Build & Operations Specification
+Date: 2025‑11‑05 (America/Chicago)
+
+───────────────────────────────────────────────────────────────────────────────
+0) PURPOSE
+───────────────────────────────────────────────────────────────────────────────
+This document specifies a complete, production‑ready MCP (Model Context Protocol)
+server for a Pump.fun trading agent. It defines the system architecture, data
+sources and rate limits, derived signals, database schema, MCP tools (name,
+inputs/outputs), scheduling/caching cadences, error handling, and trade
+execution policies. It is sufficient for an engineer to implement the server
+and for the AI agent to use it safely and effectively.
+
+
+───────────────────────────────────────────────────────────────────────────────
+1) HIGH‑LEVEL ARCHITECTURE
+───────────────────────────────────────────────────────────────────────────────
+Components (server‑side only; the browser/UI should NOT call Pump.fun APIs
+directly due to CORS and rate limiting):
+
+  [A] WS Ingestor
+      └─ Connects to: wss://frontend-api-v3.pump.fun/socket.io/?EIO=4&transport=websocket
+      └─ Parses “42[\"tradeCreated\", {...}]” payloads
+      └─ De-dupes on (signature, tx_index); normalizes units/time; stores to DB
+
+  [B] Aggregator
+      └─ Maintains ring buffers per token for 30s/1m/5m tumbling/EMA windows
+      └─ Computes momentum, breadth, imbalance, spot price, impact (bps), etc.
+      └─ Updates token_stats every 500–1000ms
+
+  [C] REST Fetchers (rate‑limited, server‑to‑server, cached)
+      ├─ /coins/for-you (universe discovery)
+      ├─ /v2/coins/{mint}/trades (whale tape; on‑demand)
+      ├─ /v1/pools/{pool}/market-activity (5m/1h/6h/24h aggregates)
+      ├─ /v1/pools/{pool}/ath (ATH in USD)
+      ├─ /v2/coins/{mint}/candles?interval=1h (trend/ATR/VWAP)
+      ├─ /sol-price (SOL↔USD)
+      └─ /advanced-api-v2/coins/top-holders-and-sol-balance/{mint} (concentration)
+
+  [D] Solana RPC (e.g., Helius getMultipleAccounts)
+      └─ Occasional validation of reserves/supply/decimals; SOL & token balances
+
+  [E] Rules Engine
+      └─ Evaluates threshold logic every 500–1000ms against token_stats
+      └─ Emits EVENT frames (ENTRY_OPPORTUNITY, SPIKE_UP, THIN_LIQ, etc.)
+
+  [F] MCP Transport Layer
+      └─ Exposes tools to the AI agent (discoverUniverse, tokenStats, …, execTrade)
+      └─ Implements auth, quotas, and structured logging
+
+  [G] Trade Executor
+      └─ Builds & submits transactions with slippage guard
+      └─ Idempotent order keys, retries with backoff, failure feedback
+
+  [H] Storage
+      └─ PostgreSQL or SQLite (server‑local); append‑only trades + aggregates; positions
+
+
+ASCII flow:
+
+  Pump.fun WS → [A] WS Ingestor → trades table → [B] Aggregator
+                                      ↑                 ↓
+                               RPC/REST Fetchers → token_stats
+                                      ↓                 ↓
+                       holders/candles/ATH/activity → [E] Rules Engine → EVENTs
+                                                                      ↓
+                                                                  MCP Tools
+                                                                      ↓
+                                                                  [G] execTrade
+                                                                      ↓
+                                                                RPC submit/sign
+                                                                      ↓
+                                                                  portfolio DB
+
+
+───────────────────────────────────────────────────────────────────────────────
+2) DATA SOURCES (ENDPOINTS) & WHAT TO EXTRACT
+───────────────────────────────────────────────────────────────────────────────
+2.1 WebSocket (Primary real‑time source)
+  URL: wss://frontend-api-v3.pump.fun/socket.io/?EIO=4&transport=websocket
+  Frame: 42["tradeCreated", { ...trade fields... }]
+
+  Extract (persist raw + normalized):
+    identity:    signature, tx_index, slot
+    token:       mint, bonding_curve, associated_bonding_curve,
+                 virtual_sol_reserves (vSol), virtual_token_reserves (vTok),
+                 total_supply
+    trade:       is_buy, sol_amount (lamports), token_amount, timestamp (s)
+    context:     market_cap, usd_market_cap, is_currently_live, last_trade_timestamp
+    poster:      user (trader address)
+
+  Normalize:
+    lamports→SOL: sol = sol_amount / 1e9
+    trade price:  px_SOL_per_token = (sol_amount / 1e9) / token_amount
+    reserve spot (if present): spot = vSol / vTok  (SOL per token)
+    ts: ensure UTC ISO8601; keep raw epoch too
+
+  De‑dupe key: (signature, tx_index).
+
+2.2 Universe Discovery
+  GET https://frontend-api-v3.pump.fun/coins/for-you?…
+    Useful filters: marketCapMin/Max, volume24hMin/Max, includeNsfw=false
+  Extract: mint, name, symbol, complete, is_currently_live, market_cap/usd,
+           virtual_sol_reserves, virtual_token_reserves
+  Derive: spot price ≈ vSol/vTok when available; eligibility flags
+  Rate‑limit: headers show ~60/min; set TTL≈60s on server cache.
+
+2.3 Market Activity (cheap aggregates)
+  GET https://swap-api.pump.fun/v1/pools/{pool}/market-activity
+  Extract (per 5m/1h/6h/24h): numTxs, volumeUSD, numUsers, numBuys/numSells,
+                              buyVolumeUSD/sellVolumeUSD, numBuyers/numSellers,
+                              priceChangePercent
+  Use as secondary truth/sanity check; TTL 15–30s for watched/held tokens.
+
+2.4 Candles (trend/volatility)
+  GET https://swap-api.pump.fun/v2/coins/{mint}/candles?interval=1h&limit=1000&currency=USD&createdTs=…
+  Extract: timestamp, open/high/low/close (strings), volume
+  Derive: EMA20/EMA50, ATR14, hourly VWAP, breakout bands; TTL 5–10 min.
+
+2.5 Recent Trades (REST whale tape)
+  GET https://swap-api.pump.fun/v2/coins/{mint}/trades?limit=…&cursor=…&minSolAmount=…
+  Extract: timestamp, type (buy/sell), amountSol, priceSol, userAddress
+  Derive: whale counts (≥0.25/≥0.5/≥1.0 SOL), micro VWAP, buy/sell dominance
+  Use on-demand (drill‑down); do NOT poll every tick.
+
+2.6 ATH
+  GET https://swap-api.pump.fun/v1/pools/{pool}/ath?currency=USD
+  Extract: athMarketCap
+  Derive: drawdownFromATH% using current mkt cap or price; poll on first watch
+  and then hourly or on explicit request.
+
+2.7 Holders & SOL Balances (concentration)
+  GET https://advanced-api-v2.pump.fun/coins/top-holders-and-sol-balance/{mint}
+  Extract: topHolders[{address, amount, solBalance}]
+  Derive: top10% share, Gini approx, count of “rich holders with SOL ≥ X”
+  Rate‑limit ~60/min; refresh 2–5 min for watchlist/holdings only.
+
+2.8 SOL Price
+  GET https://frontend-api-v3.pump.fun/sol-price
+  Extract: solPrice (USD); TTL 30–60s.
+
+2.9 Solana RPC (e.g., Helius)
+  POST https://<your-rpc>/ (method=getMultipleAccounts)
+  Use to: decode SPL token accounts, supply/decimals, pool balances, verify
+  reserve math; also confirm wallet balances for portfolio. Cache lightly.
+
+
+───────────────────────────────────────────────────────────────────────────────
+3) DERIVED SIGNALS & FORMULAS (AGGREGATOR)
+───────────────────────────────────────────────────────────────────────────────
+Windows (per mint): maintain rolling stats for 30s / 1m / 5m (EMA or ring buffers).
+
+Core:
+  price_now:           last reserve spot (vSol/vTok) if present else last trade px
+  priceChange30sPct:   100 * (price_now - price_30s_ago) / price_30s_ago
+  volumeSol{30s,1m,5m}: sum(sol) over window
+  tradesPerSec_w:      count / windowSeconds
+  buysPerSec/sellsPerSec: by direction
+  buySellImbalance:    (buyVol - sellVol) / (buyVol + sellVol)
+  uniqueTraders_w:     cardinality(user) over window
+  m1vs5mVelocity:      EMA_1m(buysPerSec) / EMA_5m(buysPerSec)
+
+Impact/Slippage (first-order CPMM approximation):
+  impact_bps(ΔSOL) ≈ (ΔSOL / vSol) * 10_000     [clamp to ≤5,000 bps]
+  Precompute estFillBps at sizes {0.05, 0.10, 0.15 SOL}.
+
+Trend/Volatility (from 1h candles):
+  EMA20/EMA50, ATR14, hourly VWAP.
+  ddFromATH% = 100 * (ATH - now) / ATH (use USD mkt cap or price consistently).
+
+PnL:
+  uPnL% = 100 * (mktPx - avgCost) / avgCost
+  uPnL_SOL = qty * (mktPx - avgCost)   [convert via token qty if stored in tokens]
+
+
+───────────────────────────────────────────────────────────────────────────────
+4) DATABASE SCHEMA (SQL; adjust for Postgres/SQLite)
+───────────────────────────────────────────────────────────────────────────────
+-- trades (append-only; dedupe on signature+tx_index)
+CREATE TABLE IF NOT EXISTS trades (
+  signature                TEXT PRIMARY KEY,
+  tx_index                 INTEGER NOT NULL,
+  slot                     BIGINT NOT NULL,
+  mint                     TEXT NOT NULL,
+  is_buy                   BOOLEAN NOT NULL,
+  sol_amount_lamports      BIGINT NOT NULL,
+  token_amount             NUMERIC NOT NULL,
+  price_sol_per_token      DOUBLE PRECISION NOT NULL,
+  user_address             TEXT,
+  created_ts_epoch_s       BIGINT NOT NULL,
+  inserted_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_trades_mint_ts  ON trades(mint, created_ts_epoch_s);
+CREATE INDEX IF NOT EXISTS idx_trades_slot     ON trades(slot);
+
+-- token_stats (rolling snapshot per mint; one row per mint)
+CREATE TABLE IF NOT EXISTS token_stats (
+  mint                     TEXT PRIMARY KEY,
+  px                       DOUBLE PRECISION,
+  priceChange30sPct        DOUBLE PRECISION,
+  volumeSol30s             DOUBLE PRECISION,
+  volumeSol1m              DOUBLE PRECISION,
+  volumeSol5m              DOUBLE PRECISION,
+  buysPerSec               DOUBLE PRECISION,
+  sellsPerSec              DOUBLE PRECISION,
+  buySellImbalance         DOUBLE PRECISION,
+  uniqueTraders30s         INTEGER,
+  uniqueTraders1m          INTEGER,
+  m1vs5mVelocity           DOUBLE PRECISION,
+  vSol                     DOUBLE PRECISION,
+  vTok                     DOUBLE PRECISION,
+  estFillBps005            DOUBLE PRECISION,
+  estFillBps010            DOUBLE PRECISION,
+  estFillBps015            DOUBLE PRECISION,
+  ddFromATHPct             DOUBLE PRECISION,
+  ema20                    DOUBLE PRECISION,
+  ema50                    DOUBLE PRECISION,
+  atr14                    DOUBLE PRECISION,
+  vwap1h                   DOUBLE PRECISION,
+  updated_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- positions (wallet state managed server-side)
+CREATE TABLE IF NOT EXISTS positions (
+  mint                     TEXT PRIMARY KEY,
+  qty_tokens               DOUBLE PRECISION NOT NULL DEFAULT 0,
+  avg_cost_sol_per_token   DOUBLE PRECISION NOT NULL DEFAULT 0,
+  mkt_px_sol_per_token     DOUBLE PRECISION,
+  u_pnl_pct                DOUBLE PRECISION,
+  u_pnl_sol                DOUBLE PRECISION,
+  opened_at                TIMESTAMP,
+  updated_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- rules (threshold automation)
+CREATE TABLE IF NOT EXISTS rules (
+  id                       TEXT PRIMARY KEY,
+  mint                     TEXT,       -- optional per-mint; NULL = global
+  expr_json                TEXT NOT NULL, -- structured rule expression
+  enabled                  BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- events (auditable notifications to agent)
+CREATE TABLE IF NOT EXISTS events (
+  id                       TEXT PRIMARY KEY,
+  kind                     TEXT NOT NULL,   -- ENTRY_OPPORTUNITY, SPIKE_UP, …
+  mint                     TEXT,
+  payload_json             TEXT NOT NULL,
+  created_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- watchlist (managed by tool)
+CREATE TABLE IF NOT EXISTS watchlist (
+  mint                     TEXT PRIMARY KEY,
+  max_entry_sol            DOUBLE PRECISION,
+  min_users_1m             INTEGER,
+  max_impact_bps_at_0p10   INTEGER,
+  enabled                  BOOLEAN NOT NULL DEFAULT TRUE,
+  updated_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- caches (TTL-based; implement via table or KV store)
+CREATE TABLE IF NOT EXISTS cache_kv (
+  k TEXT PRIMARY KEY,
+  v TEXT NOT NULL,
+  expires_at TIMESTAMP NOT NULL
+);
+
+
+───────────────────────────────────────────────────────────────────────────────
+5) MCP TOOLS (INTERFACES & CONTRACTS)
+───────────────────────────────────────────────────────────────────────────────
+All tools are server-to-server. JSON shown as exemplars; define in your MCP
+transport. All inputs validated; all outputs typed. Errors include code, detail.
+
+5.1 discoverUniverse
+  Purpose: find candidates to watch/trade via Pump.fun discovery API.
+  Input:
+    {
+      "filters": {
+        "marketCapMinUSD": 10000,
+        "marketCapMaxUSD": 15000000,
+        "volume24hMinUSD": 5000,
+        "volume24hMaxUSD": 250000,
+        "includeNsfw": false
+      },
+      "limit": 200
+    }
+  Output:
+    {
+      "asOf": "2025-11-05T21:33:05Z",
+      "items": [{
+        "mint": "...pump",
+        "name": "…",
+        "symbol": "…",
+        "complete": false,
+        "isLive": false,
+        "marketCapUSD": 13098.58,
+        "vSol": 5.10e10,
+        "vTok": 6.31e14,
+        "spotPxSol": 8.08e-5  // vSol/vTok
+      }]
+    }
+  Source: GET /coins/for-you (TTL 60s)
+
+5.2 tokenStats
+  Purpose: real‑time snapshot built from WS windows + optional REST backstops.
+  Input:  { "mint": "...pump" }
+  Output:
+    {
+      "mint":"...",
+      "px": 9.9e-14,
+      "priceChange30sPct": 12.4,
+      "volumeSol1m": 38.2,
+      "uniqueTraders1m": 56,
+      "buysPerSec": 5.1,
+      "buySellImbalance": 0.31,
+      "m1vs5mVelocity": 1.7,
+      "estFillBps010": 210,
+      "trend": { "ema20":..., "ema50":..., "atr14":..., "ddFromATHPct": 42.3 },
+      "usdPx": 0.0001068,
+      "asOf": "…"
+    }
+  Sources: WS-trades (primary), /market-activity (sanity), /candles, /sol-price, /ath
+
+5.3 recentTrades
+  Purpose: on-demand whale tape / microstructure.
+  Input:  { "mint":"...pump", "minSol": 0.05, "limit": 100, "cursor": "…" }
+  Output:
+    {
+      "trades": [{ "ts":"…","side":"sell","amountSol":0.58,"pxSol":6.60e-7,"user":"…" }],
+      "stats":  { "buys":92,"sells":146,"whaleBuys":9,"whaleSells":14 },
+      "nextCursor": "…"
+    }
+  Source: GET /v2/coins/{mint}/trades (rate-limit aware; TTL 1–2s if cached)
+
+5.4 holdersSnapshot
+  Purpose: concentration and exit liquidity risk assessment.
+  Input:  { "mint": "...pump", "thresholdSol": 100 }
+  Output:
+    {
+      "topHolders": [{ "address":"…","amount":1.77e8,"solBalance":0.003 }, …],
+      "top10PctShare": 62.1,
+      "richHoldersAtThreshold": 4,
+      "asOf": "…"
+    }
+  Source: GET /advanced-api-v2/…/top-holders-and-sol-balance/{mint} (TTL 2–5 min)
+
+5.5 marketActivity
+  Purpose: low-cost aggregates (sanity/backfill).
+  Input:  { "pool":"<address>", "windows":["5m","1h"] }
+  Output: { "5m":{…},"1h":{…}, "_derived":{"imbalance1h":-0.02,"buyersPerUser1h":0.55} }
+  Source: GET /v1/pools/{pool}/market-activity (TTL 15–30s)
+
+5.6 candles
+  Purpose: trend regime & volatility context.
+  Input:  { "mint":"...pump", "limit": 200 }
+  Output: { "ema20":…,"ema50":…,"atr14":…,"vwap1h":…,"last":{"ts":…,"close":…} }
+  Source: GET /v2/coins/{mint}/candles (TTL 5–10 min)
+
+5.7 solPrice
+  Purpose: conversions and PnL display.
+  Input:  {}
+  Output: { "solUsd": 161.71, "asOf":"…" }
+  Source: GET /sol-price (TTL 30–60s)
+
+5.8 poolState
+  Purpose: verify reserves/supply/decimals (sanity/audit); also wallet balances.
+  Input:  { "accounts": ["<pubkey1>", "<pubkey2>", …] }
+  Output: { "context":{"slot":…}, "accounts":[{ "owner":"…","lamports":…,"decoded":{…}}] }
+  Source: RPC getMultipleAccounts (Helius or your RPC)
+
+5.9 watchlist
+  Purpose: manage the set of mints evaluated by rules/heartbeats.
+  Input:  { "op":"UPSERT|DELETE|LIST", "items":[{ "mint":"…","maxEntrySol":0.15,"minUsers":40,"maxImpactBps":350 }] }
+  Output: { "ok":true, "watch":[…] }
+  Source: DB only
+
+5.10 portfolio
+  Purpose: wallet positions/PnL for policy.
+  Input:  { "op":"SNAPSHOT" }
+  Output: { "sol":0.92, "positions":[{ "mint":"…","qty":1.2e7,"avgCost":9.1e-14,"mktPx":9.9e-14,"uPnlPct":8.8 }] }
+  Source: DB + optional RPC balance check
+
+5.11 rulesEngine
+  Purpose: create/update threshold rules; emits EVENTs server→agent.
+  Input:  {
+    "op":"UPSERT|DELETE|LIST",
+    "rules":[{
+      "id":"entry-v1",
+      "expr":{
+        "all":[
+          {">=":["m1vs5mVelocity",1.6]},
+          {">=":["uniqueTraders1m",40]},
+          {">=":["buySellImbalance",0.20]},
+          {"<=":["estFillBps010",350]},
+          {"<=":["priceChange30sPct",25]}
+        ]},
+      "scope":{"mint":"*"},
+      "cooldownSec": 45
+    }]
+  }
+  Output: { "ok":true, "rules":[…] }
+
+  EVENT payloads (server → agent):
+    { "mode":"EVENT","reason":"ENTRY_OPPORTUNITY","token":{…},"portfolio":{…},"ts":"…" }
+    { "mode":"EVENT","reason":"SPIKE_UP|SPIKE_DOWN|THIN_LIQ|POSITION_WIN|POSITION_PAIN", … }
+
+5.12 execTrade
+  Purpose: execute a trade with slippage/size guard; server handles tx build/sign.
+  Input:  {
+    "side":"BUY"|"SELL",
+    "mint":"...pump",
+    "amountSol":0.12,             // OR amountTokens
+    "slippageBps": 230,
+    "postOnly": false,
+    "clientId": "idempotent-uuid"
+  }
+  Output: {
+    "ok": true,
+    "txid":"…",
+    "fillPxSol": 6.60e-7,
+    "feeLamports": 5000,
+    "error": null
+  }
+  Error (example): { "ok":false, "error":{"code":"SLIPPAGE_EXCEEDED","detail":"impact=412bps > 230bps"} }
+
+
+───────────────────────────────────────────────────────────────────────────────
+6) AGGREGATOR IMPLEMENTATION NOTES
+───────────────────────────────────────────────────────────────────────────────
+• Ring buffers per mint for each window (30s/1m/5m):
+  - Keep arrays of trades (ts, side, sol, tokens, user, px).
+  - On each tick (500–1000ms):
+      * Evict stale entries per window.
+      * Recompute sums (volumes), counts, set(cardinality) for users.
+      * Update EMAs (buysPerSec_1m, buysPerSec_5m).
+      * Compute px: prefer reserves (vSol/vTok) from latest WS; fallback to last trade px.
+      * Compute estFillBps at sizes using current vSol.
+
+• De‑dupe:
+  - Ignore incoming if (signature,tx_index) already present.
+
+• Time normalization:
+  - WS “timestamp” is seconds; keep ms accuracy from created_timestamp when available.
+  - Store both epoch and ISO8601 for joins and human logs.
+
+• Backfill:
+  - If WS gap detected, optional call to /v2/…/trades to fill since last known ts.
+  - Never block aggregator on backfills; run async and merge safely.
+
+• Candles:
+  - Compute ema/atr locally from the returned series; re-use cached series for all callers.
+
+• Impact estimation:
+  - First-order CPMM is deliberately conservative; clamp to [0, 5000] bps.
+  - If reserves missing, set estFillBpsXXX to null; the rules engine can require non-null.
+
+
+───────────────────────────────────────────────────────────────────────────────
+7) SCHEDULING, CACHING, & RATE LIMITS
+───────────────────────────────────────────────────────────────────────────────
+Default TTLs:
+  /coins/for-you        → 60s
+  /market-activity      → 15–30s (watched/held tokens only)
+  /candles (1h)         → 5–10 min
+  /top-holders          → 2–5 min (watchlist + holdings only)
+  /sol-price            → 30–60s
+  /v2 trades            → on-demand; avoid periodic polling
+  WS                    → continuous; tick every 500–1000ms
+
+Token bucket per host (example):
+  frontend-api-v3.pump.fun  → 60/min
+  swap-api.pump.fun         → 100/min (varies per route; use observed headers)
+  advanced-api-v2.pump.fun  → 60/min
+  RPC                       → per provider; enforce QPS cap & retries
+
+Cache implementation:
+  - Memory cache for hot data (LRU) + cache_kv table for durability/TTL.
+  - Attach “asOf” timestamps to all tool responses.
+
+
+───────────────────────────────────────────────────────────────────────────────
+8) TRADE EXECUTION POLICY
+───────────────────────────────────────────────────────────────────────────────
+Inputs from agent: side, mint, amount (SOL or tokens), slippageBps, clientId.
+
+Sizing:
+  - Use estFillBps at size to decide max allowed impact; if null, agent should
+    provide conservative slippage or rules must require non-null before entry.
+
+Slippage:
+  - Convert slippageBps to max acceptable price on AMM.
+  - If price moves beyond cap → return SLIPPAGE_EXCEEDED (no spam retries).
+
+Idempotency & retries:
+  - clientId must be unique for the order intent; store it with tx hash once used.
+  - Network errors: exponential backoff (e.g., 250ms, 500ms, 1s; max 3).
+  - Do not retry if chain returned “slippage exceeded”/“account in use”; surface to agent.
+
+Fees:
+  - Report fee lamports; expose in Output.
+
+Post‑trade:
+  - Update positions: qty, avgCost (VWAP‑style), mktPx; recompute uPnL.
+  - Emit EVENT “TRADE_FILLED” with fill summary.
+
+
+───────────────────────────────────────────────────────────────────────────────
+9) RULES & EVENTS (DEFAULTS)
+───────────────────────────────────────────────────────────────────────────────
+ENTRY_OPPORTUNITY fires when ALL:
+  m1vs5mVelocity ≥ 1.6
+  uniqueTraders1m ≥ 40
+  buySellImbalance ≥ 0.20
+  estFillBps010 ≤ 350
+  priceChange30sPct ≤ +25
+
+Other EVENTs:
+  SPIKE_UP:     priceChange30sPct ≥ +20
+  SPIKE_DOWN:   priceChange30sPct ≤ −15
+  THIN_LIQ:     estFillBps010 > 400 for ≥10s
+  POSITION_WIN: uPnL% ≥ +15 on any holding
+  POSITION_PAIN: uPnL% ≤ −10 on any holding
+
+Heartbeat (server → agent) every 10–15s:
+  {
+    "mode":"HEARTBEAT",
+    "ts":"…",
+    "portfolio":{"sol":0.92,"positions":[…],"dayPnlSol":-0.02},
+    "top":[
+      {"mint":"…","px":…,"priceChange30sPct":…,"volumeSol1m":…,
+       "uniqueTraders1m":…,"buysPerSec":…,"buySellImbalance":…,
+       "m1vs5mVelocity":…,"estFillBps010":…}
+    ]
+  }
+
+
+───────────────────────────────────────────────────────────────────────────────
+10) CONFIGURATION (ENV / FILE)
+───────────────────────────────────────────────────────────────────────────────
+Environment variables:
+  PUMP_RPC_URL=…                 # Solana RPC endpoint
+  PUMP_RPC_API_KEY=…             # if required by provider
+  PUMP_WS_URL=wss://frontend-api-v3.pump.fun/socket.io/?EIO=4&transport=websocket
+  PUMP_HTTP_DISCOVERY=https://frontend-api-v3.pump.fun
+  PUMP_HTTP_SWAP=https://swap-api.pump.fun
+  PUMP_HTTP_ADV=https://advanced-api-v2.pump.fun
+  MCP_BIND=0.0.0.0:8080
+  DB_URL=postgres://user:pass@host/dbname    # or sqlite:///file.db
+  WALLET_SEED_KMS=…               # pointer to secure key material (HSM/KMS)
+  LOG_LEVEL=info
+  CACHE_TTLS_JSON={...}           # optional per-endpoint overrides
+
+Configuration file (optional, plain text or YAML):
+  - watchlist defaults (minUsers, maxImpact bps, maxEntrySol)
+  - whitelist/blacklist tokens
+  - rule presets
+
+
+───────────────────────────────────────────────────────────────────────────────
+11) SECURITY, PRIVACY, AND COMPLIANCE
+───────────────────────────────────────────────────────────────────────────────
+• Never expose API keys or wallet seeds to the browser.
+• All Pump.fun HTTP calls are server‑to‑server; respect CORS headers.
+• Encrypt secrets at rest; restrict DB & logs to least privilege.
+• Redact user addresses in logs where appropriate; store full payloads in
+  audit tables if needed, but avoid PII.
+• Idempotent clientId prevents duplicate order execution.
+• Include structured logs with requestId/traceId for each tool call & tx.
+
+
+───────────────────────────────────────────────────────────────────────────────
+12) TESTING STRATEGY
+───────────────────────────────────────────────────────────────────────────────
+• Unit tests for: ring buffer math, EMA/ATR/VWAP, impact estimation, rules eval.
+• Integration tests: mock WS frames & REST JSON; verify stats/rules/events.
+• Replay tests: feed recorded WS frames at x1/x10 to validate performance.
+• Dry‑run trading: execTrade “simulate: true” returns computed impact/fill only.
+• Chaos: inject WS gaps; ensure /market-activity backstops are used gracefully.
+
+
+───────────────────────────────────────────────────────────────────────────────
+13) DEPLOYMENT & OBSERVABILITY
+───────────────────────────────────────────────────────────────────────────────
+• Containerize (Docker). Health endpoints:
+  - /healthz (liveness), /readyz (readiness), /metrics (Prometheus)
+• Dashboards:
+  - Per‑mint buys/sells/imbalance, estFillBps, rules fired, error rates.
+• Alerts:
+  - WS disconnect > 30s, error rate spikes, cache miss storms, RPC 429s.
+
+
+───────────────────────────────────────────────────────────────────────────────
+14) EDGE CASES & FALLBACKS
+───────────────────────────────────────────────────────────────────────────────
+• Missing vSol/vTok in WS:
+  - Fallback to last trade px; mark estFillBps as null; rules should gate on it.
+• NSFW/is_banned tokens:
+  - Filter at discoverUniverse; agent tools should not surface unless explicitly
+    requested.
+• Market‑activity drift vs WS:
+  - Prefer WS for short windows; if drift > threshold, log WARN and soft‑reset
+    the per‑mint buffers from REST aggregates.
+• Candles with string numbers:
+  - Parse to Decimal/float carefully; preserve precision for ATR/EMA.
+
+
+───────────────────────────────────────────────────────────────────────────────
+15) SUGGESTED PROJECT STRUCTURE (SERVER)
+───────────────────────────────────────────────────────────────────────────────
+(Provide these paths in your repository; file paths are listed here for clarity.)
+
+/cmd/mcp-server/main.ts
+/pkg/ws/ingestor.ts
+/pkg/agg/aggregator.ts
+/pkg/tools/discoverUniverse.ts
+/pkg/tools/tokenStats.ts
+/pkg/tools/recentTrades.ts
+/pkg/tools/holdersSnapshot.ts
+/pkg/tools/athInfo.ts
+/pkg/tools/marketActivity.ts
+/pkg/tools/candles.ts
+/pkg/tools/solPrice.ts
+/pkg/tools/poolState.ts
+/pkg/tools/watchlist.ts
+/pkg/tools/portfolio.ts
+/pkg/tools/rulesEngine.ts
+/pkg/tools/execTrade.ts
+/pkg/db/schema.sql
+/pkg/db/repo.ts
+/pkg/cache/cache.ts
+/pkg/config/env.ts
+/pkg/util/math.ts
+/pkg/util/time.ts
+/pkg/util/http.ts
+/pkg/util/rateLimiter.ts
+/pkg/util/log.ts
+
+
+───────────────────────────────────────────────────────────────────────────────
+16) KEY TYPE SIGNATURES (TYPESCRIPT SKETCHES)
+───────────────────────────────────────────────────────────────────────────────
+Note: Keep interfaces separate from implementations; validate all inputs.
+
+// WebSocket frame (normalized)
+interface TradeWs {
+  signature: string;
+  tx_index: number;
+  slot: number;
+  mint: string;
+  is_buy: boolean;
+  sol_amount_lamports: number;
+  token_amount: number;
+  timestamp_s: number;
+  vSol?: number;
+  vTok?: number;
+  total_supply?: number;
+  user?: string;
+  market_cap?: number;
+  usd_market_cap?: number;
+}
+
+// Aggregated rolling snapshot
+interface TokenStats {
+  mint: string;
+  px: number;                        // SOL per token
+  priceChange30sPct: number;
+  volumeSol30s: number;
+  volumeSol1m: number;
+  volumeSol5m: number;
+  buysPerSec: number;
+  sellsPerSec: number;
+  buySellImbalance: number;
+  uniqueTraders30s: number;
+  uniqueTraders1m: number;
+  m1vs5mVelocity: number;
+  vSol?: number;
+  vTok?: number;
+  estFillBps005?: number;
+  estFillBps010?: number;
+  estFillBps015?: number;
+  ddFromATHPct?: number;
+  ema20?: number;
+  ema50?: number;
+  atr14?: number;
+  vwap1h?: number;
+  updatedAt: number;
+}
+
+// ExecTrade input/output
+interface ExecTradeInput {
+  side: "BUY"|"SELL";
+  mint: string;
+  amountSol?: number;
+  amountTokens?: number;
+  slippageBps: number;
+  postOnly?: boolean;
+  clientId: string;
+}
+interface ExecTradeOutput {
+  ok: boolean;
+  txid?: string;
+  fillPxSol?: number;
+  feeLamports?: number;
+  error?: { code: string; detail?: string };
+}
+
+Math helpers (sketch):
+  const LAMPORTS = 1_000_000_000;
+  priceFromTrade = (solLamports, tokenAmt) => (solLamports / LAMPORTS) / tokenAmt;
+  priceFromReserves = (vSol, vTok) => (vSol && vTok) ? vSol / vTok : undefined;
+  estFillCostBps = (deltaSol, vSol) => (!vSol || vSol <= 0) ? undefined :
+                                       Math.min(5000, Math.max(0, (deltaSol / vSol) * 10000));
+
+
+───────────────────────────────────────────────────────────────────────────────
+17) OPERATIONAL PLAYBOOK (DAY‑1)
+───────────────────────────────────────────────────────────────────────────────
+1) Configure ENV (RPC, Pump hosts, DB URL, wallet key source).
+2) Run migrations (schema.sql). Warm up caches: /sol-price then /coins/for-you.
+3) Start WS Ingestor; verify first trades persisted; monitor /metrics.
+4) Start Aggregator; check token_stats updates at 500–1000ms cadence.
+5) Add mints to watchlist; verify rulesEngine emits EVENTs as thresholds trip.
+6) Connect agent to MCP; test discoverUniverse → tokenStats → execTrade simulate.
+7) Enable real execTrade with small sizes; confirm idempotency via clientId.
+8) Set alerts for WS disconnects, rate‑limit 429s, error spikes.
+
+
+───────────────────────────────────────────────────────────────────────────────
+18) GLOSSARY
+───────────────────────────────────────────────────────────────────────────────
+• EMA: Exponential Moving Average
+• ATR: Average True Range
+• VWAP: Volume‑Weighted Average Price
+• CPMM: Constant‑Product Market Maker
+• Impact (bps): estimated price move from executing ΔSOL, in basis points
+• ddFromATH%: percentage drawdown from all‑time high
+
+
+END OF SPEC

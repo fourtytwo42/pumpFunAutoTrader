@@ -1,0 +1,476 @@
+Official Specification: Monitoring & Control Web App for MCP Pump.fun Trader
+Date: 2025-11-06 04:00 UTC
+
+Scope
+-----
+Build a Node.js/Next.js application (web + APIs + websockets) that monitors and controls an existing MCP trading agent for Pump.fun tokens. The MCP already exists; this spec covers all other services: data ingestion, storage, APIs, real‑time streams, UI, chat/context handling, observability, and operations. No social media sources are used; only Pump.fun and Solana RPC endpoints provided below.
+
+High-Level Goals
+----------------
+1) Real-time portfolio and execution visibility (wallet balances, positions, orders, fills, failures, fees, slippage).
+2) Transparent agent telemetry via safe decision traces (inputs, scores, thresholds, tool usage) without exposing raw chain-of-thought.
+3) Single rolling chat with a hard 200k-token budget, supporting operator instructions and context injection.
+4) Event-driven streaming to UI via websockets; idempotent ingestion; accurate PnL accounting (realized & mark-to-market).
+5) Secure-by-default: key custody isolation, RBAC, audit, rate limiting; production observability and SLOs.
+
+Assumptions
+-----------
+- MCP exposes tool invocation logs and emits order intents; it is not re-implemented here.
+- Trades are executed by a separate Execution service or the MCP; this app consumes their outcomes.
+- Wallet private keys are not stored in plaintext in the app DB. Signing happens in a signer microservice or KMS. The app may store only encrypted delegate blobs if necessary.
+- Data sources are limited to Pump.fun APIs + Solana RPC (Helius). No social/scraped content.
+
+Architecture
+------------
+Services
+- Next.js App (UI + API + WS hub) — Node.js 20+
+- Ingestion Service — Node.js worker consuming Pump.fun websocket + REST
+- Optional Execution Proxy — if MCP wants the app to submit/resubmit transactions (tool-driven)
+- Postgres 14+ (with Prisma ORM). Timescale optional for time-series performance
+- Redis 7+ for Pub/Sub + caching
+- Prometheus/Grafana or OpenTelemetry for metrics
+
+Data Flow
+- Pump.fun websocket tick → Ingestion → DB (TradeTape, Token updates) + Redis publish → UI WS updates
+- MCP events (order intents, tool calls, results) → AgentEvent table + Redis publish
+- REST polling (candles, market-activity, top-holders, pool ATH, sol-price) → snapshots & aggregates
+- UI reads via REST for SSR and stays live via websockets (Socket.IO or ws)
+
+External Endpoints (Pump.fun & RPC)
+-----------------------------------
+Live feed
+- WS: wss://frontend-api-v3.pump.fun/socket.io/?EIO=4&transport=websocket
+  Event: "tradeCreated" fields include mint, is_buy, sol_amount, token_amount, usd_market_cap, virtual_*_reserves, timestamp, slot, signature, etc.
+
+Discovery & Analytics (HTTP)
+- GET /coins/for-you?filters… → discovery lists; seeds watchlists and dashboards
+- GET /v2/coins/:mint/candles?interval=1h|5m|1m&limit=N&currency=USD&createdTs=… → pricing & charts
+- GET /v1/pools/:pool/ath?currency=USD → ATH market cap; drawdown
+- GET /v1/pools/:pool/market-activity → 5m/1h/6h/24h volume, numTxs, buyers/sellers, priceChangePercent
+- GET /coins/top-holders-and-sol-balance/:mint → concentration & whale readiness (holder SOL balances)
+- GET /sol-price → mark SOL → USD for PnL/fees
+- GET /v2/coins/:mint/trades?limit=&cursor=&minSolAmount= → recent on-chain fills (filters)
+RPC (Helius proxied by Pump.fun FE)
+- POST getMultipleAccounts → token/pool account sanity checks, balance reconciliation
+
+Data Model (Prisma)
+-------------------
+(File path: /prisma/schema.prisma)
+
+[Code below is Prisma schema; paths are listed above this block.]
+
+```prisma
+datasource db { provider = "postgresql"; url = env("DATABASE_URL") }
+generator client { provider = "prisma-client-js" }
+
+model Wallet {
+  id           String   @id @default(cuid())
+  label        String?
+  pubkey       String   @unique
+  signerBlob   Bytes?
+  createdAt    DateTime @default(now())
+  positions    Position[]
+  orders       Order[]
+  trades       Trade[]
+  pnlLedgers   PnLLedger[]
+}
+
+model Token {
+  mint           String  @id
+  symbol         String?
+  name           String?
+  totalSupply    Decimal?
+  imageUri       String?
+  program        String?
+  createdAt      DateTime @default(now())
+  pools          Pool[]
+  candles        Candle[]
+}
+
+model Pool {
+  id           String  @id @default(cuid())
+  tokenMint    String
+  poolAddress  String  @unique
+  athMcapUsd   Decimal?
+  virtualSol   Decimal?
+  virtualToken Decimal?
+  updatedAt    DateTime @updatedAt
+  token        Token    @relation(fields: [tokenMint], references: [mint])
+}
+
+model Candle {
+  id        String   @id @default(cuid())
+  tokenMint String
+  ts        DateTime
+  openUsd   Decimal
+  highUsd   Decimal
+  lowUsd    Decimal
+  closeUsd  Decimal
+  volume    Decimal
+  interval  String
+  token     Token    @relation(fields: [tokenMint], references: [mint])
+  @@index([tokenMint, ts, interval])
+}
+
+model TradeTape {
+  id            String   @id @default(cuid())
+  tokenMint     String
+  txSig         String   @unique
+  ts            DateTime
+  isBuy         Boolean
+  baseAmount    Decimal
+  quoteSol      Decimal
+  priceUsd      Decimal?
+  priceSol      Decimal?
+  userAddress   String?
+  slot          BigInt?
+  raw           Json?
+  @@index([tokenMint, ts])
+}
+
+model Position {
+  id         String   @id @default(cuid())
+  walletId   String
+  tokenMint  String
+  qty        Decimal
+  avgCostUsd Decimal
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  wallet     Wallet   @relation(fields: [walletId], references: [id])
+  token      Token    @relation(fields: [tokenMint], references: [mint])
+  @@unique([walletId, tokenMint])
+}
+
+model Order {
+  id             String   @id @default(cuid())
+  walletId       String
+  tokenMint      String
+  side           String
+  status         String
+  qtyTokens      Decimal?
+  qtySol         Decimal?
+  limitPriceUsd  Decimal?
+  slippageBps    Int?
+  reason         String?
+  txSig          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  wallet         Wallet    @relation(fields: [walletId], references: [id])
+  token          Token     @relation(fields: [tokenMint], references: [mint])
+  executions     Execution[]
+}
+
+model Execution {
+  id        String   @id @default(cuid())
+  orderId   String
+  ts        DateTime @default(now())
+  fillQty   Decimal
+  costSol   Decimal
+  feeSol    Decimal
+  priceUsd  Decimal?
+  txSig     String?
+  order     Order    @relation(fields: [orderId], references: [id])
+}
+
+model PnLLedger {
+  id          String   @id @default(cuid())
+  walletId    String
+  tokenMint   String?
+  ts          DateTime @default(now())
+  type        String   // "realized"|"unrealized"|"fee"|"transfer"
+  amountUsd   Decimal
+  meta        Json?
+  wallet      Wallet   @relation(fields: [walletId], references: [id])
+}
+
+model HolderSnapshot {
+  id        String   @id @default(cuid())
+  tokenMint String
+  ts        DateTime @default(now())
+  topJson   Json
+  total     Int
+  token     Token     @relation(fields: [tokenMint], references: [mint])
+}
+
+model MarketActivitySnapshot {
+  id        String   @id @default(cuid())
+  tokenMint String
+  ts        DateTime @default(now())
+  window    String
+  payload   Json
+  token     Token    @relation(fields: [tokenMint], references: [mint])
+}
+
+model AgentEvent {
+  id         String   @id @default(cuid())
+  ts         DateTime @default(now())
+  kind       String   // "signal"|"tool_invocation"|"tool_result"|"order_intent"|"risk"|"summary"
+  level      String   // "info"|"warn"|"error"|"debug"
+  walletId   String?
+  tokenMint  String?
+  traceId    String?
+  rationale  String?
+  input      Json?
+  output     Json?
+  metrics    Json?
+  toolName   String?
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  ts        DateTime @default(now())
+  role      String   // "user"|"assistant"|"system"|"tool"
+  content   String
+  meta      Json?
+}
+```
+
+Derived Metrics & Calculations
+------------------------------
+- Last price USD per token: prefer latest candle close; fallback to last trade; fallback to AMM mid inferred from virtual reserves; multiply priceSOL * /sol-price.
+- MTM value: qty * price_usd_now.
+- Average cost (VWAP including fees) on buys: avgCostUsd ← (old_qty*old_avg + fill_qty*fill_price + fee_usd) / new_qty.
+- Realized PnL on sells: (fill_qty * fill_price) − (fill_qty * avgCostUsd) − fee_usd.
+- Unrealized PnL: (qty * price_now) − (qty * avgCostUsd).
+- Holder concentration: top10_share, Herfindahl index from HolderSnapshot.topJson.
+- Flow features: buy/sell imbalance = buys/(buys+sells) over 5m/1h; velocity = ΔnumTxs/Δt.
+
+Event Taxonomy (to store & stream)
+----------------------------------
+- portfolio:update — computed snapshot (equity, realized/unrealized, SOL price, positions)
+- trade:new — normalized tape tick from WS
+- order:update — order lifecycle status (+ fills, txSig, fees, slippage)
+- agent:event — safe decision trace summary, metrics, and tool invocation/result crumbs
+- token:update — new candle/price snapshot, market-activity, holders update
+- chat:new — appended message (user/assistant/system/tool)
+All events are persisted and also fanned out to clients via websocket.
+
+APIs (Next.js Route Handlers)
+-----------------------------
+Base: /api
+
+GET /api/portfolio?walletId=…
+- Returns: equityUsd, realizedUsd, unrealizedUsd, solUsd, positions[]
+
+GET /api/positions?walletId=…
+- Returns: positions[] with MTM and pct PnL
+
+GET /api/trades?walletId=…&mint=…&cursor=…
+- Returns: executions joined with trade tape; pagination
+
+GET /api/orders?walletId=…&status=open|failed|filled
+- Returns: orders[] with latest execution
+
+GET /api/tokens/:mint/metrics
+- Returns: price now, ATH, drawdown, holder summary, last market-activity windows
+
+GET /api/agent/events?walletId=…&mint=…&since=ISO8601
+- Returns: AgentEvent[]
+
+POST /api/orders
+- Body: { walletId, mint, side: "buy"|"sell", qtyTokens|qtySol, slippageBps, limitUsd? }
+- Effect: Creates Order row and publishes queue message for executor (or MCP tool call)
+
+POST /api/chat
+- Body: { role: "user", content, meta? }
+- Effect: append message; triggers MCP run if configured
+
+GET /api/chat/context
+- Returns: current ≤200k-token rolling window (assistant entries are public summaries)
+
+WebSocket Hub
+- Path: /api/stream (Socket.IO or ws). Channels: portfolio:update, order:update, trade:new, agent:event, token:update, chat:new
+
+Chat & 200k Context Window
+--------------------------
+- Single conversation stored in ChatMessage.
+- Window assembly on each LLM call:
+  1) Include most recent operator messages (last ~30) uncompressed.
+  2) Include compact system/tool snapshot: active positions, orders, key metrics.
+  3) Include recent AgentEvent summaries (kind=summary|signal|risk) related to watched tokens.
+  4) If near 200k tokens, evict oldest assistant summaries first; then older user messages. Periodically write batch “recap” messages (daily and per-position closure) to retain long-term memory at low token cost.
+- Operator can “Inject snapshot” from any UI card (token/alert) which creates a short, structured tool message in the chat.
+
+Frontend (Next.js App Router)
+-----------------------------
+Pages
+- / (Overview): Portfolio cards, Realized/Unrealized PnL, SOL balance, Active Orders, Alerts, Execution Timeline
+- /positions: Table with per-token drawers (chart 1m/5m/1h, holder heat, activity donuts)
+- /trades: Fills, fees, slippage, latency
+- /orders: Open/Pending/Failed with actions (retry/cancel if enabled)
+- /tokens: Discovery/watchlist from /coins/for-you; sort by 5m/1h metrics
+- /agent: Decision Trace (AgentEvent), Tool Calls panel
+- /chat: Chat window + Context meter + “Inject snapshot” controls
+- /alerts: Configure thresholds & history
+- /settings: Wallets, risk caps, slippage defaults, API keys
+
+Components
+- PortfolioCard, PnLChart, PositionsTable, TradesTable, OrdersTable
+- TokenMiniChart (sparklines), HoldersTopBar, ActivityDonuts
+- ExecutionTimeline, ToolTracePanel, AgentSummaryFeed
+- ChatPanel, ContextMeter, KillSwitch, RiskControls
+
+Ingestion Service
+-----------------
+- Connect to Pump.fun WS; parse tradeCreated; ensure idempotency (txSig unique)
+- For watched tokens, poll at adaptive rates:
+  - candles (1m/5m/1h), market-activity windows, top-holders, pool ATH
+  - cache ETags and respect x-ratelimit-* headers; exponential backoff on 429/5xx
+- Publish normalized updates via Redis Pub/Sub
+- Persist snapshots into Candle, MarketActivitySnapshot, HolderSnapshot, Pool, Token
+
+Execution Integration
+---------------------
+- If MCP executes trades: the app consumes its events (order intents/results) through a lightweight webhook or queue.
+- If the app should execute: POST /api/orders triggers an internal queue processed by Execution service which calls MCP tool or web3 library; results fed back as order:update + Execution rows.
+
+Security & Compliance
+---------------------
+- AuthN: JWT (HTTP-only cookie), OAuth2 (optional) for operators; per-wallet RBAC (viewer, operator, admin)
+- Key custody: signer service or KMS; DB holds only encrypted delegate blobs; never log private keys/seed.
+- Input validation at all API boundaries; strict JSON schemas
+- Rate limiting (per IP/user), CSRF for POST routes
+- Audit logging for sensitive changes (risk caps, slippage, wallet bindings)
+- Secrets in environment variables; do not commit. Production separate from dev.
+
+Observability & SLOs
+--------------------
+- Logs: pino JSON with traceId; redact sensitive fields
+- Metrics: Prometheus/OpenTelemetry — order latency, tx failure rate, WS lag, ingestion backlog, API p95/p99
+- Dashboards: portfolio KPIs, error rates, rate-limit hits
+- Alerts: drawdown breach, whale delta, flow flip, spread spike, repeated tx failures
+
+Performance Targets
+-------------------
+- WS tick → UI visible in ≤ 500 ms p95
+- Portfolio API p95 ≤ 150 ms
+- 10k trade tape rows/min sustained without loss (buffered via Redis and batch writes)
+- 1s budget from order placement to status reflection in UI (post-submission)
+
+Rate-Limit & Backoff Strategy
+-----------------------------
+- Track x-ratelimit-remaining/reset headers; local token bucket per endpoint class
+- Use ETag/If-None-Match; cache hot responses
+- 429/5xx: exponential backoff with jitter; circuit-breaker around hot loops
+- Progressive polling: fast for watched tokens; slow global discovery
+
+Data Retention
+--------------
+- TradeTape: 30–90 days hot; archive to cheaper storage if needed
+- Snapshots: last 30 days for 1m candles, 180 days for 1h
+- AgentEvent: 90 days hot; archive
+- Chat: retain full history but only last 200k tokens window pushed to LLM at runtime
+
+Configuration (Environment)
+---------------------------
+- DATABASE_URL=postgres://…
+- REDIS_URL=redis://…
+- PUMPFUN_BASE=https://swap-api.pump.fun
+- PUMPFUN_WS=wss://frontend-api-v3.pump.fun/socket.io/?EIO=4&transport=websocket
+- HELIUS_RPC=https://pump-fe.helius-rpc.com/?api-key=…
+- JWT_SECRET=…
+- CORS_ORIGIN=https://…
+- MAX_CONTEXT_TOKENS=200000
+- DEFAULT_SLIPPAGE_BPS=…
+- RISK_* (caps, drawdown%, minLiquidityUSD, etc.)
+
+API & WS Payload Contracts (Examples)
+-------------------------------------
+WebSocket: portfolio:update
+```json
+{
+  "walletId": "w_123",
+  "ts": "2025-11-05T21:33:09Z",
+  "solUsd": 161.71,
+  "equityUsd": 1243.55,
+  "unrealizedUsd": 112.93,
+  "realizedUsd": 54.88,
+  "positions": [
+    { "mint":"CFEV...pump", "qty":"3561744.793403", "avgCostUsd":"0.00011", "priceUsd":"0.00014", "mtmUsd":"498.10" }
+  ]
+}
+```
+
+WebSocket: agent:event (safe decision trace)
+```json
+{
+  "id": "ev_abc",
+  "ts": "2025-11-05T21:33:12Z",
+  "kind": "signal",
+  "level": "info",
+  "walletId": "w_123",
+  "tokenMint": "CFEV...pump",
+  "traceId": "trace_9912",
+  "rationale": "5m buyer-dominant flow with rising 1h volume; holder concentration stable.",
+  "metrics": { "flow5m": 0.62, "vol1h_usd": 22626.34, "priceChange1h_pct": -6.96, "top10_share_pct": 41.2 },
+  "toolName": null,
+  "input": { "windows": ["5m","1h"], "features": ["imbalance","volatility","holders"] },
+  "output": null
+}
+```
+
+REST: GET /api/tokens/:mint/metrics
+```json
+{
+  "mint": "CFEV...pump",
+  "priceUsd": 0.00014,
+  "priceSol": 0.00000066,
+  "athMcapUsd": 398775.51,
+  "drawdownPct": -29.1,
+  "holders": { "total": 4312, "top10_share_pct": 41.2, "whaleSolTopN": 1207.3 },
+  "activity": {
+    "5m": { "numTxs": 4, "volumeUSD": 668.39, "numUsers": 4, "priceChangePercent": -7.15 },
+    "1h": { "numTxs": 238, "volumeUSD": 22626.35, "priceChangePercent": -6.96 }
+  }
+}
+```
+
+UI/UX Requirements
+------------------
+- Overview Dashboard: KPIs (equity, PnL, SOL), Active Orders, Alerts, live Execution Timeline
+- Positions: sortable table → drawer with chart (1m/5m/1h), holders chart, activity donuts
+- Trades: detailed fills (fees, slippage, latency, txSig links)
+- Orders: open/pending/failed; batch retry/cancel when allowed
+- Agent: Decision Trace timeline + Tool Calls list with filters and correlation via traceId
+- Chat: single thread, context meter showing tokens used vs 200k; “inject snapshot” actions
+- Alerts: configure thresholds; view past alerts with resolution notes
+- Settings: wallets, risk params, slippage defaults, API keys
+- All tables filterable/searchable; all charts live-updating without full refresh
+
+Testing Strategy
+----------------
+- Unit tests: PnL math, price selection fallback, context window eviction, rate-limit/backoff
+- Integration tests: WS ingestion idempotency, REST polling with ETag, order lifecycle
+- E2E tests: happy path dashboard load, live WS stream, placing an order (if enabled), chat injection
+- Load tests: 10k ticks/min with no data loss; 1s p95 order status visibility
+
+Deployment & Ops
+----------------
+- Docker images for Next.js, Ingestion, (Execution if used)
+- Compose or Kubernetes; distinct envs (dev/stage/prod)
+- Migrations on deploy (Prisma)
+- Health probes: /healthz (DB/Redis checks)
+- Secrets via vault/KMS
+- Backups: Postgres daily; Redis ephemeral
+
+Risk Controls & Alerts
+----------------------
+- Per-wallet caps: max concurrent positions, per-token spend, portfolio drawdown, max slippage BPS, daily fee budget, min liquidity USD
+- Alerts: drawdown breach, whale delta spike, flow flip, spread spike, tx failure bursts; notify via UI (WS), optional email/webhook
+
+Open Questions
+--------------
+1) Will the app submit trades or only mirror MCP’s executions?
+2) Which discovery filters from /coins/for-you seed the watchlist by default?
+3) What’s the retention window for TradeTape and AgentEvent in “hot” storage?
+4) Do we need multi-wallet switching in UI or one wallet per deployment?
+5) Should we expose a public read-only dashboard link (with redactions)?
+
+Acceptance Criteria
+-------------------
+- Live dashboard reflects new ticks (WS) within 500 ms p95
+- Portfolio/PnL consistent with trade executions and candles within tolerance
+- AgentEvent and Tool Trace pages display every tool invocation/result within 1s of occurrence
+- Chat window maintains ≤200k tokens with correct eviction/compression behavior
+- All configured alerts fire and are visible in UI and persisted in DB
+- No secret leakage in logs; all sensitive mutations recorded in audit trail
