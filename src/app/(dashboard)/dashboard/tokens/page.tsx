@@ -108,14 +108,17 @@ export default function TokensPage() {
     return 'rgba(26, 26, 26, 1)'
   }
 
-  const formatPricePerMillion = (priceUsd: number | null) => {
-    if (!priceUsd || priceUsd === 0 || isNaN(priceUsd)) return 'N/A'
+  const formatPricePerMillion = (priceUsd: number | null | undefined) => {
+    // Check for null/undefined/NaN/zero
+    if (priceUsd == null || isNaN(priceUsd) || priceUsd <= 0) {
+      return 'N/A'
+    }
     
     // Convert to price per million tokens
     const pricePerMillion = priceUsd * 1_000_000
     
-    // Handle very small values
-    if (pricePerMillion < 0.000001) {
+    // Handle extremely small values (less than $0.000001 per million)
+    if (pricePerMillion < 0.000001 || isNaN(pricePerMillion)) {
       return 'N/A'
     }
     
@@ -343,8 +346,8 @@ export default function TokensPage() {
                         Price (per 1M tokens)
                       </Typography>
                       <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 'bold' }}>
-                        {token.price && token.price.priceUsd && Number(token.price.priceUsd) > 0
-                          ? formatPricePerMillion(token.price.priceUsd)
+                        {token.price && token.price.priceUsd != null
+                          ? formatPricePerMillion(Number(token.price.priceUsd))
                           : 'N/A'}
                       </Typography>
                       {token.price && token.price.priceSol && Number(token.price.priceSol) > 0 && (
