@@ -31,6 +31,17 @@ import LanguageIcon from "@mui/icons-material/Language";
 import { useRouter } from "next/navigation";
 import IconButton from "@mui/material/IconButton";
 
+const TIMEFRAME_OPTIONS = ['1h', '6h', '24h', '7d', '30d', 'all'] as const;
+type TimeframeOption = (typeof TIMEFRAME_OPTIONS)[number];
+const TIMEFRAME_LABELS: Record<TimeframeOption, string> = {
+  '1h': '1 hour',
+  '6h': '6 hours',
+  '24h': '24 hours',
+  '7d': '7 days',
+  '30d': '30 days',
+  all: 'All time',
+};
+
 interface Token {
   id: string;
   mintAddress: string;
@@ -70,6 +81,7 @@ export default function TokensPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [sortBy, setSortBy] = useState("volume");
+  const [timeframe, setTimeframe] = useState<TimeframeOption>('24h');
 
   useEffect(() => {
     // Initial fetch with loading indicator
@@ -81,7 +93,7 @@ export default function TokensPage() {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [page, search, sortBy]);
+  }, [page, search, sortBy, timeframe]);
 
   const fetchTokens = async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -96,6 +108,9 @@ export default function TokensPage() {
       if (sortBy) {
         params.append("sortBy", sortBy);
       }
+      if (timeframe) {
+        params.append("timeframe", timeframe);
+      }
 
       const response = await fetch(`/api/tokens?${params}`);
       const data = await response.json();
@@ -106,6 +121,11 @@ export default function TokensPage() {
     } finally {
       if (showLoading) setLoading(false);
     }
+  };
+
+  const handleTimeframeChange = (value: TimeframeOption) => {
+    setTimeframe(value);
+    setPage(1);
   };
 
   const getCardColor = (volumeRatio: number) => {
@@ -244,27 +264,45 @@ export default function TokensPage() {
     <Container maxWidth="lg">
       <Box
         sx={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
           mb: 3,
+          flexWrap: 'wrap',
+          gap: 2,
         }}
       >
         <Typography variant="h4" component="h1">
           Tokens
         </Typography>
-        <FormControl size="small" sx={{ minWidth: 150 }}>
-          <InputLabel>Sort By</InputLabel>
-          <Select
-            value={sortBy}
-            label="Sort By"
-            onChange={(e) => setSortBy(e.target.value)}
-          >
-            <MenuItem value="volume">Volume</MenuItem>
-            <MenuItem value="traders">Traders</MenuItem>
-            <MenuItem value="price">Price</MenuItem>
-          </Select>
-        </FormControl>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+          <FormControl size="small" sx={{ minWidth: 150 }}>
+            <InputLabel>Sort By</InputLabel>
+            <Select
+              value={sortBy}
+              label="Sort By"
+              onChange={(e) => setSortBy(e.target.value)}
+            >
+              <MenuItem value="volume">Volume</MenuItem>
+              <MenuItem value="traders">Traders</MenuItem>
+              <MenuItem value="price">Price</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 160 }}>
+            <InputLabel>Timeframe</InputLabel>
+            <Select
+              value={timeframe}
+              label="Timeframe"
+              onChange={(e) => handleTimeframeChange(e.target.value as TimeframeOption)}
+            >
+              {TIMEFRAME_OPTIONS.map((option) => (
+                <MenuItem key={option} value={option}>
+                  {TIMEFRAME_LABELS[option]}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Stack>
       </Box>
 
       <TextField
