@@ -108,29 +108,44 @@ async function processTrade(tradeData: TradeCreatedEvent) {
       // Use fallback if DB query fails
     }
     
-    // Calculate price - use bonding curve reserves for most accurate price
-    // Price = virtual_sol_reserves / virtual_token_reserves
+    // Calculate price - use actual trade amounts for most accurate price
+    // The trade amounts reflect the actual price paid, which is more accurate than reserves
     let priceSol: Decimal
     let priceUsdFromMarketCap: Decimal | null = null
     let calculationMethod = 'none'
     
-    // First, try to calculate from bonding curve reserves (most accurate for current price)
-    if (tradeData.virtual_sol_reserves && tradeData.virtual_token_reserves) {
+    // First, try to calculate from actual trade amounts (most accurate - reflects real price paid)
+    if (baseAmount.gt(0) && amountSol.gt(0)) {
+      calculationMethod = 'trade_amounts'
+      // Calculate: price per token = SOL spent / tokens received
+      // This gives us the actual price paid for this trade
+      priceSol = amountSol.div(baseAmount)
+      const tokensPerSol = baseAmount.div(amountSol)
+      console.log(`🔍 [${tradeData.symbol}] Price calculation from trade amounts:`)
+      console.log(`   sol_amount (lamports): ${tradeData.sol_amount}`)
+      console.log(`   amountSol: ${amountSol.toString()} SOL`)
+      console.log(`   token_amount: ${tradeData.token_amount}`)
+      console.log(`   baseAmount: ${baseAmount.toString()} tokens`)
+      console.log(`   Tokens per SOL: ${tokensPerSol.toString()}`)
+      console.log(`   Calculated priceSol: ${priceSol.toString()}`)
+      console.log(`   SOL per 1M tokens: ${(Number(priceSol) * 1000000).toFixed(6)}`)
+    } else if (tradeData.virtual_sol_reserves && tradeData.virtual_token_reserves) {
       calculationMethod = 'bonding_curve_reserves'
       const virtualSolReserves = new Decimal(tradeData.virtual_sol_reserves.toString()).div(LAMPORTS_PER_SOL) // Convert lamports to SOL
       const virtualTokenReserves = new Decimal(tradeData.virtual_token_reserves.toString())
-      console.log(`🔍 [${tradeData.symbol}] Price calculation from bonding curve:`)
+      console.log(`🔍 [${tradeData.symbol}] Price calculation from bonding curve (fallback):`)
       console.log(`   virtual_sol_reserves (lamports): ${tradeData.virtual_sol_reserves}`)
       console.log(`   virtual_sol_reserves (SOL): ${virtualSolReserves.toString()}`)
       console.log(`   virtual_token_reserves: ${virtualTokenReserves.toString()}`)
-      if (virtualTokenReserves.gt(0)) {
-        // Price per token = SOL reserves / token reserves
+      if (virtualTokenReserves.gt(0) && virtualSolReserves.gt(0)) {
         priceSol = virtualSolReserves.div(virtualTokenReserves)
+        const tokensPerSol = virtualTokenReserves.div(virtualSolReserves)
         console.log(`   Calculated priceSol: ${priceSol.toString()}`)
+        console.log(`   Tokens per SOL: ${tokensPerSol.toString()}`)
         console.log(`   SOL per 1M tokens: ${(Number(priceSol) * 1000000).toFixed(6)}`)
       } else {
         priceSol = new Decimal(0)
-        console.log(`   ⚠️ Invalid token reserves`)
+        console.log(`   ⚠️ Invalid reserves (SOL: ${virtualSolReserves.toString()}, Tokens: ${virtualTokenReserves.toString()})`)
       }
     } else if (tradeData.usd_market_cap && tradeData.total_supply) {
       calculationMethod = 'market_cap'
