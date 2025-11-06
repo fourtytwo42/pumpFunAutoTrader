@@ -14,12 +14,22 @@ async function advanceSimulationSession(
   userId: string,
   client: PrismaLikeClient = prisma
 ): Promise<UserSession | null> {
-  const session = await client.userSession.findUnique({
+  let session = await client.userSession.findUnique({
     where: { userId },
   })
 
   if (!session) {
-    return null
+    const nowMs = Date.now()
+    session = await client.userSession.create({
+      data: {
+        userId,
+        startTimestamp: BigInt(nowMs),
+        currentTimestamp: BigInt(nowMs),
+        playbackSpeed: 1.0,
+        solBalanceStart: 10,
+        isActive: false,
+      },
+    })
   }
 
   if (!session.isActive) {
