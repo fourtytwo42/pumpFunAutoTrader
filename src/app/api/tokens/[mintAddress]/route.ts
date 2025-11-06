@@ -132,43 +132,54 @@ const remoteTopHolders = Array.isArray((topHoldersData as any)?.topHolders)
     ? (topHoldersData as any)
     : []
 
-    return NextResponse.json({
-      ...token,
-      createdAt: Number(token.createdAt),
-      kingOfTheHillTimestamp: token.kingOfTheHillTimestamp ? Number(token.kingOfTheHillTimestamp) : null,
-      completed: token.completed,
-      price: token.price
-        ? {
-            priceSol: Number(token.price.priceSol),
-            priceUsd: Number(token.price.priceUsd),
-            lastTradeTimestamp: token.price.lastTradeTimestamp ? Number(token.price.lastTradeTimestamp) : null,
-          }
-        : null,
-      stats: {
-        buyVolume,
-        sellVolume,
-        totalVolume: buyVolume + sellVolume,
-        uniqueTraders: uniqueTraders.size,
-        totalTrades: allTrades.length,
-      },
-      totalSupplyTokens,
-      remote: {
-        poolAddress,
-        coin: coinDetails,
-        metadata: metadataData,
-        trades: remoteTrades,
-        candles: remoteCandles,
-        topHolders: remoteTopHolders,
-        marketActivity: marketActivityData,
-        creator: creatorData,
-      },
-      recentTrades: recentTrades.slice(0, 20).map((t) => ({
-        type: t.type === 1 ? 'buy' : 'sell',
-        amountSol: Number(t.amountSol),
-        amountUsd: Number(t.amountUsd),
-        timestamp: t.timestamp.toString(),
-      })),
-    })
+
+const responsePayload = {
+  id: token.id,
+  mintAddress: token.mintAddress,
+  symbol: token.symbol,
+  name: token.name,
+  imageUri: token.imageUri,
+  twitter: token.twitter,
+  telegram: token.telegram,
+  website: token.website,
+  creatorAddress: token.creatorAddress,
+  createdAt: Number(token.createdAt),
+  kingOfTheHillTimestamp: token.kingOfTheHillTimestamp ? Number(token.kingOfTheHillTimestamp) : null,
+  completed: token.completed,
+  price: token.price
+    ? {
+        priceSol: Number(token.price.priceSol),
+        priceUsd: Number(token.price.priceUsd),
+        lastTradeTimestamp: token.price.lastTradeTimestamp ? Number(token.price.lastTradeTimestamp) : null,
+      }
+    : null,
+  stats: {
+    buyVolume,
+    sellVolume,
+    totalVolume: buyVolume + sellVolume,
+    uniqueTraders: uniqueTraders.size,
+    totalTrades: allTrades.length,
+  },
+  totalSupplyTokens,
+  remote: {
+    poolAddress,
+    coin: coinDetails,
+    metadata: metadataData,
+    trades: remoteTrades,
+    candles: remoteCandles,
+    topHolders: remoteTopHolders,
+    marketActivity: marketActivityData,
+    creator: creatorData,
+  },
+  recentTrades: recentTrades.slice(0, 20).map((t) => ({
+    type: t.type === 1 ? 'buy' : 'sell',
+    amountSol: Number(t.amountSol),
+    amountUsd: Number(t.amountUsd),
+    timestamp: t.timestamp.toString(),
+  })),
+}
+
+return NextResponse.json(responsePayload)
   } catch (error) {
     console.error('Get token error:', error)
     return NextResponse.json(
