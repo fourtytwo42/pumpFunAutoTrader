@@ -91,12 +91,25 @@ async function processTrade(tradeData: TradeCreatedEvent) {
     const baseAmount = new Decimal(tradeData.token_amount?.toString() || '0')
     const timestamp = BigInt((tradeData.timestamp || Date.now() / 1000) * 1000) // Convert to milliseconds
     
-    // Calculate price if not provided
+    // Calculate price - prioritize market cap calculation as it's more accurate
     let priceSol: Decimal
-    if (tradeData.priceSol) {
+    let priceUsdFromMarketCap: Decimal | null = null
+    
+    // First, try to calculate from market cap if available (most accurate)
+    if (tradeData.usd_market_cap && tradeData.total_supply) {
+      const totalSupply = new Decimal(tradeData.total_supply.toString())
+      const marketCap = new Decimal(tradeData.usd_market_cap.toString())
+      if (totalSupply.gt(0)) {
+        priceUsdFromMarketCap = marketCap.div(totalSupply)
+        // Convert USD price to SOL price using current SOL price
+        priceSol = priceUsdFromMarketCap.div(solPriceUsd)
+      } else {
+        priceSol = new Decimal(0)
+      }
+    } else if (tradeData.priceSol) {
       priceSol = new Decimal(tradeData.priceSol)
     } else {
-      // price = sol_amount / token_amount
+      // Fallback: price = sol_amount / token_amount
       priceSol = baseAmount.gt(0) ? amountSol.div(baseAmount) : new Decimal(0)
     }
 
@@ -117,16 +130,11 @@ async function processTrade(tradeData: TradeCreatedEvent) {
     }
 
     let priceUsd: Decimal
-    // Prioritize priceUsd from trade data, then market cap calculation, then SOL price calculation
-    if (tradeData.priceUsd) {
+    // Prioritize priceUsd from market cap (already calculated above), then trade data, then SOL price calculation
+    if (priceUsdFromMarketCap) {
+      priceUsd = priceUsdFromMarketCap
+    } else if (tradeData.priceUsd) {
       priceUsd = new Decimal(tradeData.priceUsd)
-    } else if (tradeData.usd_market_cap && tradeData.total_supply) {
-      // Use market cap / total supply for more accurate price (this is the most reliable)
-      const totalSupply = new Decimal(tradeData.total_supply.toString())
-      const marketCap = new Decimal(tradeData.usd_market_cap.toString())
-      priceUsd = totalSupply.gt(0) 
-        ? marketCap.div(totalSupply)
-        : new Decimal(0)
     } else {
       // Fallback: Calculate from SOL price: priceUsd = priceSol * solPriceUsd
       priceUsd = priceSol.mul(solPriceUsd)
@@ -218,8 +226,11 @@ async function processTrade(tradeData: TradeCreatedEvent) {
       await flushTradeBuffer()
     }
 
+    const priceUsdNum = Number(priceUsd)
+    const priceSolNum = Number(priceSol)
+    const solPerMillion = priceSolNum * 1000000
     console.log(
-      `📊 Trade: ${tradeData.is_buy ? 'BUY' : 'SELL'} ${tradeData.symbol} - ${amountSol.toString()} SOL @ ${priceSol.toString()}`
+      `📊 Trade: ${tradeData.is_buy ? 'BUY' : 'SELL'} ${tradeData.symbol} - ${amountSol.toString()} SOL @ ${priceSol.toString()} SOL/token (${solPerMillion.toFixed(6)} SOL per 1M tokens, $${(priceUsdNum * 1000000).toFixed(2)} USD per 1M tokens)`
     )
   } catch (error: any) {
     console.error('❌ Error processing trade:', error.message, error.stack)
