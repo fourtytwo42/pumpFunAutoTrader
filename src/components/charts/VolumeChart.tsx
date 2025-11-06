@@ -9,12 +9,17 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Cell,
 } from 'recharts'
 import { Box, CircularProgress, Typography } from '@mui/material'
 
 interface CandleData {
   timestamp: string
   volume: number
+  open?: number
+  close?: number
+  buyVolume?: number | null
+  sellVolume?: number | null
 }
 
 interface VolumeChartProps {
@@ -76,10 +81,25 @@ export default function VolumeChart({ tokenAddress, interval = '1m', height = 20
     return null
   }
 
-  const chartData = data.map((candle) => ({
-    time: new Date(parseInt(candle.timestamp)).toLocaleTimeString(),
-    volume: Number(candle.volume),
-  }))
+  const chartData = data.map((candle) => {
+    const timestampMs = Number.parseInt(candle.timestamp)
+    const buyVolume = candle.buyVolume ?? undefined
+    const sellVolume = candle.sellVolume ?? undefined
+    const direction = (() => {
+      if (buyVolume !== undefined && sellVolume !== undefined && buyVolume !== null && sellVolume !== null) {
+        if (buyVolume === sellVolume) {
+          return (candle.close ?? 0) >= (candle.open ?? 0) ? 'up' : 'down'
+        }
+        return buyVolume > sellVolume ? 'up' : 'down'
+      }
+      return (candle.close ?? 0) >= (candle.open ?? 0) ? 'up' : 'down'
+    })()
+    return {
+      time: new Date(timestampMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      volume: Number(candle.volume),
+      color: direction === 'up' ? '#00ff88' : '#ff4d4d',
+    }
+  })
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -105,7 +125,11 @@ export default function VolumeChart({ tokenAddress, interval = '1m', height = 20
           }}
           formatter={(value: number) => [value.toFixed(2), 'Volume']}
         />
-        <Bar dataKey="volume" fill="#8884d8" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="volume" radius={[4, 4, 0, 0]}>
+          {chartData.map((entry, index) => (
+            <Cell key={`cell-${index}`} fill={entry.color} />
+          ))}
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
   )

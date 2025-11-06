@@ -67,6 +67,8 @@ async function generateCandlesFromTrades(
     low: Decimal
     close: Decimal
     volume: Decimal
+    buyVolume: Decimal | null
+    sellVolume: Decimal | null
   }>()
 
   const intervalMs = intervalMinutes * 60 * 1000
@@ -86,6 +88,8 @@ async function generateCandlesFromTrades(
         low: trade.priceSol,
         close: trade.priceSol,
         volume: new Decimal(0),
+        buyVolume: new Decimal(0),
+        sellVolume: new Decimal(0),
       }
       candlesMap.set(key, candle)
     }
@@ -94,6 +98,11 @@ async function generateCandlesFromTrades(
     candle.low = Decimal.min(candle.low, trade.priceSol)
     candle.close = trade.priceSol
     candle.volume = candle.volume.add(trade.amountSol)
+    if (trade.type === 1) {
+      candle.buyVolume = (candle.buyVolume ?? new Decimal(0)).add(trade.amountSol)
+    } else {
+      candle.sellVolume = (candle.sellVolume ?? new Decimal(0)).add(trade.amountSol)
+    }
   }
 
   const candles = Array.from(candlesMap.values())
@@ -165,6 +174,8 @@ export async function GET(
       low: Decimal
       close: Decimal
       volume: Decimal
+      buyVolume: Decimal | null
+      sellVolume: Decimal | null
     }>()
 
     for (const candle of localCandles) {
@@ -209,6 +220,8 @@ export async function GET(
               low: new Decimal(low || open || 0),
               close: new Decimal(close || open || 0),
               volume: new Decimal(volume || 0),
+              buyVolume: null,
+              sellVolume: null,
             })
           } catch (error) {
             console.warn('Failed to normalize remote candle', error)
@@ -233,6 +246,8 @@ export async function GET(
         low: Number(c.low),
         close: Number(c.close),
         volume: Number(c.volume),
+        buyVolume: c.buyVolume === null ? null : Number(c.buyVolume),
+        sellVolume: c.sellVolume === null ? null : Number(c.sellVolume),
       })),
     })
   } catch (error) {

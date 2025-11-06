@@ -19,6 +19,8 @@ interface CandleData {
   low: number
   close: number
   volume: number
+  buyVolume?: number | null
+  sellVolume?: number | null
 }
 
 interface PriceChartProps {
