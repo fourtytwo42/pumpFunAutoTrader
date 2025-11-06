@@ -27,6 +27,7 @@ import {
   Settings,
 } from '@mui/icons-material'
 import { useState } from 'react'
+import { WalletProvider, useWallet } from '@/components/wallet/WalletProvider'
 
 const drawerWidth = 240
 
@@ -43,11 +44,12 @@ const adminItems = [
   { text: 'AI Traders', icon: <Settings />, path: '/dashboard/admin/ai-traders' },
 ]
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+function DashboardShell({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession()
   const router = useRouter()
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const { balanceDisplay, openWallet } = useWallet()
 
   if (status === 'loading') {
     return <Box>Loading...</Box>
@@ -113,6 +115,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             Pump.fun Mock Trader
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Button color="inherit" variant="outlined" onClick={openWallet} sx={{ borderColor: 'rgba(255,255,255,0.3)' }}>
+              {balanceDisplay}
+            </Button>
             <Typography variant="body2">{session.user.username}</Typography>
             <Avatar sx={{ width: 32, height: 32 }}>
               {session.user.username.charAt(0).toUpperCase()}
@@ -162,6 +167,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {children}
       </Box>
     </Box>
+  )
+}
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <WalletProvider>
+      <DashboardShell>{children}</DashboardShell>
+    </WalletProvider>
   )
 }
 

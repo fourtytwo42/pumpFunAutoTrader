@@ -28,6 +28,7 @@ import {
 import { ShoppingCart, Sell } from "@mui/icons-material";
 import PriceChart from "@/components/charts/PriceChart";
 import VolumeChart from "@/components/charts/VolumeChart";
+import { useWallet } from "@/components/wallet/WalletProvider";
 
 const TIME_BUCKETS = ["5m", "1h", "6h", "24h"] as const;
 const CANDLE_INTERVALS = ['1m', '5m', '1h', '6h', '24h'] as const;
@@ -195,6 +196,7 @@ export default function TokenDetailPage() {
   const params = useParams<{ mintAddress?: string }>();
   const router = useRouter();
   const mintAddress = params?.mintAddress;
+  const { requestApproval, refresh: refreshWallet } = useWallet();
 
   const [token, setToken] = useState<TokenData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -252,6 +254,14 @@ export default function TokenDetailPage() {
 
   const handleBuy = async () => {
     if (!buyAmount || parseFloat(buyAmount) <= 0 || !token) return;
+    const amountSol = parseFloat(buyAmount);
+    const approved = await requestApproval({
+      type: "buy",
+      tokenName: token.name,
+      tokenSymbol: token.symbol,
+      amountSol,
+    });
+    if (!approved) return;
     setTrading(true);
     setTradeSuccess("");
     setError("");
@@ -262,7 +272,7 @@ export default function TokenDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tokenId: token.id,
-          amountSol: parseFloat(buyAmount),
+          amountSol,
         }),
       });
 
@@ -274,6 +284,7 @@ export default function TokenDetailPage() {
       setTradeSuccess(`Bought ${data.tokensReceived?.toFixed(2)} tokens!`);
       setBuyAmount("");
       fetchToken();
+      refreshWallet();
     } catch (err: any) {
       setError(err.message || "Buy failed");
     } finally {
@@ -283,6 +294,14 @@ export default function TokenDetailPage() {
 
   const handleSell = async () => {
     if (!sellAmount || parseFloat(sellAmount) <= 0 || !token) return;
+    const amountTokens = parseFloat(sellAmount);
+    const approved = await requestApproval({
+      type: "sell",
+      tokenName: token.name,
+      tokenSymbol: token.symbol,
+      amountTokens,
+    });
+    if (!approved) return;
     setTrading(true);
     setTradeSuccess("");
     setError("");
@@ -293,7 +312,7 @@ export default function TokenDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tokenId: token.id,
-          amountTokens: parseFloat(sellAmount),
+          amountTokens,
         }),
       });
 
@@ -305,6 +324,7 @@ export default function TokenDetailPage() {
       setTradeSuccess(`Sold for ${data.solReceived?.toFixed(4)} SOL!`);
       setSellAmount("");
       fetchToken();
+      refreshWallet();
     } catch (err: any) {
       setError(err.message || "Sell failed");
     } finally {
