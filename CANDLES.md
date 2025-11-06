@@ -45,7 +45,7 @@ For active tokens (10+ trades/hour) and all intervals:
 4. Calculate OHLCV (Open, High, Low, Close, Volume)
 5. Upsert candles (create new or update existing)
 
-Runs every 15 minutes via PM2 cron.
+Runs continuously as a long-running service, aggregating every 15 minutes.
 
 ### On-Demand Generation (All Tokens)
 
@@ -71,16 +71,18 @@ npm run aggregate:candles
 
 This only pre-aggregates candles for active tokens (10+ trades/hour). Less active tokens generate candles on-demand.
 
-### Automatic (PM2 Cron)
+### Automatic (PM2 Service)
 
-The PM2 ecosystem config includes a cron job that runs every 15 minutes:
+The PM2 ecosystem config runs it as a long-running service:
 
 ```javascript
-cron_restart: '*/15 * * * *' // Every 15 minutes (only for active tokens)
+autorestart: true // Keep running - polls every 15 minutes
 ```
 
-This is less frequent because:
-- Only active tokens are pre-aggregated
+The service:
+- Runs continuously (doesn't exit)
+- Aggregates candles every 15 minutes
+- Only processes active tokens (10+ trades/hour)
 - Less active tokens generate candles on-demand anyway
 - Reduces database load and memory usage
 

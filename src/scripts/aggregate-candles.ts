@@ -7,7 +7,7 @@ const prisma = new PrismaClient()
 // For less active tokens, candles are generated on-demand from trades
 // Lower threshold = more tokens pre-aggregated (uses more memory but faster queries)
 // Higher threshold = fewer tokens pre-aggregated (uses less memory, slower for inactive tokens)
-const ACTIVE_TRADE_THRESHOLD = 1 // Tokens with 1+ trades in last hour (lowered for initial setup)
+const ACTIVE_TRADE_THRESHOLD = 10 // Tokens with 10+ trades in last hour
 const INTERVALS = [1, 5, 60, 360, 1440] // 1m, 5m, 1h, 6h, 24h
 const AGGREGATION_INTERVAL_MS = 15 * 60 * 1000 // Run every 15 minutes
 
@@ -185,22 +185,19 @@ async function aggregateAllCandles() {
       .map((token) => [token.id, true])
   )
 
-  // Process all tokens with trades, but prioritize active ones
-  // This ensures we aggregate candles for all tokens initially, but focus on active ones
+  // Only process tokens that meet the active threshold
+  // Less active tokens will generate candles on-demand when requested
   const tokensToProcess = allTokensWithTrades.filter((token) => {
-    // Always process tokens that meet the threshold
-    if (recentActiveMap.has(token.id)) {
-      return true
-    }
-    // For initial setup, also process tokens with any trades (even if below threshold)
-    // This ensures historical candles are created
-    // After initial setup, you can remove this to only process active tokens
-    return true // Set to false after initial aggregation is complete
+    return recentActiveMap.has(token.id)
   })
 
+  const activeCount = recentActiveTokens.filter(t => (t._count?.trades || 0) >= ACTIVE_TRADE_THRESHOLD).length
   console.log(
-    `📊 Processing ${tokensToProcess.length} tokens (${allTokensWithTrades.length} total with trades, ${recentActiveTokens.filter(t => (t._count?.trades || 0) >= ACTIVE_TRADE_THRESHOLD).length} active with ${ACTIVE_TRADE_THRESHOLD}+ trades/hour)...`
+    `📊 Processing ${tokensToProcess.length} active tokens (${allTokensWithTrades.length} total with trades, ${activeCount} meet threshold of ${ACTIVE_TRADE_THRESHOLD}+ trades/hour)...`
   )
+  if (tokensToProcess.length === 0 && allTokensWithTrades.length > 0) {
+    console.log(`💡 No active tokens found. Candles will be generated on-demand when requested.`)
+  }
 
   let totalCandles = 0
   let processedTokens = 0
