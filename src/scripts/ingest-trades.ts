@@ -91,6 +91,21 @@ async function processTrade(tradeData: TradeCreatedEvent) {
     const baseAmount = new Decimal(tradeData.token_amount?.toString() || '0')
     const timestamp = BigInt((tradeData.timestamp || Date.now() / 1000) * 1000) // Convert to milliseconds
     
+    // Get SOL price for conversions (need this before price calculations)
+    let solPriceUsd = 160
+    try {
+      const latestSolPrice = await prisma.solPrice.findFirst({
+        orderBy: {
+          timestamp: 'desc',
+        },
+      })
+      if (latestSolPrice) {
+        solPriceUsd = Number(latestSolPrice.priceUsd)
+      }
+    } catch (error) {
+      // Use fallback if DB query fails
+    }
+    
     // Calculate price - prioritize market cap calculation as it's more accurate
     let priceSol: Decimal
     let priceUsdFromMarketCap: Decimal | null = null
@@ -111,22 +126,6 @@ async function processTrade(tradeData: TradeCreatedEvent) {
     } else {
       // Fallback: price = sol_amount / token_amount
       priceSol = baseAmount.gt(0) ? amountSol.div(baseAmount) : new Decimal(0)
-    }
-
-    // Calculate USD price
-    // Try to get SOL price from DB, fallback to estimated $160
-    let solPriceUsd = 160
-    try {
-      const latestSolPrice = await prisma.solPrice.findFirst({
-        orderBy: {
-          timestamp: 'desc',
-        },
-      })
-      if (latestSolPrice) {
-        solPriceUsd = Number(latestSolPrice.priceUsd)
-      }
-    } catch (error) {
-      // Use fallback if DB query fails
     }
 
     let priceUsd: Decimal
