@@ -76,10 +76,16 @@ setInterval(flushTradeBuffer, FLUSH_INTERVAL)
 
 async function processTrade(tradeData: TradeCreatedEvent) {
   try {
+    // Validate required fields
+    if (!tradeData.mint || !tradeData.signature || !tradeData.symbol || !tradeData.name) {
+      console.warn('⚠️ Skipping trade with missing required fields:', tradeData)
+      return
+    }
+
     // Convert amounts to proper decimals
-    const amountSol = new Decimal(tradeData.sol_amount.toString())
-    const baseAmount = new Decimal(tradeData.token_amount.toString())
-    const timestamp = BigInt(tradeData.timestamp * 1000) // Convert to milliseconds
+    const amountSol = new Decimal(tradeData.sol_amount?.toString() || '0')
+    const baseAmount = new Decimal(tradeData.token_amount?.toString() || '0')
+    const timestamp = BigInt((tradeData.timestamp || Date.now() / 1000) * 1000) // Convert to milliseconds
     
     // Calculate price if not provided
     let priceSol: Decimal
@@ -129,16 +135,16 @@ async function processTrade(tradeData: TradeCreatedEvent) {
             }
           : undefined,
       },
-      create: {
-        mintAddress: tradeData.mint,
-        symbol: tradeData.symbol,
-        name: tradeData.name,
-        imageUri: tradeData.image_uri || null,
-        twitter: tradeData.twitter || null,
-        telegram: tradeData.telegram || null,
-        creatorAddress: tradeData.creator,
-        createdAt: BigInt(tradeData.created_timestamp || tradeData.timestamp * 1000),
-        totalSupply: new Decimal(tradeData.total_supply.toString()),
+        create: {
+          mintAddress: tradeData.mint,
+          symbol: tradeData.symbol || 'UNKNOWN',
+          name: tradeData.name || 'Unknown Token',
+          imageUri: tradeData.image_uri || null,
+          twitter: tradeData.twitter || null,
+          telegram: tradeData.telegram || null,
+          creatorAddress: tradeData.creator || 'unknown',
+          createdAt: BigInt((tradeData.created_timestamp || tradeData.timestamp || Date.now() / 1000) * 1000),
+          totalSupply: new Decimal(tradeData.total_supply?.toString() || '0'),
         price: tradeData.last_trade_timestamp
           ? {
               create: {
@@ -165,6 +171,12 @@ async function processTrade(tradeData: TradeCreatedEvent) {
 
     if (!token) {
       console.error(`Token ${tradeData.mint} not found after upsert`)
+      return
+    }
+
+    // Validate trade data before adding to buffer
+    if (!tradeData.user || amountSol.lte(0) || baseAmount.lte(0)) {
+      console.warn(`⚠️ Skipping invalid trade: ${tradeData.signature}`)
       return
     }
 
