@@ -113,8 +113,8 @@ export async function GET(
 ) {
   try {
     const searchParams = request.nextUrl.searchParams
-    const interval = searchParams.get('interval') || '1h'
-    const limit = parseInt(searchParams.get('limit') || '100')
+    const interval = searchParams.get('interval') || '1m'
+    const limit = parseInt(searchParams.get('limit') || '500')
     const startTime = searchParams.get('start_time')
     const endTime = searchParams.get('end_time')
     const simulationTime = searchParams.get('simulation_time')

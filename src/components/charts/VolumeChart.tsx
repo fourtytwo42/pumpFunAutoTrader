@@ -23,7 +23,7 @@ interface VolumeChartProps {
   height?: number
 }
 
-export default function VolumeChart({ tokenAddress, interval = '1h', height = 200 }: VolumeChartProps) {
+export default function VolumeChart({ tokenAddress, interval = '1m', height = 200 }: VolumeChartProps) {
   const [data, setData] = useState<CandleData[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -34,7 +34,25 @@ export default function VolumeChart({ tokenAddress, interval = '1h', height = 20
   const fetchChartData = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/tokens/${tokenAddress}/candles?interval=${interval}&limit=100`)
+      let simulationTime: string | null = null
+      try {
+        const simResponse = await fetch('/api/simulation/time')
+        if (simResponse.ok) {
+          const simData = await simResponse.json()
+          if (simData?.currentTimestamp) {
+            simulationTime = simData.currentTimestamp.toString()
+          }
+        }
+      } catch (e) {
+        // ignore simulation fetch issues
+      }
+
+      let url = `/api/tokens/${tokenAddress}/candles?interval=${interval}&limit=500`
+      if (simulationTime) {
+        url += `&simulation_time=${simulationTime}`
+      }
+
+      const response = await fetch(url)
       if (response.ok) {
         const result = await response.json()
         setData(result.candles || [])

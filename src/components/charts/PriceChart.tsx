@@ -29,7 +29,7 @@ interface PriceChartProps {
   height?: number
 }
 
-export default function PriceChart({ tokenAddress, interval = '1h', height = 300 }: PriceChartProps) {
+export default function PriceChart({ tokenAddress, interval = '1m', height = 300 }: PriceChartProps) {
   const [data, setData] = useState<CandleData[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -57,7 +57,7 @@ export default function PriceChart({ tokenAddress, interval = '1h', height = 300
       }
 
       // Build URL with simulation time if available
-      let url = `/api/tokens/${tokenAddress}/candles?interval=${interval}&limit=100`
+      let url = `/api/tokens/${tokenAddress}/candles?interval=${interval}&limit=500`
       if (simulationTime) {
         url += `&simulation_time=${simulationTime}`
       }
