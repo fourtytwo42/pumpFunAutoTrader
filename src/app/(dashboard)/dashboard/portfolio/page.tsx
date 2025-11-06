@@ -16,7 +16,6 @@ import {
   TableHead,
   TableRow,
   Typography,
-  Button,
 } from '@mui/material'
 import { useEventStream } from '@/hooks/useEventStream'
 
@@ -105,9 +104,6 @@ export default function PortfolioPage() {
               Please try again later.
             </Typography>
           ) : null}
-          <Button variant="contained" href="/dashboard/wallet" sx={{ mt: 3 }}>
-            Open Wallet Setup
-          </Button>
         </Paper>
       </Container>
     )

@@ -43,6 +43,22 @@ export async function POST(request: NextRequest) {
     const label = normalizeLabel(body?.label)
     const pubkey = normalizePubkey(body?.pubkey)
 
+    const existing = await prisma.wallet.findFirst({
+      where: { userId: session.user.id },
+      orderBy: { createdAt: 'asc' },
+    })
+
+    if (existing) {
+      const updated = await prisma.wallet.update({
+        where: { id: existing.id },
+        data: {
+          label,
+        },
+      })
+
+      return NextResponse.json(updated)
+    }
+
     const wallet = await prisma.wallet.create({
       data: {
         label,

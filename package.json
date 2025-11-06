@@ -25,6 +25,7 @@
     "fetch:sol-price": "tsx src/scripts/fetch-sol-price.ts",
     "fix:lamports": "tsx src/scripts/fix-lamports-trades.ts",
     "backfill:prices": "tsx src/scripts/backfill-token-prices.ts",
+    "clean:wallets": "tsx src/scripts/cleanup-wallets.ts",
     "pm2:start": "pm2 start ecosystem.config.js --only autotrader-web",
     "pm2:start:all": "pm2 start ecosystem.config.js",
     "pm2:start:ingest": "pm2 start ecosystem.config.js --only autotrader-ingest-trades",

@@ -32,16 +32,11 @@ export default async function DashboardPage() {
             Dashboard
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            Configure a wallet to begin monitoring activity.
+            Setting up your simulation wallet...
           </Typography>
-          <Button
-            component={Link}
-            href="/dashboard/wallet"
-            variant="contained"
-            sx={{ mt: 3 }}
-          >
-            Open Wallet Setup
-          </Button>
+          <Typography variant="body2" color="text.secondary">
+            This usually takes just a moment. If the page does not refresh automatically, try reloading.
+          </Typography>
         </Box>
       </Container>
     )
