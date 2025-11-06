@@ -22,12 +22,15 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  ToggleButton,
+  ToggleButtonGroup,
 } from "@mui/material";
 import { ShoppingCart, Sell } from "@mui/icons-material";
 import PriceChart from "@/components/charts/PriceChart";
 import VolumeChart from "@/components/charts/VolumeChart";
 
 const TIME_BUCKETS = ["5m", "1h", "6h", "24h"] as const;
+const CANDLE_INTERVALS = ['1m', '5m', '1h', '6h', '24h'] as const;
 
 interface MarketActivityBucket {
   numTxs?: number;
@@ -189,6 +192,13 @@ export default function TokenDetailPage() {
   const [sellAmount, setSellAmount] = useState("");
   const [trading, setTrading] = useState(false);
   const [tradeSuccess, setTradeSuccess] = useState("");
+  const [candleInterval, setCandleInterval] = useState<(typeof CANDLE_INTERVALS)[number]>('1m');
+  const handleCandleIntervalChange = (_: unknown, value: (typeof CANDLE_INTERVALS)[number] | null) => {
+    if (value) {
+      setCandleInterval(value);
+    }
+  };
+
 
   useEffect(() => {
     fetchToken();
@@ -419,9 +429,34 @@ export default function TokenDetailPage() {
       <Grid container spacing={3}>
         <Grid item xs={12} md={8}>
           <Paper sx={{ p: 3, mb: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Market Snapshot
-            </Typography>
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: { xs: 'column', sm: 'row' },
+                alignItems: { xs: 'flex-start', sm: 'center' },
+                justifyContent: 'space-between',
+                gap: 1,
+                mb: 2,
+              }}
+            >
+              <Typography variant="h6" gutterBottom sx={{ mb: { xs: 1, sm: 0 } }}>
+                Market Snapshot
+              </Typography>
+              <ToggleButtonGroup
+                value={candleInterval}
+                exclusive
+                size="small"
+                onChange={handleCandleIntervalChange}
+                color="primary"
+                aria-label="candle interval"
+              >
+                {CANDLE_INTERVALS.map((option) => (
+                  <ToggleButton key={option} value={option} aria-label={`${option} interval`}>
+                    {option}
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+            </Box>
             <Grid container spacing={2} sx={{ mb: 3 }}>
               <Grid item xs={12} sm={6} md={3}>
                 <Typography variant="body2" color="text.secondary">
@@ -487,10 +522,10 @@ export default function TokenDetailPage() {
               </Grid>
             </Grid>
             <Box sx={{ mb: 2 }}>
-              <PriceChart tokenAddress={token.mintAddress} height={300} />
+              <PriceChart tokenAddress={token.mintAddress} interval={candleInterval} height={300} />
             </Box>
             <Box>
-              <VolumeChart tokenAddress={token.mintAddress} height={150} />
+              <VolumeChart tokenAddress={token.mintAddress} interval={candleInterval} height={150} />
             </Box>
           </Paper>
 
