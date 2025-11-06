@@ -19,13 +19,16 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       walletId: wallet.id,
-      equityUsd: metrics.realizedUsd + metrics.unrealizedUsd,
+      balanceSol: metrics.balanceSol,
+      balanceUsd: metrics.balanceUsd,
+      equityUsd: metrics.equityUsd,
       portfolioValueSol: metrics.portfolioValueSol,
+      portfolioValueUsd: metrics.portfolioValueUsd,
       realizedUsd: metrics.realizedUsd,
       unrealizedUsd: metrics.unrealizedUsd,
       solUsd: metrics.solUsd,
       totalTrades: metrics.totalTrades,
-      positions: wallet.positions.length,
+      positions: snapshot.positions.length,
       openOrders: metrics.openOrders,
       updatedAt: new Date().toISOString(),
     })

@@ -1,56 +1,64 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getLatestSolPrice, getTokenUsdPrice } from '@/lib/metrics'
+import { getLatestSolPrice } from '@/lib/metrics'
+import { requireAuth } from '@/lib/middleware'
+import { getDefaultWallet } from '@/lib/dashboard'
+import { getUserBalance } from '@/lib/trading'
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = request.nextUrl
-    const walletId = searchParams.get('walletId')
-    const wallet = walletId
-      ? await prisma.wallet.findUnique({
-          where: { id: walletId },
-          include: {
-            positions: true,
-          },
-        })
-      : await prisma.wallet.findFirst({
-          include: {
-            positions: true,
-          },
-        })
-
-    if (!wallet) {
-      return NextResponse.json(
-        { error: 'Wallet not found' },
-        { status: 404 }
-      )
+    const session = await requireAuth({ redirectOnFail: false })
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const solUsd = (await getLatestSolPrice()) ?? 0
+    const { searchParams } = request.nextUrl
+    const walletId = searchParams.get('walletId') ?? undefined
+    const wallet = walletId
+      ? await prisma.wallet.findUnique({ where: { id: walletId, userId: session.user.id } })
+      : await getDefaultWallet(session.user.id)
 
-    const positions = []
-    let unrealizedUsd = 0
+    if (!wallet) {
+      return NextResponse.json({ error: 'Wallet not found' }, { status: 404 })
+    }
 
-    for (const position of wallet.positions) {
-      const priceUsd = (await getTokenUsdPrice(position.tokenMint)) ?? 0
-      const qty = Number(position.qty)
-      const avgCost = Number(position.avgCostUsd)
-      const mtmUsd = qty * priceUsd
-      const costUsd = qty * avgCost
+    const [portfolio, solUsd, balanceSol] = await Promise.all([
+      prisma.userPortfolio.findMany({
+        where: { userId: session.user.id },
+        include: {
+          token: {
+            include: {
+              price: true,
+            },
+          },
+        },
+        orderBy: { updatedAt: 'desc' },
+      }),
+      getLatestSolPrice().then((value) => value ?? 0),
+      getUserBalance(session.user.id),
+    ])
+
+    const positions = portfolio.map((position) => {
+      const qty = Number(position.amount)
+      const avgPriceSol = Number(position.avgBuyPrice)
+      const priceSol = position.token.price ? Number(position.token.price.priceSol) : 0
+      const priceUsd = position.token.price ? Number(position.token.price.priceUsd) : priceSol * solUsd
+      const mtmUsd = priceUsd * qty
+      const costUsd = avgPriceSol * solUsd * qty
       const pnlUsd = mtmUsd - costUsd
-
-      unrealizedUsd += pnlUsd
-
-      positions.push({
-        mint: position.tokenMint,
+      return {
+        mint: position.token.mintAddress,
+        symbol: position.token.symbol,
         qty,
-        avgCostUsd: avgCost,
+        avgCostUsd: avgPriceSol * solUsd,
         priceUsd,
         mtmUsd,
         pnlUsd,
         pnlPct: costUsd > 0 ? (pnlUsd / costUsd) * 100 : 0,
-      })
-    }
+      }
+    })
+
+    const unrealizedUsd = positions.reduce((sum, pos) => sum + pos.pnlUsd, 0)
 
     const realizedLedger = await prisma.pnLLedger.aggregate({
       _sum: { amountUsd: true },
@@ -63,11 +71,15 @@ export async function GET(request: NextRequest) {
     })
 
     const realizedUsd = Number(realizedLedger._sum.amountUsd ?? 0)
-    const equityUsd = realizedUsd + unrealizedUsd
+    const balanceUsd = solUsd > 0 ? balanceSol * solUsd : 0
+    const mtmTotalUsd = positions.reduce((sum, pos) => sum + pos.mtmUsd, 0)
+    const equityUsd = balanceUsd + mtmTotalUsd
 
     return NextResponse.json({
       walletId: wallet.id,
       solUsd,
+      balanceSol,
+      balanceUsd,
       equityUsd,
       realizedUsd,
       unrealizedUsd,

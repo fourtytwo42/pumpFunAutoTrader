@@ -34,14 +34,20 @@ export async function GET() {
   ])
 
   if (!wallet) {
+    const usdBalance = solPrice ? balanceSol * solPrice : 0
     return NextResponse.json({
+      wallet: null,
+      walletId: null,
+      solBalance: balanceSol,
+      usdBalance,
       balanceSol,
-      balanceUsd: solPrice ? balanceSol * solPrice : null,
+      balanceUsd: usdBalance,
+      solUsdPrice: solPrice ?? 0,
       transactions: [],
     })
   }
 
-  const balanceUsd = solPrice ? balanceSol * solPrice : null
+  const balanceUsd = solPrice ? balanceSol * solPrice : 0
 
   const transactions = trades.map((trade) => ({
     id: trade.id.toString(),
@@ -55,8 +61,17 @@ export async function GET() {
   }))
 
   return NextResponse.json({
+    walletId: wallet.id,
+    wallet: {
+      id: wallet.id,
+      label: wallet.label,
+      pubkey: wallet.pubkey,
+    },
+    solBalance: balanceSol,
+    usdBalance: balanceUsd,
     balanceSol,
     balanceUsd,
+    solUsdPrice: solPrice ?? 0,
     transactions,
   })
 }

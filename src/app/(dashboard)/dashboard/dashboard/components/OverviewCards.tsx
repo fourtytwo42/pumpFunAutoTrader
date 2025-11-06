@@ -14,12 +14,15 @@ interface OverviewSnapshot {
   walletId: string
   equityUsd: number
   portfolioValueSol: number
+  portfolioValueUsd?: number
   realizedUsd: number
   unrealizedUsd: number
   solUsd: number
   totalTrades: number
   positions: number
   openOrders: number
+  balanceSol?: number | null
+  balanceUsd?: number | null
 }
 
 interface OverviewCardsProps {
@@ -85,9 +88,20 @@ export function OverviewCards({ initial }: OverviewCardsProps) {
               </Box>
               <AccountBalanceWallet sx={{ fontSize: 40, color: 'primary.main', opacity: 0.7 }} />
             </Box>
-            <Typography variant="caption" color="text.secondary">
-              SOL price ${metrics.solUsd.toFixed(2)}
+            <Typography variant="caption" color="text.secondary" display="block">
+              SOL ${metrics.solUsd.toFixed(2)}
             </Typography>
+            {metrics.portfolioValueUsd != null ? (
+              <Typography variant="caption" color="text.secondary" display="block">
+                ≈ ${metrics.portfolioValueUsd.toFixed(2)}
+              </Typography>
+            ) : null}
+            {metrics.balanceSol != null ? (
+              <Typography variant="caption" color="text.secondary" display="block">
+                Wallet {metrics.balanceSol.toFixed(2)} SOL
+                {metrics.balanceUsd != null ? ` (~$${metrics.balanceUsd.toFixed(2)})` : ''}
+              </Typography>
+            ) : null}
           </CardContent>
         </Card>
       </Grid>

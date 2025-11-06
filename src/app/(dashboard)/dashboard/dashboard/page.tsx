@@ -9,7 +9,6 @@ import {
   Link,
   Avatar,
   Stack,
-  Chip,
   Divider,
 } from '@mui/material'
 import { TrendingUp } from '@mui/icons-material'
@@ -48,13 +47,26 @@ export default async function DashboardPage() {
     )
   }
 
-  const { wallet, solUsd, portfolioValueSol, realizedUsd, unrealizedUsd, totalTrades, totalTokens, openOrders } =
-    snapshot
+  const {
+    wallet,
+    solUsd,
+    portfolioValueSol,
+    portfolioValueUsd,
+    realizedUsd,
+    unrealizedUsd,
+    totalTrades,
+    totalTokens,
+    openOrders,
+    balanceSol,
+    balanceUsd,
+    positions,
+  } = snapshot
 
-  const [initialOrdersRaw, initialTradesRaw, initialEventsRaw, recentPositions] = await Promise.all([
+  const [initialOrdersRaw, initialTradesRaw, initialEventsRaw] = await Promise.all([
     prisma.order.findMany({
       where: {
         walletId: wallet.id,
+        userId: session.user.id,
         status: {
           in: ['pending', 'open', 'accepted', 'queued'],
         },
@@ -72,30 +84,23 @@ export default async function DashboardPage() {
       orderBy: { ts: 'desc' },
       take: 8,
     }),
-    prisma.position.findMany({
-      where: { walletId: wallet.id },
-      include: {
-        token: {
-          include: {
-            price: true,
-          },
-        },
-      },
-      orderBy: { updatedAt: 'desc' },
-      take: 5,
-    }),
   ])
+
+  const recentPositions = positions.slice(0, 5)
 
   const overviewInitial = {
     walletId: wallet.id,
-    equityUsd: realizedUsd + unrealizedUsd,
+    equityUsd: snapshot.equityUsd,
     portfolioValueSol,
+    portfolioValueUsd,
     realizedUsd,
     unrealizedUsd,
     solUsd,
     totalTrades,
-    positions: wallet.positions.length,
+    positions: positions.length,
     openOrders,
+    balanceSol,
+    balanceUsd,
   }
 
   const initialOrders = initialOrdersRaw.map((order) => ({
@@ -105,6 +110,7 @@ export default async function DashboardPage() {
     status: order.status,
     qtyTokens: order.qtyTokens ? Number(order.qtyTokens) : null,
     qtySol: order.qtySol ? Number(order.qtySol) : null,
+    limitPriceSol: order.limitPriceSol ? Number(order.limitPriceSol) : null,
     createdAt: order.createdAt.toISOString(),
     updatedAt: order.updatedAt.toISOString(),
   }))
@@ -137,7 +143,7 @@ export default async function DashboardPage() {
           Dashboard
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          Wallet: {wallet.label ?? wallet.pubkey}
+          Wallet: {wallet.label ?? wallet.pubkey} · Balance: {balanceSol.toFixed(2)} SOL
         </Typography>
       </Box>
 
@@ -201,6 +207,17 @@ export default async function DashboardPage() {
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">
+                  Wallet Balance
+                </Typography>
+                <Typography variant="body1" fontWeight="bold">
+                  {balanceSol.toFixed(2)} SOL
+                </Typography>
+              </Box>
+              <Typography variant="caption" color="text.secondary">
+                ≈ ${balanceUsd.toFixed(2)}
+              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="body2" color="text.secondary">
                   Total Positions
                 </Typography>
                 <Typography variant="body1" fontWeight="bold">
@@ -225,10 +242,10 @@ export default async function DashboardPage() {
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">
-                  Portfolio (USD)
+                  Portfolio Value (USD)
                 </Typography>
                 <Typography variant="body1" fontWeight="bold">
-                  ${(realizedUsd + unrealizedUsd).toFixed(2)}
+                  ${portfolioValueUsd.toFixed(2)}
                 </Typography>
               </Box>
             </Box>
@@ -259,6 +276,8 @@ export default async function DashboardPage() {
                   const qty = Number(position.qty)
                   const priceSol = position.token.price ? Number(position.token.price.priceSol) : 0
                   const mtmSol = qty * priceSol
+                  const updatedDate = new Date(position.updatedAt)
+                  const symbol = position.token.symbol ?? position.tokenMint.slice(0, 4).toUpperCase()
                   return (
                     <Box
                       key={position.id}
@@ -273,13 +292,13 @@ export default async function DashboardPage() {
                       }}
                     >
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Avatar>{position.tokenMint.slice(0, 2).toUpperCase()}</Avatar>
+                        <Avatar>{symbol.slice(0, 2).toUpperCase()}</Avatar>
                         <Box>
                           <Typography variant="body2" fontWeight="bold">
-                            {position.token.name ?? position.tokenMint}
+                            {position.token.name ?? symbol}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            {qty.toFixed(2)} {position.token.symbol}
+                            {qty.toFixed(2)} {symbol}
                           </Typography>
                         </Box>
                       </Box>
@@ -288,7 +307,7 @@ export default async function DashboardPage() {
                           {mtmSol.toFixed(4)} SOL
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                          Updated {formatDistanceToNow(position.updatedAt, { addSuffix: true })}
+                          Updated {formatDistanceToNow(updatedDate, { addSuffix: true })}
                         </Typography>
                       </Box>
                     </Box>

@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { eventBus } from '@/lib/events'
+import { requireAuth } from '@/lib/middleware'
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await requireAuth({ redirectOnFail: false })
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     const params = request.nextUrl.searchParams
     const walletId = params.get('walletId')
     const rawStatus = params.get('status')
@@ -30,6 +35,7 @@ export async function GET(request: NextRequest) {
     const orders = await prisma.order.findMany({
       where: {
         walletId,
+        userId: session.user.id,
         ...(statusFilter ? { status: { in: statusFilter } } : {}),
       },
       include: {
@@ -74,8 +80,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await requireAuth({ redirectOnFail: false })
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     const body = await request.json()
-    const { walletId, mint, side, qtyTokens, qtySol, slippageBps, limitSol, userId } = body || {}
+    const { walletId, mint, side, qtyTokens, qtySol, slippageBps, limitSol } = body || {}
 
     if (!walletId || !mint || !side) {
       return NextResponse.json({ error: 'walletId, mint and side are required' }, { status: 400 })
@@ -91,7 +101,7 @@ export async function POST(request: NextRequest) {
         qtySol: qtySol != null ? qtySol : undefined,
         limitPriceSol: limitSol != null ? limitSol : undefined,
         slippageBps: slippageBps ?? null,
-        userId: userId ?? null,
+        userId: session.user.id,
       },
     })
 

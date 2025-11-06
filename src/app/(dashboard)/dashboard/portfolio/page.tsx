@@ -22,6 +22,7 @@ import { useEventStream } from '@/hooks/useEventStream'
 
 interface SnapshotPosition {
   mint: string
+  symbol?: string | null
   qty: number
   avgCostUsd: number
   priceUsd: number
@@ -32,6 +33,9 @@ interface SnapshotPosition {
 
 interface PortfolioSnapshot {
   walletId: string
+  solUsd: number
+  balanceSol: number
+  balanceUsd: number
   equityUsd: number
   realizedUsd: number
   unrealizedUsd: number
@@ -118,6 +122,18 @@ export default function PortfolioPage() {
       <Box sx={{ display: 'flex', gap: 2, mb: 4, flexWrap: 'wrap' }}>
         <Paper sx={{ p: 3, flex: 1, minWidth: 200 }}>
           <Typography variant="h6" gutterBottom color="text.secondary">
+            Wallet Balance
+          </Typography>
+          <Typography variant="h4" color="primary">
+            {snapshot.balanceSol.toFixed(2)} SOL
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            ≈ ${snapshot.balanceUsd.toFixed(2)} · SOL ${snapshot.solUsd.toFixed(2)}
+          </Typography>
+        </Paper>
+
+        <Paper sx={{ p: 3, flex: 1, minWidth: 200 }}>
+          <Typography variant="h6" gutterBottom color="text.secondary">
             Equity (USD)
           </Typography>
           <Typography variant="h4" color="primary">
@@ -175,10 +191,15 @@ export default function PortfolioPage() {
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Avatar sx={{ width: 32, height: 32 }}>
-                        {position.mint.slice(0, 2).toUpperCase()}
+                        {(position.symbol ?? position.mint).slice(0, 2).toUpperCase()}
                       </Avatar>
                       <Box>
-                        <Typography variant="body2">{position.mint}</Typography>
+                        <Typography variant="body2" fontWeight="bold">
+                          {position.symbol ?? position.mint.slice(0, 4).toUpperCase()}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {position.mint}
+                        </Typography>
                       </Box>
                     </Box>
                   </TableCell>
