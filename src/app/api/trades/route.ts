@@ -7,7 +7,8 @@ export async function GET(request: NextRequest) {
     const walletId = params.get('walletId')
     const mint = params.get('mint')
     const cursor = params.get('cursor')
-    const limit = Number(params.get('limit') ?? '50')
+    const limitParam = Number(params.get('limit') ?? '50')
+    const limit = Math.min(Math.max(limitParam, 1), 100)
 
     if (!walletId) {
       return NextResponse.json({ error: 'walletId is required' }, { status: 400 })

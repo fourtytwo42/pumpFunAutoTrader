@@ -24,9 +24,32 @@ export async function getDefaultWallet() {
   }
 }
 
-export async function getDashboardSnapshot() {
+export async function getDashboardSnapshot(walletId?: string) {
   try {
-    const wallet = await getDefaultWallet()
+    let wallet = null
+
+    if (walletId) {
+      try {
+        wallet = await prisma.wallet.findUnique({
+          where: { id: walletId },
+          include: {
+            positions: true,
+          },
+        })
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2021') {
+          console.warn('Dashboard wallet lookup skipped: table missing', {
+            code: error.code,
+            meta: error.meta,
+          })
+          return null
+        }
+        throw error
+      }
+    } else {
+      wallet = await getDefaultWallet()
+    }
+
     if (!wallet) {
       return null
     }
@@ -61,6 +84,15 @@ export async function getDashboardSnapshot() {
       where: { walletId: wallet.id },
     })
 
+    const openOrders = await prisma.order.count({
+      where: {
+        walletId: wallet.id,
+        status: {
+          in: ['pending', 'open', 'accepted', 'queued'],
+        },
+      },
+    })
+
     return {
       wallet,
       solUsd,
@@ -69,6 +101,7 @@ export async function getDashboardSnapshot() {
       unrealizedUsd,
       totalTrades,
       totalTokens,
+      openOrders,
     }
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2021') {

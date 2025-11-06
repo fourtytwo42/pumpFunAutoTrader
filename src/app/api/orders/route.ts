@@ -6,16 +6,31 @@ export async function GET(request: NextRequest) {
   try {
     const params = request.nextUrl.searchParams
     const walletId = params.get('walletId')
-    const status = params.get('status')
+    const rawStatus = params.get('status')
+    const limitParam = params.get('limit')
 
     if (!walletId) {
       return NextResponse.json({ error: 'walletId is required' }, { status: 400 })
     }
 
+    let statusFilter: string[] | undefined
+    if (rawStatus) {
+      if (rawStatus === 'active') {
+        statusFilter = ['pending', 'open', 'accepted', 'queued']
+      } else {
+        statusFilter = rawStatus
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean)
+      }
+    }
+
+    const limit = Math.min(Number(limitParam ?? '50') || 50, 100)
+
     const orders = await prisma.order.findMany({
       where: {
         walletId,
-        status: status ?? undefined,
+        ...(statusFilter ? { status: { in: statusFilter } } : {}),
       },
       include: {
         executions: {
@@ -23,6 +38,7 @@ export async function GET(request: NextRequest) {
         },
       },
       orderBy: { createdAt: 'desc' },
+      take: limit,
     })
 
     return NextResponse.json({
@@ -80,7 +96,7 @@ export async function POST(request: NextRequest) {
 
     eventBus.emitEvent({
       type: 'order:update',
-      payload: { orderId: order.id, status: order.status },
+      payload: { walletId, orderId: order.id, status: order.status },
     })
 
     return NextResponse.json({ ok: true, order })

@@ -3,31 +3,28 @@ import {
   Container,
   Typography,
   Box,
-  Paper,
   Grid,
-  Card,
-  CardContent,
+  Paper,
   Button,
   Link,
+  Avatar,
+  Stack,
+  Chip,
+  Divider,
 } from '@mui/material'
-import {
-  TrendingUp,
-  AccountBalanceWallet,
-  Science,
-  ShowChart,
-  Timeline,
-} from '@mui/icons-material'
+import { TrendingUp } from '@mui/icons-material'
 import { prisma } from '@/lib/db'
 import { getDashboardSnapshot } from '@/lib/dashboard'
+import { OverviewCards } from './components/OverviewCards'
+import { ActiveOrdersCard } from './components/ActiveOrdersCard'
+import { RecentTradesCard } from './components/RecentTradesCard'
+import { AgentEventFeed } from './components/AgentEventFeed'
+import { formatDistanceToNow } from 'date-fns'
 
 export default async function DashboardPage() {
-  const session = await requireAuth()
+  await requireAuth()
+
   const snapshot = await getDashboardSnapshot()
-
-  if (!session) {
-    return null
-  }
-
   if (!snapshot) {
     return (
       <Container maxWidth="lg">
@@ -36,31 +33,94 @@ export default async function DashboardPage() {
             Dashboard
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            Welcome, {session.user.username}! Configure a wallet to begin monitoring activity.
+            Configure a wallet to begin monitoring activity.
           </Typography>
         </Box>
       </Container>
     )
   }
 
-  const { wallet, solUsd, portfolioValueSol, realizedUsd, unrealizedUsd, totalTrades, totalTokens } =
+  const { wallet, solUsd, portfolioValueSol, realizedUsd, unrealizedUsd, totalTrades, totalTokens, openOrders } =
     snapshot
 
-  const recentPositions = await prisma.position.findMany({
-    where: { walletId: wallet.id },
-    include: {
-      token: {
-        include: {
-          price: true,
+  const [initialOrdersRaw, initialTradesRaw, initialEventsRaw, recentPositions] = await Promise.all([
+    prisma.order.findMany({
+      where: {
+        walletId: wallet.id,
+        status: {
+          in: ['pending', 'open', 'accepted', 'queued'],
         },
       },
-    },
-    orderBy: { updatedAt: 'desc' },
-    take: 5,
-  })
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    }),
+    prisma.tradeTape.findMany({
+      where: { walletId: wallet.id },
+      orderBy: { ts: 'desc' },
+      take: 5,
+    }),
+    prisma.agentEvent.findMany({
+      where: { walletId: wallet.id },
+      orderBy: { ts: 'desc' },
+      take: 8,
+    }),
+    prisma.position.findMany({
+      where: { walletId: wallet.id },
+      include: {
+        token: {
+          include: {
+            price: true,
+          },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 5,
+    }),
+  ])
 
-  const formatCurrency = (value: number) =>
-    `${value >= 0 ? '+' : ''}${value.toFixed(2)}`
+  const overviewInitial = {
+    walletId: wallet.id,
+    equityUsd: realizedUsd + unrealizedUsd,
+    portfolioValueSol,
+    realizedUsd,
+    unrealizedUsd,
+    solUsd,
+    totalTrades,
+    positions: wallet.positions.length,
+    openOrders,
+  }
+
+  const initialOrders = initialOrdersRaw.map((order) => ({
+    id: order.id,
+    tokenMint: order.tokenMint,
+    side: order.side,
+    status: order.status,
+    qtyTokens: order.qtyTokens ? Number(order.qtyTokens) : null,
+    qtySol: order.qtySol ? Number(order.qtySol) : null,
+    createdAt: order.createdAt.toISOString(),
+    updatedAt: order.updatedAt.toISOString(),
+  }))
+
+  const initialTrades = initialTradesRaw.map((trade) => ({
+    id: trade.id,
+    ts: trade.ts.toISOString(),
+    tokenMint: trade.tokenMint,
+    side: trade.isBuy ? 'buy' as const : 'sell' as const,
+    baseAmount: Number(trade.baseAmount),
+    quoteSol: Number(trade.quoteSol),
+    priceUsd: trade.priceUsd ? Number(trade.priceUsd) : null,
+    priceSol: trade.priceSol ? Number(trade.priceSol) : null,
+    txSig: trade.txSig,
+  }))
+
+  const initialEvents = initialEventsRaw.map((event) => ({
+    id: event.id,
+    ts: event.ts.toISOString(),
+    kind: event.kind,
+    level: event.level,
+    tokenMint: event.tokenMint,
+    rationale: event.rationale,
+  }))
 
   return (
     <Container maxWidth="lg">
@@ -69,141 +129,58 @@ export default async function DashboardPage() {
           Dashboard
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          Welcome, {session.user.username}!
+          Wallet: {wallet.label ?? wallet.pubkey}
         </Typography>
       </Box>
 
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box>
-                  <Typography variant="body2" color="text.secondary" gutterBottom>
-                    Portfolio (SOL)
-                  </Typography>
-                  <Typography variant="h4" color="primary">
-                    {portfolioValueSol.toFixed(3)} SOL
-                  </Typography>
-                </Box>
-                <AccountBalanceWallet sx={{ fontSize: 40, color: 'primary.main', opacity: 0.7 }} />
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
+      <OverviewCards initial={overviewInitial} />
 
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box>
-                  <Typography variant="body2" color="text.secondary" gutterBottom>
-                    Realized P/L
-                  </Typography>
-                  <Typography
-                    variant="h4"
-                    color={realizedUsd >= 0 ? 'success.main' : 'error.main'}
-                  >
-                    ${formatCurrency(realizedUsd)}
-                  </Typography>
-                </Box>
-                <TrendingUp
-                  sx={{
-                    fontSize: 40,
-                    color: realizedUsd >= 0 ? 'success.main' : 'error.main',
-                    opacity: 0.7,
-                  }}
-                />
-              </Box>
-            </CardContent>
-          </Card>
+      <Grid container spacing={3} sx={{ mb: 3 }}>
+        <Grid item xs={12} lg={8}>
+          <ActiveOrdersCard walletId={wallet.id} initialOrders={initialOrders} />
         </Grid>
-
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box>
-                  <Typography variant="body2" color="text.secondary" gutterBottom>
-                    Unrealized P/L
-                  </Typography>
-                  <Typography
-                    variant="h4"
-                    color={unrealizedUsd >= 0 ? 'success.main' : 'error.main'}
-                  >
-                    ${formatCurrency(unrealizedUsd)}
-                  </Typography>
-                </Box>
-                <ShowChart sx={{ fontSize: 40, color: 'primary.main', opacity: 0.7 }} />
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box>
-                  <Typography variant="body2" color="text.secondary" gutterBottom>
-                    Active Positions
-                  </Typography>
-                  <Typography variant="h4">{totalTokens}</Typography>
-                </Box>
-                <Timeline sx={{ fontSize: 40, color: 'primary.main', opacity: 0.7 }} />
-              </Box>
-            </CardContent>
-          </Card>
+        <Grid item xs={12} lg={4}>
+          <AgentEventFeed walletId={wallet.id} initialEvents={initialEvents} />
         </Grid>
       </Grid>
 
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={4}>
-          <Card component={Link} href="/dashboard/tokens" sx={{ textDecoration: 'none', '&:hover': { boxShadow: 4 } }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <TrendingUp sx={{ fontSize: 48, color: 'primary.main' }} />
-                <Box>
-                  <Typography variant="h6">Browse Tokens</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Explore discovery watchlist
-                  </Typography>
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
+      <Grid container spacing={3} sx={{ mb: 3 }}>
+        <Grid item xs={12} lg={8}>
+          <RecentTradesCard walletId={wallet.id} initialTrades={initialTrades} />
         </Grid>
-
-        <Grid item xs={12} md={4}>
-          <Card component={Link} href="/dashboard/positions" sx={{ textDecoration: 'none', '&:hover': { boxShadow: 4 } }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <AccountBalanceWallet sx={{ fontSize: 48, color: 'primary.main' }} />
-                <Box>
-                  <Typography variant="h6">View Positions</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Drill into MTM and flows
-                  </Typography>
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} md={4}>
-          <Card component={Link} href="/dashboard/faucet" sx={{ textDecoration: 'none', '&:hover': { boxShadow: 4 } }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Science sx={{ fontSize: 48, color: 'primary.main' }} />
-                <Box>
-                  <Typography variant="h6">Risk Controls</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Configure risk limits and alerts
-                  </Typography>
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
+        <Grid item xs={12} lg={4}>
+          <Paper sx={{ p: 3, height: '100%' }}>
+            <Typography variant="h6" gutterBottom>
+              Quick Actions
+            </Typography>
+            <Stack spacing={1.5} sx={{ mt: 2 }}>
+              <Button
+                component={Link}
+                href="/dashboard/tokens"
+                variant="contained"
+                color="primary"
+              >
+                Browse Tokens
+              </Button>
+              <Button component={Link} href="/dashboard/positions" variant="outlined">
+                View Positions
+              </Button>
+              <Button component={Link} href="/dashboard/orders" variant="outlined">
+                Manage Orders
+              </Button>
+              <Button component={Link} href="/dashboard/chat" variant="outlined">
+                Open Chat
+              </Button>
+              <Button
+                component={Link}
+                href="/dashboard/alerts"
+                variant="outlined"
+                startIcon={<TrendingUp />}
+              >
+                Configure Alerts
+              </Button>
+            </Stack>
+          </Paper>
         </Grid>
       </Grid>
 
@@ -232,15 +209,29 @@ export default async function DashboardPage() {
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">
-                  SOL Price
+                  Open Orders
                 </Typography>
                 <Typography variant="body1" fontWeight="bold">
-                  ${solUsd.toFixed(2)}
+                  {openOrders}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="body2" color="text.secondary">
+                  Portfolio (USD)
+                </Typography>
+                <Typography variant="body1" fontWeight="bold">
+                  ${(realizedUsd + unrealizedUsd).toFixed(2)}
                 </Typography>
               </Box>
             </Box>
-            <Button variant="contained" fullWidth sx={{ mt: 2 }} component={Link} href="/dashboard/positions">
-              View Positions
+            <Divider sx={{ my: 2 }} />
+            <Button
+              variant="contained"
+              fullWidth
+              component={Link}
+              href="/dashboard/positions"
+            >
+              View Full Portfolio
             </Button>
           </Paper>
         </Grid>
@@ -250,13 +241,16 @@ export default async function DashboardPage() {
             <Typography variant="h6" gutterBottom>
               Recent Positions
             </Typography>
-            {recentPositions.length > 0 ? (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
+            {recentPositions.length === 0 ? (
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                No active positions yet.
+              </Typography>
+            ) : (
+              <Stack spacing={2} sx={{ mt: 2 }}>
                 {recentPositions.map((position) => {
-                  const priceSol = position.token.price ? Number(position.token.price.priceSol) : 0
                   const qty = Number(position.qty)
-                  const mtmSol = priceSol * qty
-
+                  const priceSol = position.token.price ? Number(position.token.price.priceSol) : 0
+                  const mtmSol = qty * priceSol
                   return (
                     <Box
                       key={position.id}
@@ -270,30 +264,29 @@ export default async function DashboardPage() {
                         borderRadius: 1,
                       }}
                     >
-                      <Box>
-                        <Typography variant="body1" fontWeight="bold">
-                          {position.token.name}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {qty.toFixed(2)} {position.token.symbol}
-                        </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Avatar>{position.tokenMint.slice(0, 2).toUpperCase()}</Avatar>
+                        <Box>
+                          <Typography variant="body2" fontWeight="bold">
+                            {position.token.name ?? position.tokenMint}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {qty.toFixed(2)} {position.token.symbol}
+                          </Typography>
+                        </Box>
                       </Box>
                       <Box sx={{ textAlign: 'right' }}>
                         <Typography variant="body2" color="text.secondary">
                           {mtmSol.toFixed(4)} SOL
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                          Updated {position.updatedAt.toLocaleString()}
+                          Updated {formatDistanceToNow(position.updatedAt, { addSuffix: true })}
                         </Typography>
                       </Box>
                     </Box>
                   )
                 })}
-              </Box>
-            ) : (
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                No active positions yet.
-              </Typography>
+              </Stack>
             )}
           </Paper>
         </Grid>

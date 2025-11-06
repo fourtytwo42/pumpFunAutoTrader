@@ -8,6 +8,8 @@ export async function GET(request: NextRequest) {
     const walletId = params.get('walletId') ?? undefined
     const mint = params.get('mint') ?? undefined
     const since = params.get('since')
+    const limitParam = Number(params.get('limit') ?? '50')
+    const limit = Math.min(Math.max(limitParam, 1), 200)
 
     const events = await prisma.agentEvent.findMany({
       where: {
@@ -16,7 +18,7 @@ export async function GET(request: NextRequest) {
         ts: since ? { gte: new Date(since) } : undefined,
       },
       orderBy: { ts: 'desc' },
-      take: 200,
+      take: limit,
     })
 
     return NextResponse.json({
