@@ -213,26 +213,66 @@ export default function TokensPage() {
                   }}
                   onClick={() => router.push(`/dashboard/tokens/${token.mintAddress}`)}
                 >
-                  <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                      <Avatar
-                        src={token.imageUri || undefined}
-                        sx={{ width: 40, height: 40 }}
+                  <CardContent sx={{ p: 2 }}>
+                    {/* Large token image at top */}
+                    <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+                      {token.imageUri ? (
+                        <Box
+                          component="img"
+                          src={token.imageUri}
+                          alt={token.name}
+                          sx={{
+                            width: 100,
+                            height: 100,
+                            borderRadius: '12px',
+                            objectFit: 'cover',
+                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                            border: '2px solid rgba(255, 255, 255, 0.1)',
+                            display: 'block',
+                          }}
+                          onError={(e: any) => {
+                            // Hide image and show fallback
+                            e.target.style.display = 'none'
+                            const fallback = e.target.parentElement?.querySelector('.token-fallback')
+                            if (fallback) {
+                              (fallback as HTMLElement).style.display = 'flex'
+                            }
+                          }}
+                        />
+                      ) : null}
+                      <Box
+                        className="token-fallback"
+                        sx={{
+                          width: 100,
+                          height: 100,
+                          borderRadius: '12px',
+                          backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                          border: '2px solid rgba(255, 255, 255, 0.1)',
+                          display: token.imageUri ? 'none' : 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '36px',
+                          fontWeight: 'bold',
+                          color: 'text.secondary',
+                        }}
                       >
                         {token.symbol.charAt(0)}
-                      </Avatar>
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography variant="h6" noWrap>
-                          {token.name}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" noWrap>
-                          {token.symbol}
-                        </Typography>
                       </Box>
                     </Box>
 
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="body2" color="text.secondary">
+                    {/* Token name and symbol */}
+                    <Box sx={{ textAlign: 'center', mb: 2 }}>
+                      <Typography variant="h6" noWrap sx={{ fontWeight: 'bold', mb: 0.5 }}>
+                        {token.name}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" noWrap>
+                        {token.symbol}
+                      </Typography>
+                    </Box>
+
+                    {/* Price */}
+                    <Box sx={{ mb: 2, textAlign: 'center' }}>
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
                         Price (per 1M tokens)
                       </Typography>
                       <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 'bold' }}>
@@ -241,13 +281,14 @@ export default function TokensPage() {
                           : 'N/A'}
                       </Typography>
                       {token.price && (
-                        <Typography variant="body2" color="text.secondary">
+                        <Typography variant="caption" color="text.secondary">
                           {token.price.priceSol.toFixed(8)} SOL/token
                         </Typography>
                       )}
                     </Box>
 
-                    <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+                    {/* Volume info */}
+                    <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
                       <Chip
                         label={`Buy: ${formatVolume(token.buyVolume)}`}
                         size="small"
@@ -262,7 +303,7 @@ export default function TokensPage() {
                       />
                     </Box>
 
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
                       {token.uniqueTraders} traders • Vol: {formatVolume(token.totalVolume)}
                       {token.totalVolumeSol !== undefined && token.totalVolumeSol > 0 && (
                         <span> ({formatVolumeSol(token.totalVolumeSol)})</span>
