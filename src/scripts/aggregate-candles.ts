@@ -48,7 +48,7 @@ async function aggregateCandlesForToken(tokenId: string, intervalMinutes: number
   })
 
   if (trades.length === 0) {
-    return // No new trades
+    return 0 // No new trades
   }
 
   // Group trades by candle interval
@@ -64,7 +64,7 @@ async function aggregateCandlesForToken(tokenId: string, intervalMinutes: number
     let candle = candlesMap.get(key)
 
     if (!candle) {
-      // Initialize new candle
+      // Initialize new candle - use first trade's price as open
       candle = {
         tokenId,
         interval: intervalMinutes,
@@ -81,73 +81,93 @@ async function aggregateCandlesForToken(tokenId: string, intervalMinutes: number
     // Update candle
     candle.high = Decimal.max(candle.high, trade.priceSol)
     candle.low = Decimal.min(candle.low, trade.priceSol)
-    candle.close = trade.priceSol
+    candle.close = trade.priceSol // Last trade price becomes close
     candle.volume = candle.volume.add(trade.amountSol)
   }
 
-  // Insert/update candles
+  // Insert/update candles in batch
   const candles = Array.from(candlesMap.values())
-  for (const candle of candles) {
-    await prisma.candle.upsert({
-      where: {
-        tokenId_interval_timestamp: {
-          tokenId: candle.tokenId,
-          interval: candle.interval,
-          timestamp: candle.timestamp,
+  
+  // Use transaction for better performance
+  await prisma.$transaction(
+    candles.map((candle) =>
+      prisma.candle.upsert({
+        where: {
+          tokenId_interval_timestamp: {
+            tokenId: candle.tokenId,
+            interval: candle.interval,
+            timestamp: candle.timestamp,
+          },
         },
-      },
-      update: {
-        open: candle.open,
-        high: candle.high,
-        low: candle.low,
-        close: candle.close,
-        volume: candle.volume,
-      },
-      create: candle,
-    })
-  }
-
-  if (candles.length > 0) {
-    console.log(
-      `✅ Aggregated ${candles.length} candles for token ${tokenId} (${intervalMinutes}m interval)`
+        update: {
+          // Update close price and volume (open, high, low stay the same for existing candles)
+          close: candle.close,
+          high: candle.high,
+          low: candle.low,
+          volume: candle.volume,
+        },
+        create: candle,
+      })
     )
-  }
+  )
+
+  return candles.length
 }
 
 async function aggregateAllCandles() {
   console.log('🕯️ Starting candle aggregation...')
+  const startTime = Date.now()
 
-  // Get all tokens
+  // Get all tokens that have trades
   const tokens = await prisma.token.findMany({
-    select: { id: true, symbol: true },
+    where: {
+      trades: {
+        some: {},
+      },
+    },
+    select: { id: true, symbol: true, mintAddress: true },
   })
 
-  console.log(`📊 Processing ${tokens.length} tokens...`)
+  console.log(`📊 Processing ${tokens.length} tokens with trades...`)
+
+  let totalCandles = 0
+  let processedTokens = 0
 
   for (const token of tokens) {
-    for (const interval of INTERVALS) {
-      try {
-        await aggregateCandlesForToken(token.id, interval)
-      } catch (error: any) {
-        console.error(
-          `❌ Error aggregating candles for ${token.symbol} (${interval}m):`,
-          error.message
-        )
+    try {
+      let tokenCandles = 0
+      for (const interval of INTERVALS) {
+        const candles = await aggregateCandlesForToken(token.id, interval)
+        tokenCandles += candles
       }
+      
+      if (tokenCandles > 0) {
+        processedTokens++
+        totalCandles += tokenCandles
+      }
+    } catch (error: any) {
+      console.error(
+        `❌ Error aggregating candles for ${token.symbol} (${token.mintAddress}):`,
+        error.message
+      )
     }
   }
 
-  console.log('✅ Candle aggregation completed')
+  const duration = ((Date.now() - startTime) / 1000).toFixed(2)
+  console.log(
+    `✅ Candle aggregation completed: ${totalCandles} candles created/updated for ${processedTokens} tokens in ${duration}s`
+  )
 }
 
 async function startAggregation() {
-  // Run once
-  await aggregateAllCandles()
-  await prisma.$disconnect()
+  try {
+    await aggregateAllCandles()
+  } catch (error: any) {
+    console.error('❌ Fatal error:', error)
+    process.exit(1)
+  } finally {
+    await prisma.$disconnect()
+  }
 }
 
-startAggregation().catch((error) => {
-  console.error('❌ Fatal error:', error)
-  process.exit(1)
-})
-
+startAggregation()
