@@ -14,16 +14,14 @@ sudo npm install -g pm2
 
 The `ecosystem.config.js` file defines all processes:
 
-- **autotrader-web**: Production web server
+- **autotrader-web**: Production web server (always running)
+- **autotrader-ingest-tokens**: Token data ingestion (run on-demand or via cron)
+- **autotrader-ingest-trades**: Trade data ingestion (run on-demand or via cron)
+- **autotrader-ingest-candles**: Candle/OHLCV data ingestion (run on-demand or via cron)
 
 **Note**: Development mode (`npm run dev`) should be run manually, not via PM2. PM2 is only for production deployments.
 
-Ingestion services (commented out in ecosystem config):
-- **autotrader-ingest-tokens**: Token data ingestion (runs every 6 hours)
-- **autotrader-ingest-trades**: Trade data ingestion (runs every 15 minutes)
-- **autotrader-ingest-candles**: Candle/OHLCV data ingestion (runs every 30 minutes)
-
-These will be enabled once the ingestion scripts are fully implemented.
+**Ingestion Services**: These are configured but not auto-restarted. They run once and exit. Use cron jobs or manual runs for periodic ingestion.
 
 ## Quick Start
 
@@ -39,6 +37,34 @@ npm run pm2:start
 
 ```bash
 npm run pm2:start:all
+```
+
+### Start Only Ingestion Services
+
+```bash
+npm run pm2:start:ingest
+```
+
+### Run Ingestion Manually
+
+To run ingestion services on-demand:
+
+```bash
+# Run token ingestion
+pm2 start autotrader-ingest-tokens
+
+# Run trade ingestion
+pm2 start autotrader-ingest-trades
+
+# Run candle ingestion
+pm2 start autotrader-ingest-candles
+```
+
+Or use npm scripts directly:
+```bash
+npm run ingest:tokens
+npm run ingest:trades
+npm run ingest:candles
 ```
 
 ### View Status
