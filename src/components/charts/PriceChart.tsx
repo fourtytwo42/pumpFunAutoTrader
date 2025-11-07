@@ -9,6 +9,7 @@ import {
   CartesianGrid,
   Tooltip,
   Bar,
+  Customized,
 } from 'recharts'
 import { Box, CircularProgress, Typography, Paper, Stack } from '@mui/material'
 
@@ -38,6 +39,124 @@ interface ChartDatum extends CandleData {
 }
 
 const CHART_MARGIN = { top: 16, bottom: 16, left: 12, right: 12 } as const
+const PRICE_Y_AXIS_ID = 'price'
+const CANDLE_BAR_KEY = 'price-candles-bar'
+
+type AxisScale = (value: number) => number
+
+interface AxisMapEntry {
+  scale?: AxisScale
+}
+
+interface FormattedGraphicalItem {
+  item?: {
+    key?: string | number | null
+    props?: {
+      dataKey?: string | number
+      yAxisId?: string | number
+    }
+  }
+  props?: {
+    data?: Array<{
+      x?: number
+      width?: number
+      payload?: ChartDatum
+    }>
+  }
+}
+
+interface CandlesRendererProps {
+  formattedGraphicalItems?: FormattedGraphicalItem[]
+  yAxisMap?: Record<string, AxisMapEntry>
+  upColor?: string
+  downColor?: string
+}
+
+const getAxisEntry = (
+  axisMap: Record<string, AxisMapEntry> | undefined,
+  axisId?: string | number,
+) => {
+  if (!axisMap) {
+    return undefined
+  }
+  if (axisId === undefined || axisId === null) {
+    return axisMap['0'] ?? Object.values(axisMap)[0]
+  }
+  const key = typeof axisId === 'number' ? axisId.toString() : axisId
+  return axisMap[key]
+}
+
+const CandlesRenderer = ({
+  formattedGraphicalItems,
+  yAxisMap,
+  upColor = '#00ff88',
+  downColor = '#ff4d4d',
+}: CandlesRendererProps) => {
+  const target = formattedGraphicalItems?.find((item) => item.item?.key === CANDLE_BAR_KEY)
+
+  if (!target?.props?.data?.length) {
+    return null
+  }
+
+  const axisId = target.item?.props?.yAxisId
+  const axisEntry = getAxisEntry(yAxisMap, axisId)
+  const scale = axisEntry?.scale
+
+  if (typeof scale !== 'function') {
+    return null
+  }
+
+  return (
+    <g>
+      {target.props.data.map((entry, index) => {
+        const payload = entry.payload
+        if (!payload) {
+          return null
+        }
+
+        const openY = scale(payload.open)
+        const closeY = scale(payload.close)
+        const highY = scale(payload.high)
+        const lowY = scale(payload.low)
+
+        if (![openY, closeY, highY, lowY].every((value) => Number.isFinite(value))) {
+          return null
+        }
+
+        const width = typeof entry.width === 'number' ? entry.width : 8
+        const xPosition = typeof entry.x === 'number' ? entry.x : 0
+        const candleWidth = Math.max(width * 0.6, 6)
+        const color = payload.direction === 'up' ? upColor : downColor
+        const bodyTop = Math.min(openY, closeY)
+        const bodyBottom = Math.max(openY, closeY)
+        const bodyHeight = Math.max(bodyBottom - bodyTop, 1.5)
+        const centerX = xPosition + width / 2
+
+        return (
+          <g key={`${payload.timestamp}-${index}`}>
+            <line
+              x1={centerX}
+              x2={centerX}
+              y1={highY}
+              y2={lowY}
+              stroke={color}
+              strokeWidth={2}
+            />
+            <rect
+              x={xPosition + (width - candleWidth) / 2}
+              y={bodyTop}
+              width={candleWidth}
+              height={bodyHeight}
+              fill={color}
+              stroke={color}
+              rx={1}
+            />
+          </g>
+        )
+      })}
+    </g>
+  )
+}
 
 const CandleTooltip = ({ active, payload }: any) => {
   if (!active || !payload || payload.length === 0) {
@@ -158,56 +277,6 @@ export default function PriceChart({ tokenAddress, interval = '1m', height = 300
     return [priceExtent.min - padding, priceExtent.max + padding] as [number, number]
   }, [priceExtent])
 
-  const candleShape = useCallback((props: any) => {
-    const { x, width, payload, yAxis } = props || {}
-    if (!payload) {
-      return null
-    }
-
-    const scale = yAxis && typeof yAxis.scale === 'function' ? yAxis.scale : null
-    if (!scale) {
-      return null
-    }
-
-    const openY = scale(payload.open)
-    const closeY = scale(payload.close)
-    const highY = scale(payload.high)
-    const lowY = scale(payload.low)
-
-    if (![openY, closeY, highY, lowY].every((v) => Number.isFinite(v))) {
-      return null
-    }
-
-    const isUp = payload.direction === 'up'
-    const color = isUp ? '#00ff88' : '#ff4d4d'
-    const bodyTop = Math.min(openY, closeY)
-    const bodyBottom = Math.max(openY, closeY)
-    const bodyHeight = Math.max(bodyBottom - bodyTop, 2)
-    const candleWidth = Math.max(width * 0.6, 6)
-    const xCenter = x + width / 2
-
-    return (
-      <g>
-        <line
-          x1={xCenter}
-          y1={highY}
-          x2={xCenter}
-          y2={lowY}
-          stroke={color}
-          strokeWidth={2}
-        />
-        <rect
-          x={x + (width - candleWidth) / 2}
-          y={bodyTop}
-          width={candleWidth}
-          height={bodyHeight}
-          fill={color}
-          stroke={color}
-        />
-      </g>
-    )
-  }, [])
-
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height, flexDirection: 'column', gap: 2 }}>
@@ -257,16 +326,20 @@ export default function PriceChart({ tokenAddress, interval = '1m', height = 300
           tick={{ fill: '#888' }}
           tickFormatter={(value) => value.toFixed(8)}
           width={80}
+          yAxisId={PRICE_Y_AXIS_ID}
         />
         <Tooltip content={<CandleTooltip />} />
-        <Bar dataKey="base" stackId="candles" fillOpacity={0} fill="transparent" isAnimationActive={false} />
         <Bar
-          dataKey="body"
-          stackId="candles"
-          barSize={12}
-          shape={candleShape as any}
+          key={CANDLE_BAR_KEY}
+          dataKey="close"
+          yAxisId={PRICE_Y_AXIS_ID}
+          fill="transparent"
+          stroke="transparent"
+          fillOpacity={0}
+          strokeOpacity={0}
           isAnimationActive={false}
         />
+        <Customized component={<CandlesRenderer />} />
       </ComposedChart>
     </ResponsiveContainer>
   )
