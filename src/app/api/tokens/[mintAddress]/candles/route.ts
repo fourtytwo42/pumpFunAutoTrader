@@ -191,7 +191,7 @@ export async function GET(
 
     if (candleMap.size < limit) {
       const createdAtMs = token.createdAt ? Number(token.createdAt) : 0
-      const createdTs = createdAtMs > 0 ? Math.floor(createdAtMs / 1000) : undefined
+      const createdTs = createdAtMs > 0 ? createdAtMs : undefined
       const pumpUrl = `https://swap-api.pump.fun/v2/coins/${params.mintAddress}/candles?interval=${interval}&limit=${limit}&currency=USD${createdTs ? `&createdTs=${createdTs}` : ''}`
       console.log('[Candles API] Fetching from pump.fun:', pumpUrl)
       const remoteCandles = await fetchPumpJson<any>(pumpUrl)
