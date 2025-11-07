@@ -21,7 +21,6 @@
     "postinstall": "prisma generate",
     "ingest:trades": "tsx src/scripts/ingest-trades.ts",
     "ingest:tokens": "tsx src/scripts/ingest-tokens.ts",
-    "aggregate:candles": "tsx src/scripts/aggregate-candles.ts",
     "fetch:sol-price": "tsx src/scripts/fetch-sol-price.ts",
     "fix:lamports": "tsx src/scripts/fix-lamports-trades.ts",
     "backfill:prices": "tsx src/scripts/backfill-token-prices.ts",

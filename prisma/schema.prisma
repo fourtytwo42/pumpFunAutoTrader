@@ -76,7 +76,6 @@ model Token {
 
   // Relations
   trades                  Trade[]
-  candles                 Candle[]
   price                   TokenPrice?
   portfolios              UserPortfolio[]
   userTrades              UserTrade[]
@@ -124,24 +123,6 @@ model Trade {
   @@index([timestamp(sort: Desc)])
   @@index([userAddress, timestamp(sort: Desc)])
   @@map("trades")
-}
-
-model Candle {
-  id        BigInt   @id @default(autoincrement())
-  tokenId   String   @map("token_id")
-  token     Token    @relation(fields: [tokenId], references: [id], onDelete: Cascade)
-  interval  Int // minutes
-  timestamp BigInt
-  open      Decimal  @db.Decimal(30, 18)
-  high      Decimal  @db.Decimal(30, 18)
-  low       Decimal  @db.Decimal(30, 18)
-  close     Decimal  @db.Decimal(30, 18)
-  volume    Decimal  @db.Decimal(30, 9)
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@unique([tokenId, interval, timestamp])
-  @@index([tokenId, interval, timestamp(sort: Desc)])
-  @@map("candles")
 }
 
 model UserPortfolio {

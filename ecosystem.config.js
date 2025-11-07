@@ -34,22 +34,6 @@ module.exports = {
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
     },
     {
-      name: 'autotrader-aggregate-candles',
-      script: 'npm',
-      args: 'run aggregate:candles',
-      cwd: '/home/hendo420/autoTrader',
-      instances: 1,
-      autorestart: true, // Keep running - polls every 15 minutes
-      watch: false,
-      max_memory_restart: '500M',
-      env: {
-        NODE_ENV: 'production',
-      },
-      error_file: './logs/aggregate-candles-error.log',
-      out_file: './logs/aggregate-candles-out.log',
-      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-    },
-    {
       name: 'autotrader-fetch-sol-price',
       script: 'npm',
       args: 'run fetch:sol-price',
