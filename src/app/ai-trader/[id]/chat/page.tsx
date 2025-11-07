@@ -73,6 +73,19 @@ export default function AiTraderChatPage() {
       .catch((error) => {
         console.error('Failed to load trader info:', error)
       })
+
+    // Fetch chat history
+    fetch(`/api/ai-trader/${params.id}/messages`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.messages) {
+          setMessages(data.messages)
+          console.log('[AI Chat] Loaded', data.messages.length, 'messages from history')
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to load chat history:', error)
+      })
   }, [params?.id])
 
   const scrollToBottom = () => {
@@ -83,17 +96,31 @@ export default function AiTraderChatPage() {
     scrollToBottom()
   }, [messages])
 
+  // Poll for new messages every 2 seconds
+  useEffect(() => {
+    if (!params?.id) return
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/ai-trader/${params.id}/messages`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.messages && data.messages.length > messages.length) {
+            setMessages(data.messages)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to poll messages:', error)
+      }
+    }, 2000)
+
+    return () => clearInterval(interval)
+  }, [params?.id, messages.length])
+
   const handleSend = async () => {
     if (!input.trim() || !params?.id) return
 
-    const userMessage: ChatMessage = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: input,
-      timestamp: Date.now(),
-    }
-
-    setMessages((prev) => [...prev, userMessage])
+    const messageText = input
     setInput('')
     setSending(true)
 
@@ -101,32 +128,24 @@ export default function AiTraderChatPage() {
       const response = await fetch(`/api/ai-trader/${params.id}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: input }),
+        body: JSON.stringify({ message: messageText }),
       })
 
       if (response.ok) {
         const data = await response.json()
-        const assistantMessage: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: data.response,
-          timestamp: Date.now(),
-        }
-        setMessages((prev) => [...prev, assistantMessage])
 
         // Update available tools
         if (data.availableTools) {
           setAvailableTools(data.availableTools)
-          console.log('[AI Chat] Available MCP Tools:', data.availableTools)
+          console.log('[AI Chat] Available Tools:', data.availableTools)
         }
 
         // Log to console for debugging
-        console.log('[AI Chat] User:', input)
+        console.log('[AI Chat] User:', messageText)
         console.log('[AI Chat] Assistant:', data.response)
         console.log('[AI Chat] Usage:', data.usage)
-        if (data.toolCalls) {
-          console.log('[AI Chat] Tool Calls:', data.toolCalls)
-        }
+
+        // Messages are saved to DB and will appear via polling
       }
     } catch (error) {
       console.error('Failed to send message:', error)
@@ -152,45 +171,17 @@ export default function AiTraderChatPage() {
         const data = await response.json()
         console.log(`[AI Control] ${action} result:`, data)
 
-        // Add system message showing the action
-        const systemMessage: ChatMessage = {
-          id: Date.now().toString(),
-          role: 'system',
-          content: `Triggered: ${action}`,
-          timestamp: Date.now(),
-        }
-        setMessages((prev) => [...prev, systemMessage])
-
         // Update available tools
         if (data.availableTools) {
           setAvailableTools(data.availableTools)
-          console.log('[AI Trigger] Available MCP Tools:', data.availableTools)
+          console.log('[AI Trigger] Available Tools:', data.availableTools)
         }
 
         if (data.toolCalls && data.toolCalls.length > 0) {
-          console.log('[AI Trigger] Tool mentions:', data.toolCalls)
-          data.toolCalls.forEach((toolCall: any) => {
-            const toolMessage: ChatMessage = {
-              id: `${Date.now()}_${toolCall.name}`,
-              role: 'tool',
-              content: `AI mentioned tool: ${toolCall.name}`,
-              timestamp: Date.now(),
-              toolCall,
-            }
-            setMessages((prev) => [...prev, toolMessage])
-          })
+          console.log('[AI Trigger] Tool calls:', data.toolCalls)
         }
 
-        if (data.response) {
-          const assistantMessage: ChatMessage = {
-            id: (Date.now() + 1).toString(),
-            role: 'assistant',
-            content: data.response,
-            timestamp: Date.now(),
-          }
-          setMessages((prev) => [...prev, assistantMessage])
-        }
-
+        // All messages (system, tool, assistant) are saved to DB and will appear via polling
         console.log('[AI Trigger] Response:', data.response)
         console.log('[AI Trigger] Usage:', data.usage)
       }
@@ -342,16 +333,29 @@ export default function AiTraderChatPage() {
                           ? `${traderInfo.themeColor}20`
                           : message.role === 'tool'
                             ? '#2a2a2a'
-                            : '#1a1a1a',
+                            : message.role === 'system'
+                              ? '#1a1a1a'
+                              : '#1a1a1a',
                       border:
                         message.role === 'user'
                           ? `1px solid ${traderInfo.themeColor}40`
-                          : '1px solid rgba(255,255,255,0.1)',
+                          : message.role === 'tool'
+                            ? '1px solid #ffa726'
+                            : '1px solid rgba(255,255,255,0.1)',
                     }}
                   >
-                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                      {message.content}
-                    </Typography>
+                    {message.role === 'tool' ? (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <CircularProgress size={16} sx={{ color: '#ffa726' }} />
+                        <Typography variant="body2" color="warning.main">
+                          {message.content}
+                        </Typography>
+                      </Box>
+                    ) : (
+                      <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                        {message.content}
+                      </Typography>
+                    )}
                     {debugMode && message.toolCall && (
                       <Box sx={{ mt: 2, p: 1, backgroundColor: '#0a0a0a', borderRadius: 1 }}>
                         <Typography variant="caption" color="warning.main" sx={{ display: 'block', mb: 1 }}>

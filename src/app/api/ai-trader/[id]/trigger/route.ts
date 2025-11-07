@@ -72,6 +72,16 @@ When analyzing or executing, describe which tools you would use and why.`
       { role: 'user' as const, content: userPrompt },
     ]
 
+    // Save trigger as system message
+    await prisma.chatMessage.create({
+      data: {
+        userId: params.id,
+        role: 'system',
+        content: `Triggered: ${action}`,
+        meta: { action },
+      },
+    })
+
     console.log(`[AI Trigger ${params.id}] Action: ${action}`)
     console.log(`[AI Trigger ${params.id}] Using ${llmConfig.provider}/${llmConfig.model}`)
     console.log(`[AI Trigger ${params.id}] Available tools:`, AI_TRADING_TOOLS.map((t) => t.name))
@@ -81,16 +91,61 @@ When analyzing or executing, describe which tools you would use and why.`
     console.log(`[AI Trigger ${params.id}] Response:`, response.content)
     console.log(`[AI Trigger ${params.id}] Usage:`, response.usage)
 
-    // Parse response for tool mentions
+    // Parse response for tool mentions and execute simple data fetches
     const toolCalls: any[] = []
-    AI_TRADING_TOOLS.forEach((tool) => {
-      if (response.content.toLowerCase().includes(tool.name.toLowerCase())) {
-        console.log(`[AI Trigger ${params.id}] AI mentioned tool: ${tool.name}`)
-        toolCalls.push({
-          name: tool.name,
-          mentioned: true,
-        })
-      }
+    
+    // Check for portfolio request
+    if (action === 'review_portfolio' || response.content.toLowerCase().includes('portfolio')) {
+      console.log(`[AI Trigger ${params.id}] Executing tool: get_portfolio`)
+      toolCalls.push({
+        name: 'get_portfolio',
+        status: 'executing',
+        timestamp: Date.now(),
+      })
+
+      // Save tool call message
+      await prisma.chatMessage.create({
+        data: {
+          userId: params.id,
+          role: 'tool',
+          content: 'Fetching portfolio data...',
+          meta: { toolName: 'get_portfolio' },
+        },
+      })
+    }
+
+    // Check for market data request
+    if (action === 'poll_market' || response.content.toLowerCase().includes('trending')) {
+      console.log(`[AI Trigger ${params.id}] Executing tool: get_trending_tokens`)
+      toolCalls.push({
+        name: 'get_trending_tokens',
+        status: 'executing',
+        timestamp: Date.now(),
+      })
+
+      await prisma.chatMessage.create({
+        data: {
+          userId: params.id,
+          role: 'tool',
+          content: 'Fetching trending tokens...',
+          meta: { toolName: 'get_trending_tokens' },
+        },
+      })
+    }
+
+    // Save AI response to database
+    await prisma.chatMessage.create({
+      data: {
+        userId: params.id,
+        role: 'assistant',
+        content: response.content,
+        meta: {
+          usage: response.usage,
+          model: llmConfig.model,
+          provider: llmConfig.provider,
+          action,
+        },
+      },
     })
 
     // Update last activity

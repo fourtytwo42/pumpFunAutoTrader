@@ -38,6 +38,7 @@ model User {
   createdAiConfigs AiTraderConfig[] @relation("AiConfigCreatedBy")
   wallets          Wallet[]
   orders           Order[]
+  chatMessages     ChatMessage[]
 
   @@index([role, isActive])
   @@index([createdAt])
@@ -433,12 +434,15 @@ model AgentEvent {
 }
 
 model ChatMessage {
-  id      String   @id @default(cuid())
-  ts      DateTime @default(now())
-  role    String
-  content String   @db.Text
-  meta    Json?
+  id       String   @id @default(cuid())
+  ts       DateTime @default(now())
+  userId   String   @map("user_id")
+  role     String
+  content  String   @db.Text
+  meta     Json?
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([ts])
+  @@index([userId, ts])
   @@map("chat_messages")
 }

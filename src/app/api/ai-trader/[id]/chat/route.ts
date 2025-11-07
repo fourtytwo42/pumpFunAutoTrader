@@ -13,6 +13,19 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const { message } = await request.json()
 
+    // Save user message to database
+    await prisma.chatMessage.create({
+      data: {
+        userId: params.id,
+        role: 'user',
+        content: message,
+        meta: {
+          source: 'web_ui',
+          sessionUserId: session.user.id,
+        },
+      },
+    })
+
     // Get AI trader config
     const aiTrader = await prisma.user.findFirst({
       where: {
@@ -69,6 +82,20 @@ When you need data or want to take action, explain which tool you would use and 
 
     console.log(`[AI Chat ${params.id}] Response:`, response.content)
     console.log(`[AI Chat ${params.id}] Usage:`, response.usage)
+
+    // Save assistant response to database
+    await prisma.chatMessage.create({
+      data: {
+        userId: params.id,
+        role: 'assistant',
+        content: response.content,
+        meta: {
+          usage: response.usage,
+          model: llmConfig.model,
+          provider: llmConfig.provider,
+        },
+      },
+    })
 
     return NextResponse.json({
       response: response.content,
