@@ -245,12 +245,19 @@ export async function GET(
       return 0
     })
 
+    console.log('[Candles API] Merged candles before filtering:', mergedCandles.length)
+    console.log('[Candles API] Start timestamp:', startTimestamp, 'End timestamp:', endTimestamp)
+
     if (startTimestamp !== undefined) {
+      const beforeFilter = mergedCandles.length
       mergedCandles = mergedCandles.filter((candle) => candle.timestamp >= startTimestamp)
+      console.log('[Candles API] Filtered by start time:', beforeFilter, '->', mergedCandles.length)
     }
 
     if (endTimestamp !== undefined) {
+      const beforeFilter = mergedCandles.length
       mergedCandles = mergedCandles.filter((candle) => candle.timestamp <= endTimestamp)
+      console.log('[Candles API] Filtered by end time:', beforeFilter, '->', mergedCandles.length)
     }
 
     mergedCandles = mergedCandles.slice(-limit)

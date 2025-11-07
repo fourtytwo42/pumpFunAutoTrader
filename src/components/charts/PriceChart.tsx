@@ -91,23 +91,7 @@ export default function PriceChart({ tokenAddress, interval = '1m', height = 300
     setLoading(true)
     setError(null)
     try {
-      let simulationTime: string | null = null
-      try {
-        const simResponse = await fetch('/api/simulation/time')
-        if (simResponse.ok) {
-          const simData = await simResponse.json()
-          if (simData?.currentTimestamp) {
-            simulationTime = simData.currentTimestamp.toString()
-          }
-        }
-      } catch (e) {
-        // Ignore simulation fetch errors; fall back to real-time
-      }
-
-      let url = `/api/tokens/${tokenAddress}/candles?interval=${interval}&limit=500`
-      if (simulationTime) {
-        url += `&simulation_time=${simulationTime}`
-      }
+      const url = `/api/tokens/${tokenAddress}/candles?interval=${interval}&limit=500`
 
       console.log('[PriceChart] Fetching candle data:', url)
       const response = await fetch(url)

@@ -35,23 +35,7 @@ export default function VolumeChart({ tokenAddress, interval = '1m', height = 20
   const fetchChartData = useCallback(async () => {
     setLoading(true)
     try {
-      let simulationTime: string | null = null
-      try {
-        const simResponse = await fetch('/api/simulation/time')
-        if (simResponse.ok) {
-          const simData = await simResponse.json()
-          if (simData?.currentTimestamp) {
-            simulationTime = simData.currentTimestamp.toString()
-          }
-        }
-      } catch (e) {
-        // ignore simulation fetch issues
-      }
-
-      let url = `/api/tokens/${tokenAddress}/candles?interval=${interval}&limit=500`
-      if (simulationTime) {
-        url += `&simulation_time=${simulationTime}`
-      }
+      const url = `/api/tokens/${tokenAddress}/candles?interval=${interval}&limit=500`
 
       console.log('[VolumeChart] Fetching candle data:', url)
       const response = await fetch(url)
