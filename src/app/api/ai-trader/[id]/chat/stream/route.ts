@@ -145,6 +145,7 @@ Always explain your reasoning with actual data.`
           for await (const chunk of streamLLMRequest(llmConfig, messages)) {
             if (chunk.type === 'content' && chunk.content) {
               fullResponse += chunk.content
+              // Send the raw chunk - we'll clean it on the frontend
               send({ type: 'content', content: chunk.content })
             } else if (chunk.type === 'done') {
               send({ type: 'ai_response_complete', content: fullResponse })

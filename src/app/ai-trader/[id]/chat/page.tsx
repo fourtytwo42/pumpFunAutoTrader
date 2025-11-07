@@ -190,7 +190,7 @@ export default function AiTraderChatPage() {
       const decoder = new TextDecoder()
       let buffer = ''
 
-      const toolMessages: Map<string, ChatMessage> = new Map()
+      const toolCalls: Map<string, { status: string; result?: any }> = new Map()
 
       while (true) {
         const { done, value } = await reader.read()
@@ -207,65 +207,82 @@ export default function AiTraderChatPage() {
             const event = JSON.parse(line.slice(6))
 
             if (event.type === 'content' && event.content) {
-              // Append to AI message
+              // Append to AI message and clean up tool syntax
+              setMessages((prev) =>
+                prev.map((m) => {
+                  if (m.id !== aiMsgId) return m
+                  
+                  const newContent = m.content + event.content
+                  // Strip LM Studio tool syntax for clean display
+                  const cleanContent = newContent
+                    .replace(/<\|start\|>/g, '')
+                    .replace(/<\|channel\|>commentary\s+to=["']?(?:functions\.)?(\w+)["']?/g, '')
+                    .replace(/<\|constrain\|>json/g, '')
+                    .replace(/<\|message\|>\{[^}]*\}/g, '')
+                    .trim()
+                  
+                  return { ...m, content: cleanContent }
+                })
+              )
+            } else if (event.type === 'tool_start') {
+              // Track tool execution in the AI message meta
+              toolCalls.set(event.tool, { status: 'running' })
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === aiMsgId
-                    ? { ...m, content: m.content + event.content }
+                    ? {
+                        ...m,
+                        meta: {
+                          ...m.meta,
+                          toolCalls: Array.from(toolCalls.entries()).map(([name, data]) => ({
+                            name,
+                            status: data.status,
+                            result: data.result,
+                          })),
+                        },
+                      }
                     : m
                 )
               )
-            } else if (event.type === 'tool_start') {
-              // Add tool message with "running" state
-              const toolMsgId = `tool-${event.tool}-${Date.now()}`
-              const toolMsg: ChatMessage = {
-                id: toolMsgId,
-                role: 'assistant',
-                content: `${event.tool} running...`,
-                timestamp: Date.now(),
-                meta: { status: 'executing', toolName: event.tool },
-              }
-              toolMessages.set(event.tool, toolMsg)
-              setMessages((prev) => [...prev, toolMsg])
             } else if (event.type === 'tool_complete') {
-              // Update tool message to "completed"
-              const existingToolMsg = toolMessages.get(event.tool)
-              if (existingToolMsg) {
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === existingToolMsg.id
-                      ? {
-                          ...m,
-                          content: `✓ ${event.tool}`,
-                          meta: {
-                            status: 'completed',
-                            toolName: event.tool,
-                            result: event.result,
-                          },
-                        }
-                      : m
-                  )
+              // Update tool status to completed
+              toolCalls.set(event.tool, { status: 'completed', result: event.result })
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === aiMsgId
+                    ? {
+                        ...m,
+                        meta: {
+                          ...m.meta,
+                          toolCalls: Array.from(toolCalls.entries()).map(([name, data]) => ({
+                            name,
+                            status: data.status,
+                            result: data.result,
+                          })),
+                        },
+                      }
+                    : m
                 )
-              }
+              )
             } else if (event.type === 'tool_error') {
-              const existingToolMsg = toolMessages.get(event.tool)
-              if (existingToolMsg) {
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === existingToolMsg.id
-                      ? {
-                          ...m,
-                          content: `✗ ${event.tool} failed`,
-                          meta: {
-                            status: 'failed',
-                            toolName: event.tool,
-                            error: event.error,
-                          },
-                        }
-                      : m
-                  )
+              toolCalls.set(event.tool, { status: 'failed', result: { error: event.error } })
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === aiMsgId
+                    ? {
+                        ...m,
+                        meta: {
+                          ...m.meta,
+                          toolCalls: Array.from(toolCalls.entries()).map(([name, data]) => ({
+                            name,
+                            status: data.status,
+                            result: data.result,
+                          })),
+                        },
+                      }
+                    : m
                 )
-              }
+              )
             } else if (event.type === 'done') {
               console.log('[AI Chat] Stream complete')
             }
@@ -546,16 +563,16 @@ export default function AiTraderChatPage() {
                     </Box>
 
                     {/* Show compact tool calls under AI name */}
-                    {toolCalls.length > 0 && (
+                    {message.meta?.toolCalls && Array.isArray(message.meta.toolCalls) && message.meta.toolCalls.length > 0 && (
                       <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 0.5, ml: 1 }}>
-                        {toolCalls.map((toolMsg) => {
-                          const toolName = toolMsg.meta?.toolName || 'tool'
-                          const status = toolMsg.meta?.status || 'executing'
+                        {message.meta.toolCalls.map((toolCall: any, idx: number) => {
+                          const toolName = toolCall.name || 'tool'
+                          const status = toolCall.status || 'running'
                           return (
                             <Chip
-                              key={toolMsg.id}
+                              key={`${toolName}-${idx}`}
                               label={
-                                status === 'executing'
+                                status === 'running'
                                   ? `${toolName} running...`
                                   : status === 'completed'
                                     ? `✓ ${toolName}`
@@ -580,7 +597,7 @@ export default function AiTraderChatPage() {
                                       : 'warning.main',
                               }}
                               icon={
-                                status === 'executing' ? (
+                                status === 'running' ? (
                                   <CircularProgress size={10} sx={{ color: 'warning.main' }} />
                                 ) : undefined
                               }
