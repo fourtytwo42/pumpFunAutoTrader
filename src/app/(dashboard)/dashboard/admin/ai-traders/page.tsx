@@ -426,10 +426,10 @@ export default function AiTradersPage() {
                 onChange={(e) => setFormData({ ...formData, llmBaseUrl: e.target.value })}
                 placeholder={
                   formData.llmProvider === 'mlstudio'
-                    ? 'http://localhost:1234/v1'
+                    ? 'http://192.168.50.238:1234'
                     : 'http://localhost:11434'
                 }
-                helperText={`${formData.llmProvider === 'mlstudio' ? 'LM Studio' : 'Ollama'} server URL`}
+                helperText={`${formData.llmProvider === 'mlstudio' ? 'LM Studio' : 'Ollama'} server URL (without /v1)`}
               />
             )}
 

@@ -108,16 +108,20 @@ async function fetchGroqModels(apiKey?: string): Promise<string[]> {
 
 async function fetchMLStudioModels(baseUrl?: string): Promise<string[]> {
   if (!baseUrl) {
-    baseUrl = process.env.MLSTUDIO_BASE_URL || 'http://localhost:1234/v1'
+    baseUrl = process.env.MLSTUDIO_BASE_URL || 'http://localhost:1234'
   }
 
+  // Ensure we don't double up on /v1
+  const cleanBaseUrl = baseUrl.replace(/\/v1\/?$/, '')
+
   try {
-    const response = await fetch(`${baseUrl}/models`)
+    const response = await fetch(`${cleanBaseUrl}/v1/models`)
     if (!response.ok) return []
 
     const data = await response.json()
     return (data.data || []).map((m: any) => m.id).sort()
-  } catch {
+  } catch (error) {
+    console.error('Error fetching LM Studio models:', error)
     return []
   }
 }
@@ -285,9 +289,10 @@ async function sendMLStudioRequest(
   config: LLMConfig,
   messages: LLMMessage[]
 ): Promise<LLMResponse> {
-  const baseUrl = config.baseUrl || process.env.MLSTUDIO_BASE_URL || 'http://localhost:1234/v1'
+  const baseUrl = config.baseUrl || process.env.MLSTUDIO_BASE_URL || 'http://localhost:1234'
+  const cleanBaseUrl = baseUrl.replace(/\/v1\/?$/, '')
 
-  const response = await fetch(`${baseUrl}/chat/completions`, {
+  const response = await fetch(`${cleanBaseUrl}/v1/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

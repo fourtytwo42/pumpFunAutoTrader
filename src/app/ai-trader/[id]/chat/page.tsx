@@ -46,6 +46,11 @@ interface AiTraderInfo {
   isRunning: boolean
 }
 
+interface ToolInfo {
+  name: string
+  description: string
+}
+
 export default function AiTraderChatPage() {
   const params = useParams<{ id: string }>()
   const [traderInfo, setTraderInfo] = useState<AiTraderInfo | null>(null)
@@ -53,6 +58,7 @@ export default function AiTraderChatPage() {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [debugMode, setDebugMode] = useState(true)
+  const [availableTools, setAvailableTools] = useState<string[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -108,9 +114,16 @@ export default function AiTraderChatPage() {
         }
         setMessages((prev) => [...prev, assistantMessage])
 
+        // Update available tools
+        if (data.availableTools) {
+          setAvailableTools(data.availableTools)
+          console.log('[AI Chat] Available MCP Tools:', data.availableTools)
+        }
+
         // Log to console for debugging
         console.log('[AI Chat] User:', input)
         console.log('[AI Chat] Assistant:', data.response)
+        console.log('[AI Chat] Usage:', data.usage)
         if (data.toolCalls) {
           console.log('[AI Chat] Tool Calls:', data.toolCalls)
         }
@@ -148,17 +161,23 @@ export default function AiTraderChatPage() {
         }
         setMessages((prev) => [...prev, systemMessage])
 
-        if (data.toolCalls) {
+        // Update available tools
+        if (data.availableTools) {
+          setAvailableTools(data.availableTools)
+          console.log('[AI Trigger] Available MCP Tools:', data.availableTools)
+        }
+
+        if (data.toolCalls && data.toolCalls.length > 0) {
+          console.log('[AI Trigger] Tool mentions:', data.toolCalls)
           data.toolCalls.forEach((toolCall: any) => {
             const toolMessage: ChatMessage = {
               id: `${Date.now()}_${toolCall.name}`,
               role: 'tool',
-              content: `Tool: ${toolCall.name}`,
+              content: `AI mentioned tool: ${toolCall.name}`,
               timestamp: Date.now(),
               toolCall,
             }
             setMessages((prev) => [...prev, toolMessage])
-            console.log('[AI Tool Call]', toolCall)
           })
         }
 
@@ -171,6 +190,9 @@ export default function AiTraderChatPage() {
           }
           setMessages((prev) => [...prev, assistantMessage])
         }
+
+        console.log('[AI Trigger] Response:', data.response)
+        console.log('[AI Trigger] Usage:', data.usage)
       }
     } catch (error) {
       console.error(`Failed to trigger ${action}:`, error)
@@ -199,8 +221,26 @@ export default function AiTraderChatPage() {
         <Typography variant="body2">
           <strong>Status:</strong> {traderInfo.isRunning ? 'Running' : 'Stopped'} |{' '}
           <strong>Model:</strong> {traderInfo.llmProvider}/{traderInfo.llmModel}
+          {availableTools.length > 0 && (
+            <>
+              {' '}| <strong>MCP Tools:</strong> {availableTools.length} available
+            </>
+          )}
         </Typography>
       </Alert>
+
+      {debugMode && availableTools.length > 0 && (
+        <Paper sx={{ p: 2, mb: 2, backgroundColor: '#0a0a0a' }}>
+          <Typography variant="subtitle2" color="warning.main" gutterBottom>
+            Available MCP Tools:
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            {availableTools.map((tool) => (
+              <Chip key={tool} label={tool} size="small" variant="outlined" />
+            ))}
+          </Box>
+        </Paper>
+      )}
 
       <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
         <Button

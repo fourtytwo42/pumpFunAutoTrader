@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
 import { prisma } from '@/lib/db'
 import { sendLLMRequest, LLMConfig } from '@/lib/llm-providers'
+import { AI_TRADING_TOOLS } from '@/lib/ai-tools'
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -43,34 +44,54 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       config.systemPrompt ||
       'You are an AI trading agent monitoring pump.fun tokens. Analyze market data and provide insights.'
 
-    // Build action-specific prompts
+    // Add trading tools to system prompt
+    const toolsDescription = AI_TRADING_TOOLS.map(
+      (tool) => `- ${tool.name}: ${tool.description}`
+    ).join('\n')
+
+    const enhancedSystemPrompt = `${systemPrompt}
+
+You have access to the following trading tools:
+
+${toolsDescription}
+
+When analyzing or executing, describe which tools you would use and why.`
+
+    // Build action-specific prompts with tool suggestions
     const actionPrompts: Record<string, string> = {
-      poll_market:
-        'Poll the latest market data from pump.fun. Check for trending tokens, volume changes, and price movements.',
-      analyze_opportunities:
-        'Analyze the current market to identify trading opportunities. Consider volume, momentum, and risk factors.',
-      execute_trades:
-        'Review your current analysis and execute any trades you recommend based on your strategy.',
-      review_portfolio: 'Review your current portfolio positions and assess their performance.',
+      poll_market: `Poll the latest market data. Use discoverUniverse to see trending tokens, then use tokenStats and recentTrades for detailed analysis of interesting tokens.`,
+      analyze_opportunities: `Analyze the market for trading opportunities. First use discoverUniverse to find candidates, then use tokenStats, candles, and holdersSnapshot to evaluate them. Consider volume, momentum, holder distribution, and technical patterns.`,
+      execute_trades: `Review your analysis and execute recommended trades. First check your portfolio, then use execTrade for any positions you want to take. Explain your reasoning for each trade.`,
+      review_portfolio: `Review your current portfolio. Use the portfolio tool to see your positions, then analyze each holding using tokenStats and candles to assess performance and make hold/sell decisions.`,
     }
 
     const userPrompt = actionPrompts[action] || `Execute action: ${action}`
 
     const messages = [
-      { role: 'system' as const, content: systemPrompt },
+      { role: 'system' as const, content: enhancedSystemPrompt },
       { role: 'user' as const, content: userPrompt },
     ]
 
-    console.log(`[AI Trigger ${params.id}] Prompt:`, userPrompt)
+    console.log(`[AI Trigger ${params.id}] Action: ${action}`)
     console.log(`[AI Trigger ${params.id}] Using ${llmConfig.provider}/${llmConfig.model}`)
+    console.log(`[AI Trigger ${params.id}] Available tools:`, AI_TRADING_TOOLS.map((t) => t.name))
 
     const response = await sendLLMRequest(llmConfig, messages)
 
     console.log(`[AI Trigger ${params.id}] Response:`, response.content)
     console.log(`[AI Trigger ${params.id}] Usage:`, response.usage)
 
-    // Simulated tool calls (in a real implementation, this would parse the response for tool calls)
+    // Parse response for tool mentions
     const toolCalls: any[] = []
+    AI_TRADING_TOOLS.forEach((tool) => {
+      if (response.content.toLowerCase().includes(tool.name.toLowerCase())) {
+        console.log(`[AI Trigger ${params.id}] AI mentioned tool: ${tool.name}`)
+        toolCalls.push({
+          name: tool.name,
+          mentioned: true,
+        })
+      }
+    })
 
     // Update last activity
     await prisma.aiTraderConfig.update({
@@ -82,6 +103,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       response: response.content,
       usage: response.usage,
       toolCalls,
+      availableTools: AI_TRADING_TOOLS.map((t) => t.name),
     })
   } catch (error: any) {
     console.error('AI trigger error:', error)
