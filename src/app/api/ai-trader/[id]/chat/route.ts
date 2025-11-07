@@ -74,12 +74,20 @@ You have access to the following trading tools:
 
 ${toolsDescription}
 
-To use a tool, simply mention its name naturally in your response. For example:
-- "I'll check get_sol_price to see the current SOL price"
-- "Let me get_portfolio to review your holdings"
-- "I should get_trending_tokens to find opportunities"
+IMPORTANT: When you need to use a tool, simply mention it naturally in your response. The system will detect the mention, execute the tool, and call you again with the results. DO NOT output any tool syntax, JSON, or function calls - just natural conversation.
 
-The tools will be executed automatically when you mention them. Be conversational and helpful.`
+Examples:
+- User: "What is the price of SOL?"
+  You: "Let me check get_sol_price for you."
+  [System executes tool and calls you back with results]
+  You: "The current price of SOL is $157.36 USD."
+
+- User: "Show me my portfolio"
+  You: "I'll use get_portfolio to retrieve your holdings."
+  [System executes tool and calls you back with results]
+  You: "You currently hold 2.5M DOG tokens worth 0.06 SOL..."
+
+Be conversational and helpful. Wait for tool results before giving final answers.`
 
     // Build conversation
     const messages = [
@@ -125,7 +133,7 @@ The tools will be executed automatically when you mention them. Be conversationa
         console.log(`[AI Chat ${params.id}] Executing tool: ${toolCall.name}`, toolCall.arguments)
 
         // Save tool call message
-        await prisma.chatMessage.create({
+        const toolMessage = await prisma.chatMessage.create({
           data: {
             userId: params.id,
             role: 'tool',
@@ -141,11 +149,10 @@ The tools will be executed automatically when you mention them. Be conversationa
         try {
           const toolResult = await executeAITool(toolCall.name, toolCall.arguments, params.id)
           
-          // Save tool result
-          await prisma.chatMessage.create({
+          // Update the same message to show completion
+          await prisma.chatMessage.update({
+            where: { id: toolMessage.id },
             data: {
-              userId: params.id,
-              role: 'tool',
               content: `✓ ${toolCall.name} completed`,
               meta: {
                 toolName: toolCall.name,
@@ -165,10 +172,10 @@ The tools will be executed automatically when you mention them. Be conversationa
         } catch (error: any) {
           console.error(`[AI Chat ${params.id}] Tool ${toolCall.name} failed:`, error)
           
-          await prisma.chatMessage.create({
+          // Update the same message to show failure
+          await prisma.chatMessage.update({
+            where: { id: toolMessage.id },
             data: {
-              userId: params.id,
-              role: 'tool',
               content: `✗ ${toolCall.name} failed: ${error.message}`,
               meta: {
                 toolName: toolCall.name,
@@ -179,19 +186,58 @@ The tools will be executed automatically when you mention them. Be conversationa
           })
         }
       }
+
+      // Make a second LLM call with tool results so AI can respond naturally
+      const toolMessages = executedTools.map((tool) => ({
+        role: 'tool' as const,
+        name: tool.name,
+        content: JSON.stringify(tool.result),
+      }))
+
+      const finalMessages = [
+        { role: 'system' as const, content: enhancedSystemPrompt },
+        { role: 'user' as const, content: message },
+        { role: 'assistant' as const, content: response.content },
+        ...toolMessages,
+      ]
+
+      console.log(`[AI Chat ${params.id}] Making second LLM call with tool results`)
+      const finalResponse = await sendLLMRequest(llmConfig, finalMessages)
+      console.log(`[AI Chat ${params.id}] Final response:`, finalResponse.content)
+
+      // Save final assistant response to database
+      await prisma.chatMessage.create({
+        data: {
+          userId: params.id,
+          role: 'assistant',
+          content: finalResponse.content || '(No response)',
+          meta: {
+            usage: finalResponse.usage,
+            model: llmConfig.model,
+            provider: llmConfig.provider,
+            executedTools,
+          },
+        },
+      })
+
+      return NextResponse.json({
+        response: finalResponse.content,
+        usage: finalResponse.usage,
+        availableTools: AI_TRADING_TOOLS.map((t) => t.name),
+        toolCalls: executedTools,
+      })
     }
 
-    // Save assistant response to database
+    // No tool calls - save assistant response directly
     await prisma.chatMessage.create({
       data: {
         userId: params.id,
         role: 'assistant',
-        content: response.content || '(Tool calls executed)',
+        content: response.content || '(No response)',
         meta: {
           usage: response.usage,
           model: llmConfig.model,
           provider: llmConfig.provider,
-          executedTools,
         },
       },
     })
