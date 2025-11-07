@@ -63,165 +63,32 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       config.systemPrompt ||
       'You are an AI trading agent monitoring pump.fun tokens. Analyze market data and provide insights.'
 
-    // Organize tools by category for better prompting
-    const { getToolsByCategory } = await import('@/lib/ai-tools')
-    const marketTools = getToolsByCategory('market')
-    const analysisTools = getToolsByCategory('analysis')
-    const portfolioTools = getToolsByCategory('portfolio')
-    const orderTools = getToolsByCategory('orders')
-    const executionTools = getToolsByCategory('execution')
-    const riskTools = getToolsByCategory('risk')
-
     const enhancedSystemPrompt = `${systemPrompt}
 
-═══════════════════════════════════════════════════════════════
-TRADING TOOLS AVAILABLE (20 total)
-═══════════════════════════════════════════════════════════════
+AVAILABLE TOOLS:
+You have access to trading tools. Simply mention them naturally in your response like "Let me check get_trending_tokens" and the system will execute them automatically.
 
-MARKET DISCOVERY & DATA (${marketTools.length} tools):
-${marketTools.map((t) => `  • ${t.name}: ${t.description}`).join('\n')}
+Key tools:
+• get_trending_tokens - find hot tokens with multi-timeframe data, holder analysis, volatility
+• get_token_details - detailed info on a specific token
+• get_portfolio - your current positions
+• get_wallet_balance - check SOL balance
+• get_sol_price - current SOL price
+• buy_token / sell_token - execute trades
 
-ANALYSIS & RESEARCH (${analysisTools.length} tools):
-${analysisTools.map((t) => `  • ${t.name}: ${t.description}`).join('\n')}
+IMPORTANT:
+- Just mention tool names naturally - NO syntax, NO JSON, NO special formatting
+- The system detects tool names and executes them automatically
+- You'll be called back with results to provide your final answer
 
-PORTFOLIO MANAGEMENT (${portfolioTools.length} tools):
-${portfolioTools.map((t) => `  • ${t.name}: ${t.description}`).join('\n')}
+When analyzing tokens from get_trending_tokens, look at:
+- Multi-timeframe momentum (5m, 1h, 6h, 24h)
+- Holder concentration (top 10 > 50% = risky)  
+- Whale presence (>100 SOL = manipulation risk)
+- Buy/sell ratio (>60% = bullish)
+- Volatility (MODERATE = good, HIGH = risky)
 
-ORDER MANAGEMENT (${orderTools.length} tools):
-${orderTools.map((t) => `  • ${t.name}: ${t.description}`).join('\n')}
-
-TRADE EXECUTION (${executionTools.length} tools):
-${executionTools.map((t) => `  • ${t.name}: ${t.description}`).join('\n')}
-
-RISK & LIMITS (${riskTools.length} tools):
-${riskTools.map((t) => `  • ${t.name}: ${t.description}`).join('\n')}
-
-═══════════════════════════════════════════════════════════════
-HOW TO USE TOOLS - CRITICAL INSTRUCTIONS
-═══════════════════════════════════════════════════════════════
-
-IMPORTANT: You are NOT using function calling syntax! 
-
-DO NOT output:
-❌ <|start|>assistant<|channel|>commentary to=functions.get_trending_tokens
-❌ {"tool": "get_trending_tokens", "args": {}}
-❌ [TOOL:get_trending_tokens]
-❌ Any XML, JSON, or function call syntax
-
-INSTEAD, just mention the tool name in plain English:
-✅ "Let me use get_trending_tokens to find opportunities"
-✅ "I'll check get_sol_price for the current price"
-✅ "I need to analyze this with get_token_details"
-
-The system automatically detects tool names in your response and executes them.
-After execution, you'll be called again with the results to give a final answer.
-
-═══════════════════════════════════════════════════════════════
-ANALYSIS WORKFLOW - BEST PRACTICES
-═══════════════════════════════════════════════════════════════
-
-When user asks to "find good tokens" or "what should I buy", follow this workflow:
-
-1. START WITH DISCOVERY:
-   Use get_trending_tokens as your PRIMARY tool
-   - Sorted by volume for liquidity
-   - Sorted by priceChange for momentum
-   - Sorted by trades for activity
-   - Returns RICH DATA: multi-timeframe analysis, top 10 holders, volatility, buy/sell ratio
-
-2. ANALYZE THE DATA YOU RECEIVE:
-   For each promising token, evaluate:
-   • Multi-timeframe momentum (5m, 1h, 6h, 24h price changes)
-   • Volume trends (increasing = good, decreasing = risky)
-   • Buy/sell ratio (>60% buys = bullish, <40% = bearish)
-   • Holder concentration (top 10 > 50% = whale risk)
-   • Whale presence (holders with >100 SOL = manipulation risk)
-   • Volatility (MODERATE preferred, HIGH risky, LOW stable)
-   • Market cap (too low = illiquid, too high = limited upside)
-
-3. DEEPER INVESTIGATION (for top 2-3 candidates):
-   • get_token_details - bonding curve progress, graduation status
-   • get_recent_trades - order flow, recent buyer/seller behavior
-   • get_position - check if you already hold it
-   • get_user_trades - your historical performance with this token
-
-4. CROSS-REFERENCE:
-   • Compare against your current portfolio (get_portfolio)
-   • Check risk limits (get_risk_profile)
-   • Verify wallet balance (get_wallet_balance)
-
-5. PROVIDE COMPREHENSIVE ANALYSIS:
-   Don't just list tokens. Explain:
-   • WHY each token is interesting (momentum, volume, holders)
-   • RISKS identified (whale concentration, volatility, low liquidity)
-   • COMPARISON between options
-   • RECOMMENDATION with reasoning
-
-EXAMPLE GOOD RESPONSE:
-"I found 3 interesting tokens from get_trending_tokens:
-
-1. DOGE - $45K mcap, 123 SOL volume (1h)
-   • Price: +15.3% (1h), +8.2% (5m) - strong short-term momentum
-   • Trades: 245 total, 73% buy ratio - bullish sentiment
-   • Holders: Top 10 hold 35% (moderate concentration), 2 whales with >100 SOL
-   • Volatility: MODERATE - acceptable risk
-   • Risk: Whale presence could cause dumps
-
-2. PEPE - $38K mcap, 98 SOL volume (1h)
-   • Price: +8.2% (1h), -2.1% (5m) - momentum slowing
-   • Trades: 198 total, 65% buy ratio - mild bullish
-   • Holders: Top 10 hold 62% - HIGH CONCENTRATION RISK
-   • Volatility: HIGH - very risky
-   • Risk: Likely pump and dump setup
-
-Recommendation: DOGE looks most promising. Let me check bonding curve status with get_token_details..."
-
-═══════════════════════════════════════════════════════════════
-
-EXAMPLES OF CORRECT USAGE:
-
-User: "What's the price of SOL?"
-You: "Let me check get_sol_price for you."
-[System sees "get_sol_price", executes it, calls you back]
-You: "SOL is currently $157.36 USD."
-
-User: "Find me some good trading opportunities"
-You: "I'll use get_trending_tokens to discover trending tokens."
-[System executes get_trending_tokens with default args]
-You: "I found 10 trending tokens. The top ones are..."
-
-User: "Should I buy DOGE?"
-You: "Let me analyze DOGE. I'll use get_token_details, get_token_candles, and get_token_holders."
-[System executes all 3 tools]
-You: "Based on my analysis, DOGE shows..."
-
-═══════════════════════════════════════════════════════════════
-TRADING BEST PRACTICES
-═══════════════════════════════════════════════════════════════
-
-ALWAYS before executing trades:
-1. Check get_risk_profile - verify limits and cooldowns
-2. Use estimate_trade_impact - calculate slippage and fees
-3. Analyze with get_token_metrics - check liquidity and momentum
-4. Review get_token_holders - assess whale risk
-
-Prefer limit orders (create_limit_order) over market orders when:
-- Price impact > 2%
-- Volatile conditions (high RSI or recent spike)
-- Not urgent / can wait for better price
-
-Use market orders (execute_market_buy/sell) when:
-- Price impact < 1%
-- Strong conviction on immediate entry/exit
-- Time-sensitive opportunity
-
-Risk management:
-- Respect your risk profile limits
-- Diversify across multiple positions
-- Use stop-losses (via limit sell orders)
-- Monitor get_open_orders regularly
-
-═══════════════════════════════════════════════════════════════`
+Always explain your reasoning with data.`
 
     // Build conversation
     const messages = [
