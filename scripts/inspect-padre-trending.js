@@ -3,16 +3,17 @@
 /*
  * Inspect the Padre /trending websocket feed.
  *
- * Connects to wss://backend2.padre.gg/_heavy_multiplex?desc=/trending,
- * captures a handful of messages, attempts to decode (base64, zlib, brotli,
- * msgpack, JSON), and prints a structured summary.
+ * Connects to wss://backend2.padre.gg/_heavy_multiplex, captures a handful of
+ * messages, attempts to decode (base64, zlib, brotli, msgpack, JSON), and
+ * prints a structured summary. Supports sending the same auth + subscription
+ * frames that the browser issues so we can see real token/trade payloads.
  */
 
 const { WebSocket } = require('ws')
 const zlib = require('zlib')
 const { decode: msgpackDecode, encode: msgpackEncode } = require('@msgpack/msgpack')
 
-const WS_URL = 'wss://backend2.padre.gg/_heavy_multiplex?desc=%2Ftrending'
+const DEFAULT_WS_URL = 'wss://backend2.padre.gg/_heavy_multiplex'
 const MAX_MESSAGES = 50
 const REQUIRED_INTERESTING = 3
 const TIMEOUT_MS = 30_000
@@ -32,10 +33,12 @@ for (const arg of argv) {
   }
 }
 
+const wsUrl = options.url || process.env.PADRE_WS_URL || DEFAULT_WS_URL
 const jwt = options.jwt || process.env.PADRE_JWT
 const sessionId = options.session || process.env.PADRE_SESSION
 const userId = options.user || process.env.PADRE_USER
 const extraSubs = options.sub
+const cookieHeader = options.cookie || process.env.PADRE_COOKIE
 
 if (!jwt || !sessionId) {
   console.error('[padre] Missing credentials. Provide --jwt and --session (or PADRE_JWT / PADRE_SESSION env vars).')
@@ -188,6 +191,7 @@ function finalizeAndExit(code) {
   console.log(
     JSON.stringify(
       {
+        wsUrl,
         messageCount: results.length,
         interestingCount,
         messages: results,
@@ -209,16 +213,19 @@ function sendMsgpack(ws, payload) {
 }
 
 function main() {
-  console.log(`[padre] Connecting to ${WS_URL}`)
+  console.log(`[padre] Connecting to ${wsUrl}`)
 
-  const ws = new WebSocket(WS_URL, {
-    headers: {
-      Origin: 'https://trade.padre.gg',
-      'User-Agent': 'Mozilla/5.0 (compatible; PadreInspector/1.0)',
-      'Cache-Control': 'no-cache',
-      Pragma: 'no-cache',
-    },
-  })
+  const headers = {
+    Origin: 'https://trade.padre.gg',
+    'User-Agent': 'Mozilla/5.0 (compatible; PadreInspector/1.0)',
+    'Cache-Control': 'no-cache',
+    Pragma: 'no-cache',
+  }
+  if (cookieHeader) {
+    headers.Cookie = cookieHeader
+  }
+
+  const ws = new WebSocket(wsUrl, { headers })
 
   ws.on('open', () => {
     console.log('[padre] WebSocket connected')
