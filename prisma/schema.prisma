@@ -39,6 +39,8 @@ model User {
   wallets          Wallet[]
   orders           Order[]
   chatMessages     ChatMessage[]
+  riskProfile      RiskProfile?
+  riskUsages       RiskUsage[]
 
   @@index([role, isActive])
   @@index([createdAt])
@@ -445,4 +447,33 @@ model ChatMessage {
   @@index([ts])
   @@index([userId, ts])
   @@map("chat_messages")
+}
+
+model RiskProfile {
+  userId                 String  @id @map("user_id")
+  user                   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  maxPositionSizeUSD     Decimal @default(100) @map("max_position_size_usd") @db.Decimal(18, 2)
+  maxDailySpendUSD       Decimal @default(500) @map("max_daily_spend_usd") @db.Decimal(18, 2)
+  maxSlippageBps         Int     @default(500) @map("max_slippage_bps")
+  cooldownSeconds        Int     @default(30) @map("cooldown_seconds")
+  maxConcurrentPositions Int     @default(5) @map("max_concurrent_positions")
+  minLiquidityUSD        Decimal @default(1000) @map("min_liquidity_usd") @db.Decimal(18, 2)
+  blacklistedTokens      Json    @default("[]") @map("blacklisted_tokens")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  @@map("risk_profiles")
+}
+
+model RiskUsage {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date        DateTime @default(now())
+  spentUSD    Decimal  @map("spent_usd") @db.Decimal(18, 2)
+  tradesCount Int      @default(0) @map("trades_count")
+  lastTradeAt DateTime? @map("last_trade_at")
+
+  @@index([userId, date])
+  @@map("risk_usages")
 }
