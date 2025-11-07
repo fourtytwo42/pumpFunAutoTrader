@@ -53,13 +53,18 @@ export default function VolumeChart({ tokenAddress, interval = '1m', height = 20
         url += `&simulation_time=${simulationTime}`
       }
 
+      console.log('[VolumeChart] Fetching candle data:', url)
       const response = await fetch(url)
+      console.log('[VolumeChart] Response status:', response.status, response.ok)
       if (response.ok) {
         const result = await response.json()
+        console.log('[VolumeChart] Candles received:', result.candles?.length || 0, 'candles')
         setData(result.candles || [])
+      } else {
+        console.warn('[VolumeChart] Failed to fetch candles:', response.statusText)
       }
     } catch (err) {
-      console.error('Error fetching volume data:', err)
+      console.error('[VolumeChart] Error fetching volume data:', err)
     } finally {
       setLoading(false)
     }

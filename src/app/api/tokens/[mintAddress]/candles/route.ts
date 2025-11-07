@@ -128,13 +128,18 @@ export async function GET(
     const endTime = searchParams.get('end_time')
     const simulationTime = searchParams.get('simulation_time')
 
+    console.log('[Candles API] Request for mint:', params.mintAddress, 'interval:', interval, 'limit:', limit)
+
     const token = await prisma.token.findUnique({
       where: { mintAddress: params.mintAddress },
     })
 
     if (!token) {
+      console.warn('[Candles API] Token not found:', params.mintAddress)
       return NextResponse.json({ error: 'Token not found' }, { status: 404 })
     }
+
+    console.log('[Candles API] Token found:', token.id, token.symbol)
 
     const intervalMinutes: Record<string, number> = {
       '1m': 1,
@@ -167,6 +172,8 @@ export async function GET(
       limit
     )
 
+    console.log('[Candles API] Generated', localCandles.length, 'local candles from trades')
+
     const candleMap = new Map<string, {
       timestamp: bigint
       open: Decimal
@@ -185,15 +192,17 @@ export async function GET(
     if (candleMap.size < limit) {
       const createdAtMs = token.createdAt ? Number(token.createdAt) : 0
       const createdTs = createdAtMs > 0 ? Math.floor(createdAtMs / 1000) : undefined
-      const remoteCandles = await fetchPumpJson<any>(
-        `https://swap-api.pump.fun/v2/coins/${params.mintAddress}/candles?interval=${interval}&limit=${limit}&currency=USD${createdTs ? `&createdTs=${createdTs}` : ''}`
-      )
+      const pumpUrl = `https://swap-api.pump.fun/v2/coins/${params.mintAddress}/candles?interval=${interval}&limit=${limit}&currency=USD${createdTs ? `&createdTs=${createdTs}` : ''}`
+      console.log('[Candles API] Fetching from pump.fun:', pumpUrl)
+      const remoteCandles = await fetchPumpJson<any>(pumpUrl)
 
       const remoteCandleArray = Array.isArray(remoteCandles?.candles)
         ? remoteCandles.candles
         : Array.isArray(remoteCandles)
           ? remoteCandles
           : []
+
+      console.log('[Candles API] Remote candles fetched:', remoteCandleArray.length)
 
       if (remoteCandleArray.length > 0) {
         for (const candle of remoteCandleArray) {
@@ -245,6 +254,8 @@ export async function GET(
     }
 
     mergedCandles = mergedCandles.slice(-limit)
+
+    console.log('[Candles API] Returning', mergedCandles.length, 'total candles')
 
     return NextResponse.json({
       candles: mergedCandles.map((c) => ({

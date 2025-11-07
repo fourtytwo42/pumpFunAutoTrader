@@ -109,13 +109,17 @@ export default function PriceChart({ tokenAddress, interval = '1m', height = 300
         url += `&simulation_time=${simulationTime}`
       }
 
+      console.log('[PriceChart] Fetching candle data:', url)
       const response = await fetch(url)
+      console.log('[PriceChart] Response status:', response.status, response.ok)
       if (!response.ok) {
         throw new Error('Failed to fetch chart data')
       }
       const result = await response.json()
+      console.log('[PriceChart] Candles received:', result.candles?.length || 0, 'candles')
       setData(result.candles || [])
     } catch (err: any) {
+      console.error('[PriceChart] Error fetching chart data:', err)
       setError(err.message)
     } finally {
       setLoading(false)
