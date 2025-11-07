@@ -15,6 +15,9 @@ import {
   CircularProgress,
   Divider,
   Alert,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from '@mui/material'
 import {
   Send,
@@ -24,6 +27,7 @@ import {
   Assessment,
   Code,
   ClearAll,
+  ExpandMore,
 } from '@mui/icons-material'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -528,25 +532,42 @@ export default function AiTraderChatPage() {
                       )}
                     </Paper>
                     {debugMode && message.meta?.executedTools && Array.isArray(message.meta.executedTools) && (
-                      <Box sx={{ mt: 1, p: 1, backgroundColor: '#0a0a0a', borderRadius: 1, maxWidth: '80%' }}>
-                        <Typography variant="caption" color="warning.main" sx={{ display: 'block', mb: 1 }}>
-                          Debug: Tool Results
-                        </Typography>
-                        {message.meta.executedTools.map((tool: any, idx: number) => (
-                          <Box key={idx} sx={{ mb: idx < (message.meta?.executedTools?.length || 0) - 1 ? 2 : 0 }}>
-                            <Typography variant="caption" sx={{ display: 'block', fontWeight: 'bold', color: 'success.main' }}>
-                              {tool.name}
-                            </Typography>
-                            <Typography
-                              variant="caption"
-                              component="pre"
-                              sx={{ fontSize: 9, overflow: 'auto', maxHeight: 200 }}
-                            >
-                              {JSON.stringify(tool.result, null, 2)}
-                            </Typography>
-                          </Box>
-                        ))}
-                      </Box>
+                      <Accordion
+                        sx={{
+                          mt: 1,
+                          maxWidth: '80%',
+                          backgroundColor: '#0a0a0a',
+                          '&:before': { display: 'none' },
+                        }}
+                      >
+                        <AccordionSummary
+                          expandIcon={<ExpandMore sx={{ color: 'warning.main' }} />}
+                          sx={{
+                            minHeight: 32,
+                            '& .MuiAccordionSummary-content': { margin: '8px 0' },
+                          }}
+                        >
+                          <Typography variant="caption" color="warning.main">
+                            Debug: Tool Results ({message.meta.executedTools.length})
+                          </Typography>
+                        </AccordionSummary>
+                        <AccordionDetails sx={{ pt: 0 }}>
+                          {message.meta.executedTools.map((tool: any, idx: number) => (
+                            <Box key={idx} sx={{ mb: idx < (message.meta?.executedTools?.length || 0) - 1 ? 2 : 0 }}>
+                              <Typography variant="caption" sx={{ display: 'block', fontWeight: 'bold', color: 'success.main' }}>
+                                {tool.name}
+                              </Typography>
+                              <Typography
+                                variant="caption"
+                                component="pre"
+                                sx={{ fontSize: 9, overflow: 'auto', maxHeight: 200 }}
+                              >
+                                {JSON.stringify(tool.result, null, 2)}
+                              </Typography>
+                            </Box>
+                          ))}
+                        </AccordionDetails>
+                      </Accordion>
                     )}
                   </Box>
                 )
