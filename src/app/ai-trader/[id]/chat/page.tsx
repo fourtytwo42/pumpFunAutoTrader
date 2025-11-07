@@ -275,97 +275,103 @@ export default function AiTraderChatPage() {
           Chat & Control Center
         </Typography>
 
-        <Alert severity="info" sx={{ mb: 2 }}>
-        <Typography variant="body2">
-          <strong>Status:</strong> {traderInfo.isRunning ? 'Running' : 'Stopped'} |{' '}
-          <strong>Model:</strong> {traderInfo.llmProvider}/{traderInfo.llmModel}
-          {availableTools.length > 0 && (
-            <>
-              {' '}| <strong>MCP Tools:</strong> {availableTools.length} available
-            </>
-          )}
-        </Typography>
-      </Alert>
+        {!isFullscreen && (
+        <>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <Typography variant="body2">
+              <strong>Status:</strong> {traderInfo.isRunning ? 'Running' : 'Stopped'} |{' '}
+              <strong>Model:</strong> {traderInfo.llmProvider}/{traderInfo.llmModel}
+              {availableTools.length > 0 && (
+                <>
+                  {' '}| <strong>MCP Tools:</strong> {availableTools.length} available
+                </>
+              )}
+            </Typography>
+          </Alert>
 
-      {debugMode && availableTools.length > 0 && (
-        <Paper sx={{ p: 2, mb: 2, backgroundColor: '#0a0a0a' }}>
-          <Typography variant="subtitle2" color="warning.main" gutterBottom>
-            Available MCP Tools:
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            {availableTools.map((tool) => (
-              <Chip key={tool} label={tool} size="small" variant="outlined" />
-            ))}
-          </Box>
-        </Paper>
+          {debugMode && availableTools.length > 0 && (
+            <Paper sx={{ p: 2, mb: 2, backgroundColor: '#0a0a0a' }}>
+              <Typography variant="subtitle2" color="warning.main" gutterBottom>
+                Available MCP Tools:
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                {availableTools.map((tool) => (
+                  <Chip key={tool} label={tool} size="small" variant="outlined" />
+                ))}
+              </Box>
+            </Paper>
+          )}
+        </>
       )}
 
       <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap', justifyContent: 'space-between' }}>
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+        {!isFullscreen && (
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<Refresh />}
+              onClick={() => handleTriggerAction('poll_market')}
+              disabled={sending}
+            >
+              Poll Market
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<Psychology />}
+              onClick={() => handleTriggerAction('analyze_opportunities')}
+              disabled={sending}
+            >
+              Analyze
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<ShoppingCart />}
+              onClick={() => handleTriggerAction('execute_trades')}
+              disabled={sending}
+            >
+              Execute Trades
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<Assessment />}
+              onClick={() => handleTriggerAction('review_portfolio')}
+              disabled={sending}
+            >
+              Review Portfolio
+            </Button>
+          </Box>
+        )}
+        <Box sx={{ display: 'flex', gap: 1 }}>
           <Button
-            variant="outlined"
+            variant={debugMode ? 'contained' : 'outlined'}
             size="small"
-            startIcon={<Refresh />}
-            onClick={() => handleTriggerAction('poll_market')}
-            disabled={sending}
+            startIcon={<Code />}
+            onClick={() => setDebugMode(!debugMode)}
           >
-            Poll Market
+            Debug
+          </Button>
+          <Button
+            variant={isFullscreen ? 'contained' : 'outlined'}
+            size="small"
+            startIcon={isFullscreen ? <FullscreenExit /> : <Fullscreen />}
+            onClick={() => setIsFullscreen(!isFullscreen)}
+          >
+            {isFullscreen ? 'Exit' : 'Full'}
           </Button>
           <Button
             variant="outlined"
             size="small"
-            startIcon={<Psychology />}
-            onClick={() => handleTriggerAction('analyze_opportunities')}
-            disabled={sending}
+            color="error"
+            startIcon={<ClearAll />}
+            onClick={handleClearChat}
           >
-            Analyze
-          </Button>
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<ShoppingCart />}
-            onClick={() => handleTriggerAction('execute_trades')}
-            disabled={sending}
-          >
-            Execute Trades
-          </Button>
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<Assessment />}
-            onClick={() => handleTriggerAction('review_portfolio')}
-            disabled={sending}
-          >
-            Review Portfolio
+            Clear Chat
           </Button>
         </Box>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Button
-                variant={debugMode ? 'contained' : 'outlined'}
-                size="small"
-                startIcon={<Code />}
-                onClick={() => setDebugMode(!debugMode)}
-              >
-                Debug
-              </Button>
-              <Button
-                variant={isFullscreen ? 'contained' : 'outlined'}
-                size="small"
-                startIcon={isFullscreen ? <FullscreenExit /> : <Fullscreen />}
-                onClick={() => setIsFullscreen(!isFullscreen)}
-              >
-                {isFullscreen ? 'Exit' : 'Full'}
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                color="error"
-                startIcon={<ClearAll />}
-                onClick={handleClearChat}
-              >
-                Clear Chat
-              </Button>
-            </Box>
       </Box>
 
       <Paper 
