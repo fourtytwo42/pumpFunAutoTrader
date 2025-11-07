@@ -73,6 +73,7 @@ export default function AiTradersPage() {
     llmBaseUrl: '',
     temperature: 0.7,
     maxTokens: 1000,
+    contextWindow: 20000,
     systemPrompt: '',
     // Risk profile settings
     maxPositionSizeUSD: 100,
@@ -514,6 +515,18 @@ export default function AiTradersPage() {
                 helperText="Maximum response length"
               />
             </Box>
+
+            <TextField
+              fullWidth
+              label="Context Window (tokens)"
+              type="number"
+              inputProps={{ min: 1000, max: 200000, step: 1000 }}
+              value={formData.contextWindow}
+              onChange={(e) =>
+                setFormData({ ...formData, contextWindow: parseInt(e.target.value) || 20000 })
+              }
+              helperText="Chat history context size - higher = more memory but slower/costlier (default: 20000)"
+            />
 
             <TextField
               fullWidth

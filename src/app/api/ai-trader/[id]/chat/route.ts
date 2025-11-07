@@ -63,6 +63,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       config.systemPrompt ||
       'You are an AI trading agent monitoring pump.fun tokens. Analyze market data and provide insights.'
 
+    const contextWindowTokens = config.llm?.contextWindow ?? 20000
     const enhancedSystemPrompt = `${systemPrompt}
 
 AVAILABLE TOOLS:
@@ -92,11 +93,47 @@ When analyzing tokens from get_trending_tokens, evaluate:
 
 Always explain your reasoning with actual data.`
 
-    // Build conversation
+    // Fetch recent chat history to include in context
+    const recentMessages = await prisma.chatMessage.findMany({
+      where: { userId: params.id },
+      orderBy: { ts: 'desc' },
+      take: 50, // Get more than we need, will trim by tokens
+    })
+
+    // Estimate tokens (rough: ~4 chars = 1 token)
+    const estimateTokens = (text: string) => Math.ceil(text.length / 4)
+    
+    const systemPromptTokens = estimateTokens(enhancedSystemPrompt)
+    const currentMessageTokens = estimateTokens(message)
+    const reserveTokens = 2000 // Reserve for response + tool results
+    const availableForHistory = contextWindowTokens - systemPromptTokens - currentMessageTokens - reserveTokens
+
+    // Build conversation history within token budget
+    const conversationHistory: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = []
+    let usedTokens = 0
+
+    for (const msg of recentMessages.reverse()) {
+      const msgTokens = estimateTokens(msg.content)
+      if (usedTokens + msgTokens > availableForHistory) break
+
+      // Only include user and assistant messages (not system or tool messages)
+      if (msg.role === 'user' || msg.role === 'assistant') {
+        conversationHistory.push({
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+        })
+        usedTokens += msgTokens
+      }
+    }
+
+    // Build final message array
     const messages = [
       { role: 'system' as const, content: enhancedSystemPrompt },
+      ...conversationHistory,
       { role: 'user' as const, content: message },
     ]
+
+    console.log(`[AI Chat ${params.id}] Context: ${conversationHistory.length} history messages, ~${usedTokens} tokens used of ${availableForHistory} available`)
 
     console.log(`[AI Chat ${params.id}] User message:`, message)
     console.log(`[AI Chat ${params.id}] Using ${llmConfig.provider}/${llmConfig.model}`)
@@ -263,12 +300,13 @@ Always explain your reasoning with actual data.`
 
       const finalMessages: LLMMessage[] = [
         { role: 'system' as const, content: enhancedSystemPrompt },
+        ...conversationHistory,
         { role: 'user' as const, content: message },
         { role: 'assistant' as const, content: response.content },
         { role: 'user' as const, content: `[Tool Results]\n${toolResultsText}\n\nNow respond to the user with this information.` },
       ]
 
-      console.log(`[AI Chat ${params.id}] Making second LLM call with tool results`)
+      console.log(`[AI Chat ${params.id}] Making second LLM call with tool results and ${conversationHistory.length} history messages`)
       const finalResponse = await sendLLMRequest(llmConfig, finalMessages)
       console.log(`[AI Chat ${params.id}] Final response:`, finalResponse.content)
 

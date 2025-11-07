@@ -22,6 +22,7 @@ export async function POST(request: NextRequest) {
       llmBaseUrl,
       temperature,
       maxTokens,
+      contextWindow,
       systemPrompt,
       // Risk profile settings
       maxPositionSizeUSD,
@@ -94,6 +95,7 @@ export async function POST(request: NextRequest) {
             baseUrl: llmBaseUrl,
             temperature: temperature ?? 0.7,
             maxTokens: maxTokens ?? 1000,
+            contextWindow: contextWindow ?? 20000,
           },
           systemPrompt:
             systemPrompt ||
