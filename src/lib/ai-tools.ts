@@ -36,7 +36,17 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
 
   get_trending_tokens: {
     name: 'get_trending_tokens',
-    description: 'Get trending tokens from database with powerful filtering and sorting. Can sort by volume, trades, market cap over any timeframe (1m, 5m, 1h, 24h). Returns real-time data from our ingestion system.',
+    description: `Get trending tokens with comprehensive analytics. This is your PRIMARY discovery tool - use it FIRST to find opportunities.
+    
+Returns detailed metrics including:
+- Price history (5m, 1h, 6h, 24h changes)
+- Volume trends across multiple timeframes
+- Market cap and price per 1M tokens
+- Top 10 holders with SOL balances (identifies whales/risk)
+- Trade distribution (buy/sell ratio, unique traders)
+- Volatility indicators
+
+After finding interesting tokens, use get_token_details for bonding curve status, get_recent_trades for momentum, and get_top_holders for full holder analysis.`,
     category: 'market',
     riskLevel: 'safe',
     cacheSeconds: 0,
@@ -61,6 +71,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
         onlyLive: { type: 'boolean', description: 'Only show live/incomplete tokens (default: false)' },
         onlyComplete: { type: 'boolean', description: 'Only show graduated tokens (default: false)' },
         limit: { type: 'number', description: 'Max results (default: 10, max: 100)' },
+        includeHolderAnalysis: { type: 'boolean', description: 'Include top 10 holders with SOL balances (default: true)' },
       },
     },
     execute: async (args, userId) => {
@@ -178,36 +189,150 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
       // Take top N
       const topTokens = tokensWithStats.slice(0, limit)
 
+      // Fetch multi-timeframe data and holder analysis for top tokens
+      const includeHolders = args.includeHolderAnalysis !== false
+      const enrichedTokens = await Promise.all(
+        topTokens.map(async (t) => {
+          // Calculate multi-timeframe volume and price changes
+          const timeframes = {
+            '5m': 5 * 60 * 1000,
+            '1h': 60 * 60 * 1000,
+            '6h': 6 * 60 * 60 * 1000,
+            '24h': 24 * 60 * 60 * 1000,
+          }
+
+          const multiTimeframeData: any = {}
+          for (const [tf, ms] of Object.entries(timeframes)) {
+            const tfCutoff = new Date(Date.now() - ms)
+            const tfTrades = await prisma.trade.findMany({
+              where: {
+                tokenId: t.mintAddress,
+                createdAt: { gte: tfCutoff },
+              },
+              select: {
+                amountSol: true,
+                priceSol: true,
+                timestamp: true,
+              },
+              orderBy: { timestamp: 'asc' },
+            })
+
+            const volume = tfTrades.reduce((sum, tr) => sum + Number(tr.amountSol), 0)
+            let priceChangePct = 0
+            if (tfTrades.length >= 2) {
+              const firstPrice = Number(tfTrades[0].priceSol)
+              const lastPrice = Number(tfTrades[tfTrades.length - 1].priceSol)
+              if (firstPrice > 0) {
+                priceChangePct = ((lastPrice - firstPrice) / firstPrice) * 100
+              }
+            }
+
+            multiTimeframeData[tf] = {
+              volumeSol: volume,
+              priceChangePct,
+              tradeCount: tfTrades.length,
+            }
+          }
+
+          // Calculate volatility (standard deviation of price changes)
+          const recentPrices = await prisma.trade.findMany({
+            where: {
+              tokenId: t.mintAddress,
+              createdAt: { gte: new Date(Date.now() - timeframeMs[timeframe]) },
+            },
+            select: { priceSol: true },
+            orderBy: { timestamp: 'desc' },
+            take: 50,
+          })
+
+          let volatility = 0
+          if (recentPrices.length > 1) {
+            const prices = recentPrices.map((p) => Number(p.priceSol))
+            const mean = prices.reduce((a, b) => a + b, 0) / prices.length
+            const variance = prices.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / prices.length
+            volatility = Math.sqrt(variance) / mean // Coefficient of variation
+          }
+
+          // Fetch top holders
+          let holderAnalysis = null
+          if (includeHolders) {
+            try {
+              const holdersData = await PumpAPI.getTokenHolders(t.mintAddress)
+              if (holdersData && holdersData.topHolders) {
+                const top10 = holdersData.topHolders.slice(0, 10)
+                const totalSupply = Number(t.totalSupply)
+                
+                holderAnalysis = {
+                  top10Holders: top10.map((h: any) => ({
+                    address: h.address.substring(0, 8) + '...',
+                    amountTokens: Number(h.amount),
+                    percentOfSupply: totalSupply > 0 ? (Number(h.amount) / totalSupply) * 100 : 0,
+                    solBalance: Number(h.solBalance),
+                  })),
+                  top10Concentration: totalSupply > 0 
+                    ? (top10.reduce((sum: number, h: any) => sum + Number(h.amount), 0) / totalSupply) * 100 
+                    : 0,
+                  whaleCount: top10.filter((h: any) => Number(h.solBalance) > 100).length,
+                }
+              }
+            } catch (error) {
+              console.warn(`Failed to fetch holders for ${t.mintAddress}:`, error)
+            }
+          }
+
+          return {
+            mint: t.mintAddress,
+            symbol: t.symbol,
+            name: t.name,
+            imageUri: t.imageUri || null,
+            
+            // Price metrics
+            marketCapUSD: t.stats.marketCapUSD,
+            priceSol: t.stats.currentPriceSol,
+            pricePerMillionTokens: t.stats.currentPriceSol * 1e6,
+            priceUSD: t.stats.currentPriceUSD,
+            
+            // Current timeframe data
+            volume: {
+              sol: t.stats.volumeSol,
+              usd: t.stats.volumeUSD,
+              timeframe,
+            },
+            trades: {
+              total: t.stats.tradeCount,
+              buys: t.stats.buyCount,
+              sells: t.stats.sellCount,
+              buyRatio: t.stats.tradeCount > 0 ? t.stats.buyCount / t.stats.tradeCount : 0,
+            },
+            priceChange: {
+              percent: t.stats.priceChange,
+              timeframe,
+            },
+            
+            // Multi-timeframe analysis
+            multiTimeframe: multiTimeframeData,
+            
+            // Risk indicators
+            volatility: {
+              coefficient: volatility,
+              interpretation: volatility > 0.5 ? 'HIGH' : volatility > 0.2 ? 'MODERATE' : 'LOW',
+            },
+            
+            // Holder analysis
+            holders: holderAnalysis,
+            
+            // Token status
+            complete: t.completed,
+            isLive: !t.completed,
+            creator: t.creatorAddress,
+            age: Date.now() - Number(t.createdAt),
+          }
+        })
+      )
+
       return {
-        tokens: topTokens.map((t) => ({
-          mint: t.mintAddress,
-          symbol: t.symbol,
-          name: t.name,
-          imageUri: t.imageUri || null,
-          marketCapUSD: t.stats.marketCapUSD,
-          priceSol: t.stats.currentPriceSol,
-          priceUSD: t.stats.currentPriceUSD,
-          volume: {
-            sol: t.stats.volumeSol,
-            usd: t.stats.volumeUSD,
-            timeframe,
-          },
-          trades: {
-            total: t.stats.tradeCount,
-            buys: t.stats.buyCount,
-            sells: t.stats.sellCount,
-            buyRatio: t.stats.tradeCount > 0 ? t.stats.buyCount / t.stats.tradeCount : 0,
-          },
-          priceChange: {
-            percent: t.stats.priceChange,
-            timeframe,
-          },
-          complete: t.completed,
-          isLive: !t.completed,
-          creator: t.creatorAddress,
-          age: Date.now() - Number(t.createdAt),
-        })),
-        count: topTokens.length,
+        tokens: enrichedTokens,
+        count: enrichedTokens.length,
         filters: {
           sortBy,
           timeframe,
@@ -219,6 +344,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
             maxMarketCapUSD: args.maxMarketCapUSD,
           },
         },
+        analysisNote: 'Use get_token_details for bonding curve info, get_recent_trades for order flow, get_position to check your holdings',
         timestamp: Date.now(),
       }
     },
