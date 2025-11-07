@@ -14,9 +14,11 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = request.nextUrl
     const walletId = searchParams.get('walletId') ?? undefined
+    const userId = searchParams.get('userId') ?? session.user.id // Allow viewing AI trader portfolios
+    
     const wallet = walletId
-      ? await prisma.wallet.findUnique({ where: { id: walletId, userId: session.user.id } })
-      : await getDefaultWallet(session.user.id)
+      ? await prisma.wallet.findUnique({ where: { id: walletId, userId } })
+      : await getDefaultWallet(userId)
 
     if (!wallet) {
       return NextResponse.json({ error: 'Wallet not found' }, { status: 404 })
@@ -24,7 +26,7 @@ export async function GET(request: NextRequest) {
 
     const [portfolio, solUsd, balanceSol] = await Promise.all([
       prisma.userPortfolio.findMany({
-        where: { userId: session.user.id },
+        where: { userId },
         include: {
           token: {
             include: {
@@ -35,7 +37,7 @@ export async function GET(request: NextRequest) {
         orderBy: { updatedAt: 'desc' },
       }),
       getLatestSolPrice().then((value) => value ?? 0),
-      getUserBalance(session.user.id),
+      getUserBalance(userId),
     ])
 
     const positions = portfolio
@@ -79,7 +81,7 @@ export async function GET(request: NextRequest) {
 
     // Get trade history grouped by token
     const trades = await prisma.userTrade.findMany({
-      where: { userId: session.user.id },
+      where: { userId },
       include: {
         token: {
           select: {

@@ -24,6 +24,11 @@ import {
   Card,
   CardContent,
   Grid,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  FormHelperText,
 } from '@mui/material'
 import {
   Add,
@@ -46,6 +51,9 @@ interface AiTrader {
   balance: number
   totalPnL: number
   positions: number
+  themeColor: string
+  llmProvider: string
+  llmModel: string
 }
 
 export default function AiTradersPage() {
@@ -58,11 +66,43 @@ export default function AiTradersPage() {
     configName: '',
     strategyType: 'basic',
     initialBalance: 10,
+    themeColor: '#00ff88',
+    llmProvider: 'openai' as 'openai' | 'anthropic' | 'groq' | 'mlstudio' | 'ollama',
+    llmModel: '',
+    llmApiKey: '',
+    llmBaseUrl: '',
+    temperature: 0.7,
+    maxTokens: 1000,
+    systemPrompt: '',
   })
+  const [availableModels, setAvailableModels] = useState<string[]>([])
+  const [loadingModels, setLoadingModels] = useState(false)
 
   useEffect(() => {
     fetchTraders()
   }, [])
+
+  const fetchModels = async () => {
+    setLoadingModels(true)
+    try {
+      const params = new URLSearchParams({ provider: formData.llmProvider })
+      if (formData.llmBaseUrl) params.set('baseUrl', formData.llmBaseUrl)
+      if (formData.llmApiKey) params.set('apiKey', formData.llmApiKey)
+
+      const response = await fetch(`/api/admin/llm/models?${params}`)
+      if (response.ok) {
+        const data = await response.json()
+        setAvailableModels(data.models || [])
+        if (data.models?.length > 0 && !formData.llmModel) {
+          setFormData({ ...formData, llmModel: data.models[0] })
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching models:', error)
+    } finally {
+      setLoadingModels(false)
+    }
+  }
 
   const fetchTraders = async () => {
     try {
@@ -160,13 +200,39 @@ export default function AiTradersPage() {
         <Grid container spacing={2}>
           {traders.map((trader) => (
             <Grid item xs={12} md={6} lg={4} key={trader.id}>
-              <Card>
+              <Card
+                sx={{
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  border: `2px solid ${trader.themeColor}40`,
+                  '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: `0 8px 24px ${trader.themeColor}30`,
+                    borderColor: trader.themeColor,
+                  },
+                }}
+                onClick={() => router.push(`/ai-trader/${trader.id}/dashboard`)}
+              >
                 <CardContent>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', mb: 2 }}>
-                    <Box>
-                      <Typography variant="h6">{trader.configName}</Typography>
+                    <Box sx={{ flexGrow: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                        <Box
+                          sx={{
+                            width: 12,
+                            height: 12,
+                            borderRadius: '50%',
+                            backgroundColor: trader.themeColor,
+                            boxShadow: `0 0 8px ${trader.themeColor}`,
+                          }}
+                        />
+                        <Typography variant="h6">{trader.configName}</Typography>
+                      </Box>
                       <Typography variant="body2" color="text.secondary">
-                        {trader.username}
+                        @{trader.username}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                        {trader.llmProvider} · {trader.llmModel}
                       </Typography>
                       <Chip
                         label={trader.isRunning ? 'Running' : 'Stopped'}
@@ -175,14 +241,7 @@ export default function AiTradersPage() {
                         sx={{ mt: 1 }}
                       />
                     </Box>
-                    <Box>
-                      <IconButton
-                        size="small"
-                        onClick={() => router.push(`/dashboard/admin/ai-traders/${trader.id}`)}
-                        title="View Details"
-                      >
-                        <Visibility />
-                      </IconButton>
+                    <Box onClick={(e) => e.stopPropagation()}>
                       <IconButton
                         size="small"
                         onClick={() => handleDelete(trader.id)}
@@ -219,9 +278,15 @@ export default function AiTradersPage() {
                       </Typography>
                       <Typography variant="body2">{trader.positions}</Typography>
                     </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Strategy:
+                      </Typography>
+                      <Typography variant="body2">{trader.strategyType}</Typography>
+                    </Box>
                   </Box>
 
-                  <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Box sx={{ display: 'flex', gap: 1 }} onClick={(e) => e.stopPropagation()}>
                     {trader.isRunning ? (
                       <Button
                         variant="outlined"
@@ -236,11 +301,18 @@ export default function AiTradersPage() {
                     ) : (
                       <Button
                         variant="outlined"
-                        color="success"
                         size="small"
                         startIcon={<PlayArrow />}
                         onClick={() => handleStart(trader.id)}
                         fullWidth
+                        sx={{
+                          borderColor: trader.themeColor,
+                          color: trader.themeColor,
+                          '&:hover': {
+                            borderColor: trader.themeColor,
+                            backgroundColor: `${trader.themeColor}20`,
+                          },
+                        }}
                       >
                         Start
                       </Button>
@@ -256,10 +328,11 @@ export default function AiTradersPage() {
         </Grid>
       )}
 
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
+      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="md" fullWidth>
         <DialogTitle>Spawn AI Trader</DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+            <Typography variant="h6">Basic Configuration</Typography>
             <TextField
               fullWidth
               label="Username"
@@ -279,7 +352,7 @@ export default function AiTradersPage() {
               label="Strategy Type"
               value={formData.strategyType}
               onChange={(e) => setFormData({ ...formData, strategyType: e.target.value })}
-              helperText="Trading strategy identifier"
+              helperText="Trading strategy identifier (e.g., momentum, contrarian, etc.)"
             />
             <TextField
               fullWidth
@@ -290,11 +363,169 @@ export default function AiTradersPage() {
                 setFormData({ ...formData, initialBalance: parseFloat(e.target.value) || 10 })
               }
             />
+
+            <Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Theme Color
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <input
+                  type="color"
+                  value={formData.themeColor}
+                  onChange={(e) => setFormData({ ...formData, themeColor: e.target.value })}
+                  style={{ width: 60, height: 40, border: 'none', cursor: 'pointer' }}
+                />
+                <TextField
+                  label="Color Code"
+                  value={formData.themeColor}
+                  onChange={(e) => setFormData({ ...formData, themeColor: e.target.value })}
+                  size="small"
+                  sx={{ flexGrow: 1 }}
+                />
+                <Box
+                  sx={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 1,
+                    backgroundColor: formData.themeColor,
+                    border: '1px solid rgba(255,255,255,0.2)',
+                  }}
+                />
+              </Box>
+              <FormHelperText>Choose a theme color for this AI trader&apos;s dashboard</FormHelperText>
+            </Box>
+
+            <Typography variant="h6" sx={{ mt: 2 }}>
+              LLM Configuration
+            </Typography>
+            <FormControl fullWidth>
+              <InputLabel>LLM Provider</InputLabel>
+              <Select
+                value={formData.llmProvider}
+                label="LLM Provider"
+                onChange={(e) => {
+                  const provider = e.target.value as any
+                  setFormData({ ...formData, llmProvider: provider, llmModel: '' })
+                  setAvailableModels([])
+                }}
+              >
+                <MenuItem value="openai">OpenAI</MenuItem>
+                <MenuItem value="anthropic">Anthropic</MenuItem>
+                <MenuItem value="groq">Groq</MenuItem>
+                <MenuItem value="mlstudio">LM Studio</MenuItem>
+                <MenuItem value="ollama">Ollama</MenuItem>
+              </Select>
+              <FormHelperText>Choose the LLM provider for this agent</FormHelperText>
+            </FormControl>
+
+            {(formData.llmProvider === 'mlstudio' || formData.llmProvider === 'ollama') && (
+              <TextField
+                fullWidth
+                label="Base URL"
+                value={formData.llmBaseUrl}
+                onChange={(e) => setFormData({ ...formData, llmBaseUrl: e.target.value })}
+                placeholder={
+                  formData.llmProvider === 'mlstudio'
+                    ? 'http://localhost:1234/v1'
+                    : 'http://localhost:11434'
+                }
+                helperText={`${formData.llmProvider === 'mlstudio' ? 'LM Studio' : 'Ollama'} server URL`}
+              />
+            )}
+
+            {(formData.llmProvider === 'openai' ||
+              formData.llmProvider === 'anthropic' ||
+              formData.llmProvider === 'groq') && (
+              <TextField
+                fullWidth
+                label="API Key"
+                value={formData.llmApiKey}
+                onChange={(e) => setFormData({ ...formData, llmApiKey: e.target.value })}
+                placeholder="Enter API key or leave blank to use environment variable"
+                helperText={`Optional: Leave blank to use ${formData.llmProvider.toUpperCase()}_API_KEY from .env`}
+                type="password"
+              />
+            )}
+
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
+              <FormControl fullWidth disabled={loadingModels}>
+                <InputLabel>Model</InputLabel>
+                <Select
+                  value={formData.llmModel}
+                  label="Model"
+                  onChange={(e) => setFormData({ ...formData, llmModel: e.target.value })}
+                >
+                  {availableModels.map((model) => (
+                    <MenuItem key={model} value={model}>
+                      {model}
+                    </MenuItem>
+                  ))}
+                </Select>
+                <FormHelperText>
+                  {availableModels.length > 0
+                    ? 'Select a model'
+                    : 'Click "Load Models" to fetch available models'}
+                </FormHelperText>
+              </FormControl>
+              <Button
+                variant="outlined"
+                onClick={fetchModels}
+                disabled={loadingModels}
+                sx={{ minWidth: 120 }}
+              >
+                {loadingModels ? <CircularProgress size={24} /> : 'Load Models'}
+              </Button>
+            </Box>
+
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                fullWidth
+                label="Temperature"
+                type="number"
+                inputProps={{ min: 0, max: 2, step: 0.1 }}
+                value={formData.temperature}
+                onChange={(e) =>
+                  setFormData({ ...formData, temperature: parseFloat(e.target.value) || 0.7 })
+                }
+                helperText="Controls randomness (0-2)"
+              />
+              <TextField
+                fullWidth
+                label="Max Tokens"
+                type="number"
+                inputProps={{ min: 100, max: 32000, step: 100 }}
+                value={formData.maxTokens}
+                onChange={(e) =>
+                  setFormData({ ...formData, maxTokens: parseInt(e.target.value) || 1000 })
+                }
+                helperText="Maximum response length"
+              />
+            </Box>
+
+            <TextField
+              fullWidth
+              multiline
+              rows={4}
+              label="System Prompt"
+              value={formData.systemPrompt}
+              onChange={(e) => setFormData({ ...formData, systemPrompt: e.target.value })}
+              placeholder="You are an AI trading agent that analyzes pump.fun tokens and makes informed trading decisions..."
+              helperText="Define the AI agent's personality and trading approach"
+            />
           </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
-          <Button onClick={handleSpawn} variant="contained">
+          <Button
+            onClick={handleSpawn}
+            variant="contained"
+            disabled={
+              !formData.username ||
+              !formData.configName ||
+              !formData.llmProvider ||
+              !formData.llmModel
+            }
+          >
             Spawn
           </Button>
         </DialogActions>

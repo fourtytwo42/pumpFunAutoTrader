@@ -29,6 +29,8 @@ export async function GET() {
           return sum + (currentValue - costBasis)
         }, 0)
 
+        const config = user.aiConfig?.configJson as any
+
         return {
           id: user.id,
           username: user.username,
@@ -40,6 +42,9 @@ export async function GET() {
           balance,
           totalPnL,
           positions: portfolio.length,
+          themeColor: config?.themeColor || '#00ff88',
+          llmProvider: config?.llm?.provider || 'unknown',
+          llmModel: config?.llm?.model || 'unknown',
         }
       })
     )

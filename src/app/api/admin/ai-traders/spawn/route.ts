@@ -9,11 +9,31 @@ export async function POST(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const { username, configName, strategyType, initialBalance } = await request.json()
+    const {
+      username,
+      configName,
+      strategyType,
+      initialBalance,
+      themeColor,
+      llmProvider,
+      llmModel,
+      llmApiKey,
+      llmBaseUrl,
+      temperature,
+      maxTokens,
+      systemPrompt,
+    } = await request.json()
 
     if (!username || !configName) {
       return NextResponse.json(
         { error: 'username and configName are required' },
+        { status: 400 }
+      )
+    }
+
+    if (!llmProvider || !llmModel) {
+      return NextResponse.json(
+        { error: 'LLM provider and model are required' },
         { status: 400 }
       )
     }
@@ -54,6 +74,18 @@ export async function POST(request: NextRequest) {
         strategyType: strategyType || 'basic',
         configJson: {
           initialBalance: initialBalance || 10,
+          themeColor: themeColor || '#00ff88',
+          llm: {
+            provider: llmProvider,
+            model: llmModel,
+            apiKey: llmApiKey,
+            baseUrl: llmBaseUrl,
+            temperature: temperature ?? 0.7,
+            maxTokens: maxTokens ?? 1000,
+          },
+          systemPrompt:
+            systemPrompt ||
+            'You are an AI trading agent. Analyze market data and make informed trading decisions.',
         },
         isRunning: false,
         createdById: session.user.id,
@@ -69,6 +101,15 @@ export async function POST(request: NextRequest) {
         playbackSpeed: 1.0,
         solBalanceStart: initialBalance || 10,
         isActive: true,
+      },
+    })
+
+    // Create wallet for AI trader
+    await prisma.wallet.create({
+      data: {
+        userId: aiUser.id,
+        label: `${configName} Wallet`,
+        pubkey: `AI_WALLET_${aiUser.id}`,
       },
     })
 
