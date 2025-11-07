@@ -27,6 +27,7 @@ import {
 } from '@mui/icons-material'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeRaw from 'rehype-raw'
 
 interface ChatMessage {
   id: string
@@ -354,80 +355,113 @@ export default function AiTraderChatPage() {
             </Box>
           ) : (
             <Stack spacing={2}>
-              {messages.map((message) => (
-                <Box
-                  key={message.id}
-                  sx={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: message.role === 'user' ? 'flex-end' : 'flex-start',
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                    <Chip
-                      label={
-                        message.role === 'user'
-                          ? currentUserName
-                          : message.role === 'assistant'
-                            ? traderInfo.username
-                            : message.role === 'tool'
-                              ? 'TOOL'
-                              : 'SYSTEM'
-                      }
-                      size="small"
-                      color={
-                        message.role === 'user'
-                          ? 'primary'
-                          : message.role === 'assistant'
-                            ? 'success'
-                            : message.role === 'tool'
-                              ? 'warning'
-                              : 'default'
-                      }
-                    />
-                    <Typography variant="caption" color="text.secondary">
-                      {new Date(message.timestamp).toLocaleTimeString()}
-                    </Typography>
-                  </Box>
-                  <Paper
+              {messages.map((message, index) => {
+                // Group tool calls with the next assistant message
+                if (message.role === 'tool') {
+                  return null // Don't render tool messages independently
+                }
+
+                // Find tool calls that precede this assistant message
+                const toolCalls: typeof messages = []
+                if (message.role === 'assistant') {
+                  let i = index - 1
+                  while (i >= 0 && messages[i].role === 'tool') {
+                    toolCalls.unshift(messages[i])
+                    i--
+                  }
+                }
+
+                return (
+                  <Box
+                    key={message.id}
                     sx={{
-                      p: 2,
-                      maxWidth: '80%',
-                      backgroundColor:
-                        message.role === 'user'
-                          ? `${traderInfo.themeColor}20`
-                          : message.role === 'tool'
-                            ? '#2a2a2a'
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: message.role === 'user' ? 'flex-end' : 'flex-start',
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                      <Chip
+                        label={
+                          message.role === 'user'
+                            ? currentUserName
+                            : message.role === 'assistant'
+                              ? traderInfo.username
+                              : 'SYSTEM'
+                        }
+                        size="small"
+                        color={message.role === 'user' ? 'primary' : message.role === 'assistant' ? 'success' : 'default'}
+                      />
+                      <Typography variant="caption" color="text.secondary">
+                        {new Date(message.timestamp).toLocaleTimeString()}
+                      </Typography>
+                    </Box>
+
+                    {/* Show compact tool calls under AI name */}
+                    {toolCalls.length > 0 && (
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 0.5, ml: 1 }}>
+                        {toolCalls.map((toolMsg) => {
+                          const toolName = toolMsg.meta?.toolName || 'tool'
+                          const status = toolMsg.meta?.status || 'executing'
+                          return (
+                            <Chip
+                              key={toolMsg.id}
+                              label={
+                                status === 'executing'
+                                  ? `${toolName} running...`
+                                  : status === 'completed'
+                                    ? `✓ ${toolName}`
+                                    : `✗ ${toolName}`
+                              }
+                              size="small"
+                              variant="outlined"
+                              sx={{
+                                height: 20,
+                                fontSize: '0.65rem',
+                                borderColor:
+                                  status === 'completed'
+                                    ? 'success.main'
+                                    : status === 'failed'
+                                      ? 'error.main'
+                                      : 'warning.main',
+                                color:
+                                  status === 'completed'
+                                    ? 'success.main'
+                                    : status === 'failed'
+                                      ? 'error.main'
+                                      : 'warning.main',
+                              }}
+                              icon={
+                                status === 'executing' ? (
+                                  <CircularProgress size={10} sx={{ color: 'warning.main' }} />
+                                ) : undefined
+                              }
+                            />
+                          )
+                        })}
+                      </Box>
+                    )}
+                    <Paper
+                      sx={{
+                        p: 2,
+                        maxWidth: '80%',
+                        backgroundColor:
+                          message.role === 'user'
+                            ? `${traderInfo.themeColor}20`
                             : message.role === 'system'
                               ? '#1a1a1a'
                               : '#1a1a1a',
-                      border:
-                        message.role === 'user'
-                          ? `1px solid ${traderInfo.themeColor}40`
-                          : message.role === 'tool'
-                            ? '1px solid #ffa726'
+                        border:
+                          message.role === 'user'
+                            ? `1px solid ${traderInfo.themeColor}40`
                             : '1px solid rgba(255,255,255,0.1)',
-                    }}
-                  >
-                    {message.role === 'tool' ? (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        {message.meta?.status === 'executing' && (
-                          <CircularProgress size={16} sx={{ color: '#ffa726' }} />
-                        )}
-                        <Typography
-                          variant="body2"
-                          color={
-                            message.meta?.status === 'completed'
-                              ? 'success.main'
-                              : message.meta?.status === 'failed'
-                                ? 'error.main'
-                                : 'warning.main'
-                          }
-                        >
+                      }}
+                    >
+                      {message.role === 'system' ? (
+                        <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
                           {message.content}
                         </Typography>
-                      </Box>
-                    ) : (
+                      ) : (
                       <Box
                         sx={{
                           '& p': { margin: '0.5em 0' },
@@ -484,43 +518,39 @@ export default function AiTraderChatPage() {
                           },
                         }}
                       >
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        <ReactMarkdown 
+                          remarkPlugins={[remarkGfm]}
+                          rehypePlugins={[rehypeRaw]}
+                        >
                           {message.content}
                         </ReactMarkdown>
                       </Box>
-                    )}
-                    {debugMode && message.toolCall && (
-                      <Box sx={{ mt: 2, p: 1, backgroundColor: '#0a0a0a', borderRadius: 1 }}>
+                      )}
+                    </Paper>
+                    {debugMode && message.meta?.executedTools && Array.isArray(message.meta.executedTools) && (
+                      <Box sx={{ mt: 1, p: 1, backgroundColor: '#0a0a0a', borderRadius: 1, maxWidth: '80%' }}>
                         <Typography variant="caption" color="warning.main" sx={{ display: 'block', mb: 1 }}>
-                          Tool Call: {message.toolCall.name}
+                          Debug: Tool Results
                         </Typography>
-                        <Typography
-                          variant="caption"
-                          component="pre"
-                          sx={{ fontSize: 10, overflow: 'auto' }}
-                        >
-                          {JSON.stringify(message.toolCall.args, null, 2)}
-                        </Typography>
-                        {message.toolCall.result && (
-                          <>
-                            <Divider sx={{ my: 1 }} />
-                            <Typography variant="caption" color="success.main" sx={{ display: 'block', mb: 1 }}>
-                              Result:
+                        {message.meta.executedTools.map((tool: any, idx: number) => (
+                          <Box key={idx} sx={{ mb: idx < (message.meta?.executedTools?.length || 0) - 1 ? 2 : 0 }}>
+                            <Typography variant="caption" sx={{ display: 'block', fontWeight: 'bold', color: 'success.main' }}>
+                              {tool.name}
                             </Typography>
                             <Typography
                               variant="caption"
                               component="pre"
-                              sx={{ fontSize: 10, overflow: 'auto' }}
+                              sx={{ fontSize: 9, overflow: 'auto', maxHeight: 200 }}
                             >
-                              {JSON.stringify(message.toolCall.result, null, 2)}
+                              {JSON.stringify(tool.result, null, 2)}
                             </Typography>
-                          </>
-                        )}
+                          </Box>
+                        ))}
                       </Box>
                     )}
-                  </Paper>
-                </Box>
-              ))}
+                  </Box>
+                )
+              })}
             </Stack>
           )}
           <div ref={messagesEndRef} />
