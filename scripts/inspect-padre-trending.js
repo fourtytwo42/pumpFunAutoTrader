@@ -1,0 +1,279 @@
+#!/usr/bin/env node
+
+/*
+ * Inspect the Padre /trending websocket feed.
+ *
+ * Connects to wss://backend2.padre.gg/_heavy_multiplex?desc=/trending,
+ * captures a handful of messages, attempts to decode (base64, zlib, brotli,
+ * msgpack, JSON), and prints a structured summary.
+ */
+
+const { WebSocket } = require('ws')
+const zlib = require('zlib')
+const { decode: msgpackDecode, encode: msgpackEncode } = require('@msgpack/msgpack')
+
+const WS_URL = 'wss://backend2.padre.gg/_heavy_multiplex?desc=%2Ftrending'
+const MAX_MESSAGES = 50
+const REQUIRED_INTERESTING = 3
+const TIMEOUT_MS = 30_000
+
+// --- CLI / ENV configuration -------------------------------------------------
+const argv = process.argv.slice(2)
+const options = {}
+for (const arg of argv) {
+  if (!arg.startsWith('--')) continue
+  const [key, rawValue] = arg.slice(2).split('=')
+  const value = rawValue === undefined ? true : rawValue
+  if (options[key]) {
+    if (!Array.isArray(options[key])) options[key] = [options[key]]
+    options[key].push(value)
+  } else {
+    options[key] = value
+  }
+}
+
+const jwt = options.jwt || process.env.PADRE_JWT
+const sessionId = options.session || process.env.PADRE_SESSION
+const userId = options.user || process.env.PADRE_USER
+const extraSubs = options.sub
+
+if (!jwt || !sessionId) {
+  console.error('[padre] Missing credentials. Provide --jwt and --session (or PADRE_JWT / PADRE_SESSION env vars).')
+  console.error('        Example: node scripts/inspect-padre-trending.js --jwt="<token>" --session="dc3c..." --user="w_..."')
+  process.exit(1)
+}
+
+const DEFAULT_SUBSCRIPTIONS = [
+  '/padre-news/news/all/current-version',
+  userId && `/twitter/tweet/subscribe-feed/v3/${userId}?encodedCategoryFilters=&onlySubscribedAccounts=1`,
+  userId && `/orders/users/${userId}/subscribe-orders?limit=1`,
+  userId && `/watchlist/users/${userId}/on-watchlist-update`,
+]
+  .filter(Boolean)
+  .concat(extraSubs ? (Array.isArray(extraSubs) ? extraSubs : [extraSubs]) : [])
+
+const subscriptionEnvelope = DEFAULT_SUBSCRIPTIONS.map((path, index) => [4, 100 + index, path])
+
+const results = []
+let interestingCount = 0
+let timeout
+
+function isPrintable(str) {
+  if (!str) return false
+  const printable = str.replace(/[\x20-\x7E\s]/g, '')
+  return printable.length / str.length < 0.2
+}
+
+function summariseValue(value, depth = 0) {
+  if (depth > 2) return '[depth limit]'
+  if (value === null || value === undefined) return value
+  if (typeof value === 'string') {
+    if (value.length > 200) {
+      return `${value.slice(0, 200)}… (len=${value.length})`
+    }
+    return value
+  }
+  if (Array.isArray(value)) {
+    return {
+      type: 'array',
+      length: value.length,
+      sample: value.slice(0, 5).map((item) => summariseValue(item, depth + 1)),
+    }
+  }
+  if (typeof value === 'object') {
+    const keys = Object.keys(value)
+    const sample = {}
+    keys.slice(0, 10).forEach((key) => {
+      sample[key] = summariseValue(value[key], depth + 1)
+    })
+    return { type: 'object', keys, sample }
+  }
+  return value
+}
+
+function tryDecompression(label, buffer) {
+  const attempts = []
+  const methods = [
+    { label: `${label}-inflate`, fn: zlib.inflateSync },
+    { label: `${label}-gunzip`, fn: zlib.gunzipSync },
+    { label: `${label}-unzip`, fn: zlib.unzipSync },
+    { label: `${label}-brotli`, fn: zlib.brotliDecompressSync },
+  ]
+
+  for (const method of methods) {
+    try {
+      const out = method.fn(buffer)
+      attempts.push(analyseBuffer(method.label, out))
+    } catch (_) {
+      // ignore
+    }
+  }
+  return attempts
+}
+
+function analyseBuffer(label, buffer) {
+  const info = {
+    label,
+    size: buffer.length,
+    hexPreview: buffer.slice(0, 16).toString('hex'),
+  }
+
+  const text = buffer.toString('utf8')
+  if (isPrintable(text)) {
+    info.asTextPreview = text.slice(0, 400)
+    try {
+      const json = JSON.parse(text)
+      info.json = summariseValue(json)
+    } catch (_) {
+      // not JSON
+    }
+  }
+
+  try {
+    const decoded = msgpackDecode(buffer)
+    info.msgpack = summariseValue(decoded)
+  } catch (_) {
+    // not msgpack at this stage
+  }
+
+  return info
+}
+
+function analyseMessage(rawData) {
+  const entry = {
+    receivedAt: new Date().toISOString(),
+    typeof: typeof rawData,
+  }
+
+  let buffer
+
+  if (typeof rawData === 'string') {
+    const trimmed = rawData.trim()
+    entry.rawPreview = trimmed.slice(0, 80)
+    entry.rawLength = trimmed.length
+    const looksBase64 = /^[A-Za-z0-9+/=]+$/.test(trimmed) && trimmed.length % 4 === 0
+    entry.looksBase64 = looksBase64
+    buffer = looksBase64 ? Buffer.from(trimmed, 'base64') : Buffer.from(trimmed)
+  } else if (Buffer.isBuffer(rawData)) {
+    buffer = rawData
+    entry.rawLength = rawData.length
+    entry.rawPreview = rawData.slice(0, 16).toString('hex')
+  } else if (rawData instanceof ArrayBuffer) {
+    buffer = Buffer.from(rawData)
+    entry.rawLength = buffer.length
+    entry.rawPreview = buffer.slice(0, 16).toString('hex')
+  } else {
+    buffer = Buffer.from(rawData)
+    entry.rawLength = buffer.length
+    entry.rawPreview = buffer.slice(0, 16).toString('hex')
+  }
+
+  entry.analysis = [analyseBuffer('raw', buffer)]
+  entry.analysis.push(...tryDecompression('raw', buffer))
+
+  // If base64, also attempt analysis on the UTF8 text directly
+  if (entry.looksBase64) {
+    const text = buffer.toString('utf8')
+    if (isPrintable(text)) {
+      entry.plainText = text.slice(0, 400)
+    }
+  }
+
+  return { entry, buffer }
+}
+
+function finalizeAndExit(code) {
+  if (timeout) clearTimeout(timeout)
+  console.log('\n=== Padre /trending websocket analysis ===')
+  console.log(
+    JSON.stringify(
+      {
+        messageCount: results.length,
+        interestingCount,
+        messages: results,
+      },
+      null,
+      2,
+    ),
+  )
+  process.exit(code)
+}
+
+function sendMsgpack(ws, payload) {
+  try {
+    const encoded = msgpackEncode(payload)
+    ws.send(encoded)
+  } catch (error) {
+    console.error('[padre] Failed to encode/send payload', payload, error)
+  }
+}
+
+function main() {
+  console.log(`[padre] Connecting to ${WS_URL}`)
+
+  const ws = new WebSocket(WS_URL, {
+    headers: {
+      Origin: 'https://trade.padre.gg',
+      'User-Agent': 'Mozilla/5.0 (compatible; PadreInspector/1.0)',
+      'Cache-Control': 'no-cache',
+      Pragma: 'no-cache',
+    },
+  })
+
+  ws.on('open', () => {
+    console.log('[padre] WebSocket connected')
+    console.log('[padre] Sending auth handshake…')
+    sendMsgpack(ws, [1, jwt, sessionId])
+
+    if (subscriptionEnvelope.length > 0) {
+      console.log(`[padre] Queuing ${subscriptionEnvelope.length} subscription requests`)
+      subscriptionEnvelope.forEach((payload, idx) => {
+        setTimeout(() => {
+          console.log(`[padre] → subscribe ${payload[2]}`)
+          sendMsgpack(ws, payload)
+        }, (idx + 1) * 200)
+      })
+    }
+
+    timeout = setTimeout(() => {
+      console.warn('[padre] Timeout waiting for messages')
+      ws.close()
+      finalizeAndExit(1)
+    }, TIMEOUT_MS)
+  })
+
+  ws.on('message', (data) => {
+    const { entry, buffer } = analyseMessage(data)
+    results.push(entry)
+
+    if (entry.rawLength > 2 || buffer.length > 2) {
+      interestingCount += 1
+      console.log(
+        `[padre] Message #${results.length} captured (interesting, length=${entry.rawLength})`,
+      )
+    } else {
+      console.log(`[padre] Message #${results.length} captured (heartbeat, length=2)`) 
+    }
+
+    if (interestingCount >= REQUIRED_INTERESTING || results.length >= MAX_MESSAGES) {
+      ws.close()
+      finalizeAndExit(0)
+    }
+  })
+
+  ws.on('error', (err) => {
+    console.error('[padre] WebSocket error:', err.message)
+    finalizeAndExit(1)
+  })
+
+  ws.on('close', (code, reason) => {
+    console.log(`[padre] WebSocket closed (code=${code}, reason=${reason.toString()})`)
+    if (results.length && timeout) {
+      clearTimeout(timeout)
+      finalizeAndExit(0)
+    }
+  })
+}
+
+main()
+
