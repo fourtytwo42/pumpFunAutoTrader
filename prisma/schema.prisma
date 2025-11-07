@@ -314,12 +314,13 @@ model Order {
   id              String      @id @default(cuid())
   userId          String      @map("user_id")
   user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  walletId        String      @map("wallet_id")
-  tokenMint       String      @map("token_mint")
+  walletId        String
+  tokenMint       String
   side            String
   status          String
   qtyTokens       Decimal?    @map("qty_tokens") @db.Decimal(30, 18)
   qtySol          Decimal?    @map("qty_sol") @db.Decimal(30, 18)
+  limitPriceUsd   Decimal?    @map("limit_price_usd") @db.Decimal(30, 18)
   limitPriceSol   Decimal?    @map("limit_price_sol") @db.Decimal(30, 18)
   slippageBps     Int?        @map("slippage_bps")
   reason          String?
