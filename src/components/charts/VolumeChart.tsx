@@ -35,7 +35,7 @@ export default function VolumeChart({ tokenAddress, interval = '1m', height = 20
   const fetchChartData = useCallback(async () => {
     setLoading(true)
     try {
-      const url = `/api/tokens/${tokenAddress}/candles?interval=${interval}&limit=500`
+      const url = `/api/tokens/${tokenAddress}/candles?interval=${interval}&limit=1000`
 
       console.log('[VolumeChart] Fetching candle data:', url)
       const response = await fetch(url)

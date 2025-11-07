@@ -210,7 +210,7 @@ export default function PriceChart({ tokenAddress, interval = '1m', height = 300
     setLoading(true)
     setError(null)
     try {
-      const url = `/api/tokens/${tokenAddress}/candles?interval=${interval}&limit=500`
+      const url = `/api/tokens/${tokenAddress}/candles?interval=${interval}&limit=1000`
 
       console.log('[PriceChart] Fetching candle data:', url)
       const response = await fetch(url)
@@ -273,8 +273,11 @@ export default function PriceChart({ tokenAddress, interval = '1m', height = 300
   }, [chartData])
 
   const domain = useMemo(() => {
-    const padding = (priceExtent.max - priceExtent.min) * 0.1 || Math.abs(priceExtent.min) * 0.1 || 0.00000001
-    return [priceExtent.min - padding, priceExtent.max + padding] as [number, number]
+    const range = priceExtent.max - priceExtent.min
+    const padding = range * 0.15 || Math.abs(priceExtent.max) * 0.15 || 0.00000001
+    const minWithPadding = Math.max(0, priceExtent.min - padding)
+    const maxWithPadding = priceExtent.max + padding
+    return [minWithPadding, maxWithPadding] as [number, number]
   }, [priceExtent])
 
   if (loading) {
@@ -324,8 +327,12 @@ export default function PriceChart({ tokenAddress, interval = '1m', height = 300
           stroke="#888"
           style={{ fontSize: '12px' }}
           tick={{ fill: '#888' }}
-          tickFormatter={(value) => value.toFixed(8)}
-          width={80}
+          tickFormatter={(value) => {
+            if (value >= 0.001) return value.toFixed(6)
+            if (value >= 0.0001) return value.toFixed(7)
+            return value.toExponential(2)
+          }}
+          width={90}
           yAxisId={PRICE_Y_AXIS_ID}
         />
         <Tooltip content={<CandleTooltip />} />
