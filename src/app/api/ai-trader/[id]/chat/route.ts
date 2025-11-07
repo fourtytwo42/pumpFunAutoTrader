@@ -219,7 +219,7 @@ Risk management:
       
       // Tools that need arguments but can use smart defaults
       const smartDefaultTools: Record<string, any> = {
-        'get_trending_tokens': { limit: 10, includeNsfw: false },
+        'get_trending_tokens': { sortBy: 'volume', timeframe: '1h', limit: 10 },
         'get_user_trades': { limit: 20 },
       }
 

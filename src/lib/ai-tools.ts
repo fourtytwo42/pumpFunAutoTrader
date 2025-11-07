@@ -36,58 +36,190 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
 
   get_trending_tokens: {
     name: 'get_trending_tokens',
-    description: 'Fetch trending tokens from pump.fun with market cap, price, and metadata. Returns basic discovery data. NOTE: Does not include 24h volume or price changes - use get_token_metrics (with poolAddress) for that data.',
+    description: 'Get trending tokens from database with powerful filtering and sorting. Can sort by volume, trades, market cap over any timeframe (1m, 5m, 1h, 24h). Returns real-time data from our ingestion system.',
     category: 'market',
     riskLevel: 'safe',
     cacheSeconds: 0,
     parameters: {
       type: 'object',
       properties: {
-        marketCapMin: { type: 'number', description: 'Minimum market cap in USD' },
-        marketCapMax: { type: 'number', description: 'Maximum market cap in USD' },
-        volume24hMin: { type: 'number', description: 'Minimum 24h volume in USD' },
-        volume24hMax: { type: 'number', description: 'Maximum 24h volume in USD' },
-        includeNsfw: { type: 'boolean', description: 'Include NSFW tokens (default: false)' },
-        limit: { type: 'number', description: 'Max results (default: 20, max: 200)' },
+        sortBy: {
+          type: 'string',
+          description: 'Sort by: volume, trades, marketCap, priceChange (default: volume)',
+          enum: ['volume', 'trades', 'marketCap', 'priceChange'],
+        },
+        timeframe: {
+          type: 'string',
+          description: 'Timeframe for volume/trades: 1m, 5m, 1h, 6h, 24h (default: 1h)',
+          enum: ['1m', '5m', '1h', '6h', '24h'],
+        },
+        minVolumeSol: { type: 'number', description: 'Minimum volume in SOL for the timeframe' },
+        maxVolumeSol: { type: 'number', description: 'Maximum volume in SOL for the timeframe' },
+        minTrades: { type: 'number', description: 'Minimum number of trades in timeframe' },
+        minMarketCapUSD: { type: 'number', description: 'Minimum market cap in USD' },
+        maxMarketCapUSD: { type: 'number', description: 'Maximum market cap in USD' },
+        onlyLive: { type: 'boolean', description: 'Only show live/incomplete tokens (default: false)' },
+        onlyComplete: { type: 'boolean', description: 'Only show graduated tokens (default: false)' },
+        limit: { type: 'number', description: 'Max results (default: 10, max: 100)' },
       },
     },
     execute: async (args, userId) => {
-      const filters: PumpAPI.TrendingFilters = {
-        marketCapMinUSD: args.marketCapMin,
-        marketCapMaxUSD: args.marketCapMax,
-        volume24hMinUSD: args.volume24hMin,
-        volume24hMaxUSD: args.volume24hMax,
-        includeNsfw: args.includeNsfw || false,
-        limit: Math.min(args.limit || 20, 200),
-      }
+      const sortBy = args.sortBy || 'volume'
+      const timeframe = args.timeframe || '1h'
+      const limit = Math.min(args.limit || 10, 100)
 
-      const tokens = await PumpAPI.getTrendingTokens(filters)
+      // Calculate timeframe cutoff
+      const timeframeMs: Record<string, number> = {
+        '1m': 60 * 1000,
+        '5m': 5 * 60 * 1000,
+        '1h': 60 * 60 * 1000,
+        '6h': 6 * 60 * 60 * 1000,
+        '24h': 24 * 60 * 60 * 1000,
+      }
+      const cutoffTime = new Date(Date.now() - timeframeMs[timeframe])
+
+      // Build query for tokens with recent activity
+      const tokensWithActivity = await prisma.token.findMany({
+        where: {
+          ...(args.onlyLive ? { completed: false } : {}),
+          ...(args.onlyComplete ? { completed: true } : {}),
+          trades: {
+            some: {
+              createdAt: { gte: cutoffTime },
+            },
+          },
+        },
+        include: {
+          price: true,
+          trades: {
+            where: { createdAt: { gte: cutoffTime } },
+            select: {
+              amountSol: true,
+              amountUsd: true,
+              type: true,
+              createdAt: true,
+            },
+          },
+        },
+        take: limit * 3, // Get more than needed for filtering
+      })
+
+      // Calculate stats for each token
+      const tokensWithStats = tokensWithActivity
+        .map((token) => {
+          const trades = token.trades
+          const volumeSol = trades.reduce((sum, t) => sum + Number(t.amountSol), 0)
+          const volumeUSD = trades.reduce((sum, t) => sum + Number(t.amountUsd), 0)
+          const tradeCount = trades.length
+          const buyCount = trades.filter((t) => t.type === 1).length
+          const sellCount = trades.filter((t) => t.type === 2).length
+
+          // Calculate price change (first to last trade in timeframe)
+          let priceChange = 0
+          if (trades.length >= 2) {
+            const sortedTrades = [...trades].sort(
+              (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
+            )
+            const firstPrice =
+              Number(sortedTrades[0].amountSol) / Number(sortedTrades[0].amountUsd || 1)
+            const lastPrice =
+              Number(sortedTrades[sortedTrades.length - 1].amountSol) /
+              Number(sortedTrades[sortedTrades.length - 1].amountUsd || 1)
+            if (firstPrice > 0) {
+              priceChange = ((lastPrice - firstPrice) / firstPrice) * 100
+            }
+          }
+
+          const currentPriceSol = token.price ? Number(token.price.priceSol) : 0
+          const currentPriceUSD = token.price ? Number(token.price.priceUsd) : 0
+          const marketCapUSD = currentPriceUSD * (Number(token.totalSupply) / 1e6)
+
+          return {
+            ...token,
+            stats: {
+              volumeSol,
+              volumeUSD,
+              tradeCount,
+              buyCount,
+              sellCount,
+              priceChange,
+              marketCapUSD,
+              currentPriceSol,
+              currentPriceUSD,
+            },
+          }
+        })
+        .filter((t) => {
+          // Apply filters
+          if (args.minVolumeSol && t.stats.volumeSol < args.minVolumeSol) return false
+          if (args.maxVolumeSol && t.stats.volumeSol > args.maxVolumeSol) return false
+          if (args.minTrades && t.stats.tradeCount < args.minTrades) return false
+          if (args.minMarketCapUSD && t.stats.marketCapUSD < args.minMarketCapUSD) return false
+          if (args.maxMarketCapUSD && t.stats.marketCapUSD > args.maxMarketCapUSD) return false
+          return true
+        })
+
+      // Sort based on sortBy parameter
+      tokensWithStats.sort((a, b) => {
+        switch (sortBy) {
+          case 'volume':
+            return b.stats.volumeSol - a.stats.volumeSol
+          case 'trades':
+            return b.stats.tradeCount - a.stats.tradeCount
+          case 'marketCap':
+            return b.stats.marketCapUSD - a.stats.marketCapUSD
+          case 'priceChange':
+            return b.stats.priceChange - a.stats.priceChange
+          default:
+            return b.stats.volumeSol - a.stats.volumeSol
+        }
+      })
+
+      // Take top N
+      const topTokens = tokensWithStats.slice(0, limit)
 
       return {
-        tokens: tokens.map((t) => ({
-          mint: t.mint,
+        tokens: topTokens.map((t) => ({
+          mint: t.mintAddress,
           symbol: t.symbol,
           name: t.name,
-          description: t.description || '',
-          imageUri: t.imageUri || '',
-          marketCapUSD: t.marketCapUSD,
-          marketCapSOL: t.marketCap,
-          priceSol: (t.virtualSolReserves || 0) / (t.virtualTokenReserves || 1),
-          virtualReserves: {
-            sol: t.virtualSolReserves,
-            tokens: t.virtualTokenReserves,
+          imageUri: t.imageUri || null,
+          marketCapUSD: t.stats.marketCapUSD,
+          priceSol: t.stats.currentPriceSol,
+          priceUSD: t.stats.currentPriceUSD,
+          volume: {
+            sol: t.stats.volumeSol,
+            usd: t.stats.volumeUSD,
+            timeframe,
           },
-          complete: t.complete,
-          isLive: t.isLive,
-          creator: t.creator,
-          createdTimestamp: t.createdTimestamp,
-          bondingCurve: t.bondingCurve,
-          replyCount: t.replyCount,
-          kingOfTheHill: t.kingOfTheHillTimestamp ? new Date(t.kingOfTheHillTimestamp).toISOString() : null,
+          trades: {
+            total: t.stats.tradeCount,
+            buys: t.stats.buyCount,
+            sells: t.stats.sellCount,
+            buyRatio: t.stats.tradeCount > 0 ? t.stats.buyCount / t.stats.tradeCount : 0,
+          },
+          priceChange: {
+            percent: t.stats.priceChange,
+            timeframe,
+          },
+          complete: t.completed,
+          isLive: !t.completed,
+          creator: t.creatorAddress,
+          age: Date.now() - Number(t.createdAt),
         })),
-        count: tokens.length,
+        count: topTokens.length,
+        filters: {
+          sortBy,
+          timeframe,
+          appliedFilters: {
+            minVolumeSol: args.minVolumeSol,
+            maxVolumeSol: args.maxVolumeSol,
+            minTrades: args.minTrades,
+            minMarketCapUSD: args.minMarketCapUSD,
+            maxMarketCapUSD: args.maxMarketCapUSD,
+          },
+        },
         timestamp: Date.now(),
-        note: 'Volume and price change data not available from trending endpoint. Use get_token_metrics for 24h volume and price changes.',
       }
     },
   },
