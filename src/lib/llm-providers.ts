@@ -320,6 +320,7 @@ async function sendMLStudioRequest(
       messages,
       temperature: config.temperature ?? 0.7,
       max_tokens: config.maxTokens ?? 1000,
+      stream: false,
     }),
   })
 
@@ -336,6 +337,90 @@ async function sendMLStudioRequest(
       completionTokens: data.usage?.completion_tokens || 0,
       totalTokens: data.usage?.total_tokens || 0,
     },
+  }
+}
+
+/**
+ * Stream a chat completion request (for real-time UI updates)
+ * Returns an async generator that yields chunks
+ */
+export async function* streamLLMRequest(
+  config: LLMConfig,
+  messages: LLMMessage[]
+): AsyncGenerator<{ type: 'content' | 'done'; content?: string; usage?: any }> {
+  const baseUrl = config.baseUrl || process.env.MLSTUDIO_BASE_URL || 'http://localhost:1234'
+  const cleanBaseUrl = baseUrl.replace(/\/v1\/?$/, '')
+
+  const response = await fetch(`${cleanBaseUrl}/v1/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: config.model,
+      messages,
+      temperature: config.temperature ?? 0.7,
+      max_tokens: config.maxTokens ?? 1000,
+      stream: true,
+    }),
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`MLStudio streaming error: ${error}`)
+  }
+
+  const reader = response.body?.getReader()
+  const decoder = new TextDecoder()
+  
+  if (!reader) {
+    throw new Error('No response body')
+  }
+
+  let buffer = ''
+  let fullContent = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (!line.trim() || line.trim() === 'data: [DONE]') continue
+        if (!line.startsWith('data: ')) continue
+
+        try {
+          const json = JSON.parse(line.slice(6))
+          const delta = json.choices?.[0]?.delta?.content
+          
+          if (delta) {
+            fullContent += delta
+            yield { type: 'content', content: delta }
+          }
+
+          // Check if done
+          if (json.choices?.[0]?.finish_reason) {
+            yield {
+              type: 'done',
+              content: fullContent,
+              usage: {
+                promptTokens: json.usage?.prompt_tokens || 0,
+                completionTokens: json.usage?.completion_tokens || 0,
+                totalTokens: json.usage?.total_tokens || 0,
+              },
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to parse SSE line:', line)
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock()
   }
 }
 

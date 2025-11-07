@@ -156,31 +156,136 @@ export default function AiTraderChatPage() {
     setInput('')
     setSending(true)
 
+    // Add user message immediately
+    const userMsg: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: messageText,
+      timestamp: Date.now(),
+    }
+    setMessages((prev) => [...prev, userMsg])
+
+    // Create placeholder for AI response
+    const aiMsgId = `ai-${Date.now()}`
+    const aiMsg: ChatMessage = {
+      id: aiMsgId,
+      role: 'assistant',
+      content: '',
+      timestamp: Date.now(),
+    }
+    setMessages((prev) => [...prev, aiMsg])
+
     try {
-      const response = await fetch(`/api/ai-trader/${params.id}/chat`, {
+      const response = await fetch(`/api/ai-trader/${params.id}/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: messageText }),
       })
 
-      if (response.ok) {
-        const data = await response.json()
-
-        // Update available tools
-        if (data.availableTools) {
-          setAvailableTools(data.availableTools)
-          console.log('[AI Chat] Available Tools:', data.availableTools)
-        }
-
-        // Log to console for debugging
-        console.log('[AI Chat] User:', messageText)
-        console.log('[AI Chat] Assistant:', data.response)
-        console.log('[AI Chat] Usage:', data.usage)
-
-        // Messages are saved to DB and will appear via polling
+      if (!response.ok || !response.body) {
+        throw new Error('Streaming not supported')
       }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      const toolMessages: Map<string, ChatMessage> = new Map()
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (!line.trim() || !line.startsWith('data: ')) continue
+
+          try {
+            const event = JSON.parse(line.slice(6))
+
+            if (event.type === 'content' && event.content) {
+              // Append to AI message
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === aiMsgId
+                    ? { ...m, content: m.content + event.content }
+                    : m
+                )
+              )
+            } else if (event.type === 'tool_start') {
+              // Add tool message with "running" state
+              const toolMsgId = `tool-${event.tool}-${Date.now()}`
+              const toolMsg: ChatMessage = {
+                id: toolMsgId,
+                role: 'assistant',
+                content: `${event.tool} running...`,
+                timestamp: Date.now(),
+                meta: { status: 'executing', toolName: event.tool },
+              }
+              toolMessages.set(event.tool, toolMsg)
+              setMessages((prev) => [...prev, toolMsg])
+            } else if (event.type === 'tool_complete') {
+              // Update tool message to "completed"
+              const existingToolMsg = toolMessages.get(event.tool)
+              if (existingToolMsg) {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === existingToolMsg.id
+                      ? {
+                          ...m,
+                          content: `✓ ${event.tool}`,
+                          meta: {
+                            status: 'completed',
+                            toolName: event.tool,
+                            result: event.result,
+                          },
+                        }
+                      : m
+                  )
+                )
+              }
+            } else if (event.type === 'tool_error') {
+              const existingToolMsg = toolMessages.get(event.tool)
+              if (existingToolMsg) {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === existingToolMsg.id
+                      ? {
+                          ...m,
+                          content: `✗ ${event.tool} failed`,
+                          meta: {
+                            status: 'failed',
+                            toolName: event.tool,
+                            error: event.error,
+                          },
+                        }
+                      : m
+                  )
+                )
+              }
+            } else if (event.type === 'done') {
+              console.log('[AI Chat] Stream complete')
+            }
+          } catch (e) {
+            console.warn('Failed to parse SSE event:', line)
+          }
+        }
+      }
+
+      // Reload messages from DB to ensure consistency
+      setTimeout(() => {
+        fetch(`/api/ai-trader/${params.id}/messages`)
+          .then((res) => res.json())
+          .then((data) => setMessages(data.messages || []))
+          .catch(console.error)
+      }, 1000)
     } catch (error) {
       console.error('Failed to send message:', error)
+      // Fallback: remove the placeholder AI message
+      setMessages((prev) => prev.filter((m) => m.id !== aiMsgId))
     } finally {
       setSending(false)
     }
