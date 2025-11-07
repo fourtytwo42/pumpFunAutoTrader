@@ -77,18 +77,20 @@ Key tools:
 • buy_token / sell_token - execute trades
 
 IMPORTANT:
-- Just mention tool names naturally - NO syntax, NO JSON, NO special formatting
-- The system detects tool names and executes them automatically
-- You'll be called back with results to provide your final answer
+- Just mention tool names naturally - NO syntax, NO JSON
+- System auto-executes and calls you back with results
+- Do NOT provide URLs/links - you don't know the UI structure
+- Focus on data analysis and trading recommendations
 
-When analyzing tokens from get_trending_tokens, look at:
-- Multi-timeframe momentum (5m, 1h, 6h, 24h)
-- Holder concentration (top 10 > 50% = risky)  
+When analyzing tokens from get_trending_tokens, evaluate:
+- Multi-timeframe momentum (5m, 1h, 6h, 24h trends)
+- Holder concentration (top 10 > 50% = risky)
 - Whale presence (>100 SOL = manipulation risk)
 - Buy/sell ratio (>60% = bullish)
+- Unique traders (more = healthier market)
 - Volatility (MODERATE = good, HIGH = risky)
 
-Always explain your reasoning with data.`
+Always explain your reasoning with actual data.`
 
     // Build conversation
     const messages = [
