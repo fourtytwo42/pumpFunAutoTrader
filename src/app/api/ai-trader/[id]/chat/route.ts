@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
 import { prisma } from '@/lib/db'
-import { sendLLMRequest, LLMConfig } from '@/lib/llm-providers'
+import { sendLLMRequest, LLMConfig, LLMMessage } from '@/lib/llm-providers'
 import { AI_TRADING_TOOLS, executeAITool } from '@/lib/ai-tools'
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
@@ -188,17 +188,16 @@ Be conversational and helpful. Wait for tool results before giving final answers
       }
 
       // Make a second LLM call with tool results so AI can respond naturally
-      const toolMessages = executedTools.map((tool) => ({
-        role: 'tool' as const,
-        name: tool.name,
-        content: JSON.stringify(tool.result),
-      }))
+      // Format tool results as a user message with the data
+      const toolResultsText = executedTools
+        .map((tool) => `Tool "${tool.name}" returned: ${JSON.stringify(tool.result, null, 2)}`)
+        .join('\n\n')
 
-      const finalMessages = [
+      const finalMessages: LLMMessage[] = [
         { role: 'system' as const, content: enhancedSystemPrompt },
         { role: 'user' as const, content: message },
         { role: 'assistant' as const, content: response.content },
-        ...toolMessages,
+        { role: 'user' as const, content: `[Tool Results]\n${toolResultsText}\n\nNow respond to the user with this information.` },
       ]
 
       console.log(`[AI Chat ${params.id}] Making second LLM call with tool results`)
