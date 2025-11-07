@@ -137,8 +137,22 @@ Always explain your reasoning with actual data.`
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
         }
 
+        const sanitizeModelOutput = (text: string) => {
+          return text
+            .replace(/<\|start\|>/g, '')
+            .replace(/<\|end\|>/g, '')
+            .replace(/<\|channel\|>commentary(?:\s+to=["']?(?:functions\.)?\w+["']?)?/g, '')
+            .replace(/<\|constrain\|>[\w-]*/g, '')
+            .replace(/<\|message\|>\{[^}]*\}/g, '')
+            .replace(/to=tool\.\w+/g, '')
+            .replace(/\b\d+\s*(?=to=tool)/g, '')
+            .replace(/\s{2,}/g, ' ')
+            .trimStart()
+        }
+
         try {
           let fullResponse = ''
+          let sanitizedResponse = ''
           
           // Stream the initial AI response
           send({ type: 'start', message: 'AI thinking...' })
@@ -146,10 +160,13 @@ Always explain your reasoning with actual data.`
           for await (const chunk of streamLLMRequest(llmConfig, messages)) {
             if (chunk.type === 'content' && chunk.content) {
               fullResponse += chunk.content
-              // Send the raw chunk - we'll clean it on the frontend
-              send({ type: 'content', content: chunk.content })
+              const sanitizedChunk = sanitizeModelOutput(chunk.content)
+              if (sanitizedChunk) {
+                sanitizedResponse += sanitizedChunk
+                send({ type: 'content', content: sanitizedChunk })
+              }
             } else if (chunk.type === 'done') {
-              send({ type: 'ai_response_complete', content: fullResponse })
+              send({ type: 'ai_response_complete', content: sanitizedResponse })
               break
             }
           }
@@ -205,17 +222,22 @@ Always explain your reasoning with actual data.`
                 ]
 
                 let finalContent = ''
+                let finalSanitized = ''
                 for await (const chunk of streamLLMRequest(llmConfig, finalMessages)) {
                   if (chunk.type === 'content' && chunk.content) {
                     finalContent += chunk.content
-                    send({ type: 'content', content: chunk.content })
+                    const sanitizedChunk = sanitizeModelOutput(chunk.content)
+                    if (sanitizedChunk) {
+                      finalSanitized += sanitizedChunk
+                      send({ type: 'content', content: sanitizedChunk })
+                    }
                   } else if (chunk.type === 'done') {
                     // Save final response
                     await prisma.chatMessage.create({
                       data: {
                         userId: params.id,
                         role: 'assistant',
-                        content: finalContent,
+                        content: finalSanitized || sanitizeModelOutput(finalContent),
                         meta: { toolExecuted: toolName },
                       },
                     })
@@ -232,7 +254,7 @@ Always explain your reasoning with actual data.`
               data: {
                 userId: params.id,
                 role: 'assistant',
-                content: fullResponse,
+                content: sanitizedResponse || sanitizeModelOutput(fullResponse),
                 meta: {},
               },
             })
