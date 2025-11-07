@@ -61,6 +61,8 @@ export default function AiTraderChatPage() {
   const [availableTools, setAvailableTools] = useState<string[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  const [currentUserName, setCurrentUserName] = useState<string>('You')
+
   useEffect(() => {
     if (!params?.id) return
     
@@ -72,6 +74,18 @@ export default function AiTraderChatPage() {
       })
       .catch((error) => {
         console.error('Failed to load trader info:', error)
+      })
+
+    // Fetch current user info
+    fetch('/api/user/me')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.username) {
+          setCurrentUserName(data.username)
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to load user info:', error)
       })
 
     // Fetch chat history
@@ -308,7 +322,15 @@ export default function AiTraderChatPage() {
                 >
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                     <Chip
-                      label={message.role.toUpperCase()}
+                      label={
+                        message.role === 'user'
+                          ? currentUserName
+                          : message.role === 'assistant'
+                            ? traderInfo.username
+                            : message.role === 'tool'
+                              ? 'TOOL'
+                              : 'SYSTEM'
+                      }
                       size="small"
                       color={
                         message.role === 'user'

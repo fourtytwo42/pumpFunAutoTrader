@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
 import { prisma } from '@/lib/db'
 import { sendLLMRequest, LLMConfig } from '@/lib/llm-providers'
-import { AI_TRADING_TOOLS } from '@/lib/ai-tools'
+import { AI_TRADING_TOOLS, executeAITool } from '@/lib/ai-tools'
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -49,6 +49,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       baseUrl: config.llm?.baseUrl,
       temperature: config.llm?.temperature ?? 0.7,
       maxTokens: config.llm?.maxTokens ?? 1000,
+      tools: AI_TRADING_TOOLS.map((tool) => ({
+        type: 'function',
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+        },
+      })),
     }
 
     const systemPrompt =
@@ -82,17 +90,83 @@ When you need data or want to take action, explain which tool you would use and 
 
     console.log(`[AI Chat ${params.id}] Response:`, response.content)
     console.log(`[AI Chat ${params.id}] Usage:`, response.usage)
+    console.log(`[AI Chat ${params.id}] Tool Calls:`, response.toolCalls)
+
+    const executedTools: any[] = []
+
+    // Execute tool calls if present
+    if (response.toolCalls && response.toolCalls.length > 0) {
+      for (const toolCall of response.toolCalls) {
+        console.log(`[AI Chat ${params.id}] Executing tool: ${toolCall.name}`, toolCall.arguments)
+
+        // Save tool call message
+        await prisma.chatMessage.create({
+          data: {
+            userId: params.id,
+            role: 'tool',
+            content: `Executing ${toolCall.name}...`,
+            meta: {
+              toolName: toolCall.name,
+              arguments: toolCall.arguments,
+              status: 'executing',
+            },
+          },
+        })
+
+        try {
+          const toolResult = await executeAITool(toolCall.name, toolCall.arguments, params.id)
+          
+          // Save tool result
+          await prisma.chatMessage.create({
+            data: {
+              userId: params.id,
+              role: 'tool',
+              content: `✓ ${toolCall.name} completed`,
+              meta: {
+                toolName: toolCall.name,
+                result: toolResult,
+                status: 'completed',
+              },
+            },
+          })
+
+          executedTools.push({
+            name: toolCall.name,
+            arguments: toolCall.arguments,
+            result: toolResult,
+          })
+
+          console.log(`[AI Chat ${params.id}] Tool ${toolCall.name} result:`, toolResult)
+        } catch (error: any) {
+          console.error(`[AI Chat ${params.id}] Tool ${toolCall.name} failed:`, error)
+          
+          await prisma.chatMessage.create({
+            data: {
+              userId: params.id,
+              role: 'tool',
+              content: `✗ ${toolCall.name} failed: ${error.message}`,
+              meta: {
+                toolName: toolCall.name,
+                error: error.message,
+                status: 'failed',
+              },
+            },
+          })
+        }
+      }
+    }
 
     // Save assistant response to database
     await prisma.chatMessage.create({
       data: {
         userId: params.id,
         role: 'assistant',
-        content: response.content,
+        content: response.content || '(Tool calls executed)',
         meta: {
           usage: response.usage,
           model: llmConfig.model,
           provider: llmConfig.provider,
+          executedTools,
         },
       },
     })
@@ -101,6 +175,7 @@ When you need data or want to take action, explain which tool you would use and 
       response: response.content,
       usage: response.usage,
       availableTools: AI_TRADING_TOOLS.map((t) => t.name),
+      toolCalls: executedTools,
     })
   } catch (error: any) {
     console.error('AI chat error:', error)

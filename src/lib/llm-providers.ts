@@ -12,6 +12,7 @@ export interface LLMConfig {
   baseUrl?: string // For Ollama and MLStudio
   temperature?: number
   maxTokens?: number
+  tools?: any[] // Function definitions for tool calling
 }
 
 export interface LLMMessage {
@@ -26,6 +27,10 @@ export interface LLMResponse {
     completionTokens: number
     totalTokens: number
   }
+  toolCalls?: {
+    name: string
+    arguments: any
+  }[]
 }
 
 /**
@@ -172,18 +177,25 @@ async function sendOpenAIRequest(
   const apiKey = config.apiKey || process.env.OPENAI_API_KEY
   if (!apiKey) throw new Error('OpenAI API key not configured')
 
+  const body: any = {
+    model: config.model,
+    messages,
+    temperature: config.temperature ?? 0.7,
+    max_tokens: config.maxTokens ?? 1000,
+  }
+
+  if (config.tools && config.tools.length > 0) {
+    body.tools = config.tools
+    body.tool_choice = 'auto'
+  }
+
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({
-      model: config.model,
-      messages,
-      temperature: config.temperature ?? 0.7,
-      max_tokens: config.maxTokens ?? 1000,
-    }),
+    body: JSON.stringify(body),
   })
 
   if (!response.ok) {
@@ -192,13 +204,19 @@ async function sendOpenAIRequest(
   }
 
   const data = await response.json()
+  const choice = data.choices[0]
+  
   return {
-    content: data.choices[0]?.message?.content || '',
+    content: choice?.message?.content || '',
     usage: {
       promptTokens: data.usage?.prompt_tokens || 0,
       completionTokens: data.usage?.completion_tokens || 0,
       totalTokens: data.usage?.total_tokens || 0,
     },
+    toolCalls: choice?.message?.tool_calls?.map((tc: any) => ({
+      name: tc.function?.name,
+      arguments: JSON.parse(tc.function?.arguments || '{}'),
+    })),
   }
 }
 
