@@ -198,7 +198,7 @@ After finding interesting tokens, use get_token_details for bonding curve status
       const includeHolders = args.includeHolderAnalysis !== false
       const enrichedTokens = await Promise.all(
         topTokens.map(async (t) => {
-          // Calculate multi-timeframe volume and price changes using createdAt (DateTime) not timestamp (BigInt)
+          // Calculate multi-timeframe using ALL trades for the token (not limited to selected timeframe)
           const timeframes = {
             '5m': 5 * 60 * 1000,
             '1h': 60 * 60 * 1000,
@@ -206,21 +206,28 @@ After finding interesting tokens, use get_token_details for bonding curve status
             '24h': 24 * 60 * 60 * 1000,
           }
 
+          // Fetch ALL recent trades across all timeframes for this token
+          const allRecentTrades = await prisma.trade.findMany({
+            where: {
+              tokenId: t.id, // Use Token.id not mintAddress!
+              createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // Last 24h
+            },
+            select: {
+              amountSol: true,
+              priceSol: true,
+              createdAt: true,
+            },
+            orderBy: { createdAt: 'asc' },
+          })
+
           const multiTimeframeData: any = {}
           for (const [tf, ms] of Object.entries(timeframes)) {
-            const tfCutoff = new Date(Date.now() - ms)
-            const tfTrades = await prisma.trade.findMany({
-              where: {
-                tokenId: t.mintAddress,
-                createdAt: { gte: tfCutoff },
-              },
-              select: {
-                amountSol: true,
-                priceSol: true,
-                createdAt: true,
-              },
-              orderBy: { createdAt: 'asc' },
-            })
+            const tfCutoff = Date.now() - ms
+            
+            // Filter the already-fetched trades by timeframe
+            const tfTrades = allRecentTrades.filter(
+              (trade) => trade.createdAt.getTime() >= tfCutoff
+            )
 
             const volume = tfTrades.reduce((sum, tr) => sum + Number(tr.amountSol), 0)
             let priceChangePct = 0
@@ -233,24 +240,17 @@ After finding interesting tokens, use get_token_details for bonding curve status
             }
 
             multiTimeframeData[tf] = {
-              volumeSol: volume,
-              volumeUSD: volume * solPrice,
-              priceChangePct,
+              volumeSol: Number(volume.toFixed(4)),
+              volumeUSD: Number((volume * solPrice).toFixed(2)),
+              priceChangePct: Number(priceChangePct.toFixed(2)),
               tradeCount: tfTrades.length,
             }
           }
 
-          // Calculate volatility (standard deviation of price changes) using createdAt
-          const volatilityCutoff = new Date(Date.now() - timeframeMs[timeframe])
-          const recentPrices = await prisma.trade.findMany({
-            where: {
-              tokenId: t.mintAddress,
-              createdAt: { gte: volatilityCutoff },
-            },
-            select: { priceSol: true },
-            orderBy: { createdAt: 'desc' },
-            take: 50,
-          })
+          // Calculate volatility (standard deviation of price changes) using already-fetched trades
+          const recentPrices = allRecentTrades
+            .filter((trade) => trade.createdAt.getTime() >= Date.now() - timeframeMs[timeframe])
+            .slice(0, 50)
 
           let volatility = 0
           if (recentPrices.length > 1) {
@@ -270,14 +270,18 @@ After finding interesting tokens, use get_token_details for bonding curve status
                 const totalSupply = Number(t.totalSupply)
                 
                 holderAnalysis = {
-                  top10Holders: top10.map((h: any) => ({
-                    address: h.address.substring(0, 8) + '...',
-                    amountTokens: Number(h.amount),
-                    percentOfSupply: totalSupply > 0 ? (Number(h.amount) / totalSupply) * 100 : 0,
-                    solBalance: Number(h.solBalance),
-                  })),
+                  top10Holders: top10.map((h: any) => {
+                    const amountTokens = Number(h.amount)
+                    const percentOfSupply = totalSupply > 0 ? (amountTokens / totalSupply) * 100 : 0
+                    return {
+                      address: h.address.substring(0, 8) + '...',
+                      amountTokens: amountTokens,
+                      percentOfSupply: Number(percentOfSupply.toFixed(4)), // No scientific notation
+                      solBalance: Number(h.solBalance),
+                    }
+                  }),
                   top10Concentration: totalSupply > 0 
-                    ? (top10.reduce((sum: number, h: any) => sum + Number(h.amount), 0) / totalSupply) * 100 
+                    ? Number(((top10.reduce((sum: number, h: any) => sum + Number(h.amount), 0) / totalSupply) * 100).toFixed(4))
                     : 0,
                   whaleCount: top10.filter((h: any) => Number(h.solBalance) > 100).length,
                 }
@@ -295,7 +299,7 @@ After finding interesting tokens, use get_token_details for bonding curve status
             // Price metrics
             marketCapUSD: t.stats.marketCapUSD,
             priceSol: t.stats.currentPriceSol,
-            pricePerMillion: t.stats.currentPriceSol * 1e6,
+            pricePer1MTokens: t.stats.currentPriceSol * 1e6, // Price per 1 million tokens (clearer!)
             priceUSD: t.stats.currentPriceUSD,
             
             // Current timeframe data
