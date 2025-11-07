@@ -1,11 +1,11 @@
 Request URL
-https://frontend-api-v3.pump.fun/coins/for-you?volume24hMin=4900&includeNsfw=false
+https://frontend-api-v3.pump.fun/coins/for-you?marketCapMin=8500&marketCapMax=21200000&volume24hMin=2500&volume24hMax=395000&includeNsfw=false
 Request Method
 GET
 Status Code
 200 OK
 Remote Address
-172.64.153.234:443
+104.18.34.22:443
 Referrer Policy
 same-origin
 access-control-allow-credentials
@@ -15,15 +15,15 @@ https://pump.fun
 cf-cache-status
 DYNAMIC
 cf-ray
-99a17fd9aaf0dc06-ORD
+99aad0717e7cd84c-ORD
 content-encoding
 gzip
 content-type
 application/json; charset=utf-8
 date
-Thu, 06 Nov 2025 03:28:12 GMT
+Fri, 07 Nov 2025 06:36:05 GMT
 etag
-W/"1cf50-yMhwv7MyadO1gnE+a1UoRDjWVwk"
+W/"1195c-U4W+h/8+TsWmuk4CrvQtNamSw2U"
 expect-ct
 max-age=86400, enforce
 referrer-policy
@@ -51,7 +51,7 @@ frontend-api-v3.pump.fun
 :method
 GET
 :path
-/coins/for-you?volume24hMin=4900&includeNsfw=false
+/coins/for-you?marketCapMin=8500&marketCapMax=21200000&volume24hMin=2500&volume24hMax=395000&includeNsfw=false
 :scheme
 https
 accept
@@ -59,17 +59,17 @@ accept
 accept-encoding
 gzip, deflate, br, zstd
 accept-language
-en-US,en;q=0.9
+en-US,en;q=0.9,fr;q=0.8
 content-type
 application/json
 cookie
-_ga=GA1.1.925745869.1761661046; intercom-id-w7scljv7=710b7f3b-58e4-426e-bb34-8fc4c1ff9c4d; intercom-device-id-w7scljv7=609a5b9e-5aa2-4043-b535-a0ea3cb5456c; intercom-session-w7scljv7=; __cf_bm=jjPh2gCGhWQ_1dmsaZH7vYZUhkArFHGCUAlvbYFMuZM-1762399409-1.0.1.1-l_83UdhSwSumP.GlGpWv8amfiORSQCgojdhIByVWzES5ZDdhF5Ajvm14PTjSUKRVOIPccOqMMdi2Z2jpM4VlhsVFR0jOxI0ckzbkhg06hKE; _cfuvid=GCIldWVczoJY1wsUZWLzfGkg2KzEi0OA97tHA1dWYuc-1762399409255-0.0.1.1-604800000; cf_clearance=DREu7HREqxWXV2K3Lhyim6N41rbu1FkUXhAb6NlhHBw-1762399410-1.2.1.1-Qu5JdgEUiMUSvmeRBzr6PCZ1ShW73U9c_5OyvMBKXcUdCtlZ5PiMSCSEt63necAQlg5ShOoc9exdzj5btBHZmXuwAvDDuSIKIFXL00MqoU3iR5bSdqPsiDJVO8QPHmCysQJj2ZvQxMbj.ZxNvHcB9x_1XMgTq3OReB7.B7Zo3VT1LV3CJh8M01TlOtEptFnpo010TvgRZGWtEx.VHxP5TnIOn34xzn_X_qkdNj4Bz3E; fs_lua=1.1762399471642; fs_uid=#o-1YWTMD-na1#21287a04-73f6-4eb3-a8e7-66b644514d4f:420b98bc-b18f-42e0-ba08-802dbc8e2ed3:1762399411983::2#/1793197080; _fs_dwell_passed=420b98bc-b18f-42e0-ba08-802dbc8e2ed3; _ga_T65NVS2TQ6=GS2.1.s1762399411$o5$g1$t1762399668$j60$l0$h0
+_cfuvid=Nkth.3xAJOAjiU1uvlq.jo_FsW25J25o2rs2jTFJPbw-1762463245047-0.0.1.1-604800000; _ga=GA1.1.1647151222.1762463247; intercom-id-w7scljv7=c43f8110-7921-4253-bcee-f7a35a2e80ca; intercom-session-w7scljv7=; intercom-device-id-w7scljv7=2ce59804-770c-42f2-af83-a1dc419e2625; __cf_bm=KiowrQP2VHwpG3PIpuwZLac90PWvC_Mtk6hcnIwvdI4-1762497336-1.0.1.1-Kury8Dec6qSYlnvvvNzw9JMG_DXYM9w.6RAhWY5di_qP2NZcnNI2rnkZVZGznJZTzQKs676jdI0F_fWPqWWZfAtWrC1kY4sURl5kLBxQlgU; cf_clearance=bfGV9Dkl8Xh42kqnKHlO4QsMna9IXW1Hl_Hmv0q0_aA-1762497337-1.2.1.1-NQtrvggQnE43tkKHurPv2PZLS_brB4jUX2Nb6Qv1J5kSw5bo6BmfqbiVMh3lh3YPgrL98k3InFli.j76e1mwbnp2ZFUFZ5X9pEOCjZkD.1NfF4HX8FgXBxqykHNs1tyFQqNhMpFKfmEJLIC_gkG5Oq7dnuRuv3VORCzF0WVb69c4Tlt778ArDhMlhfuILQugO2ede8LB0.ptWoPomCym_pgDgIWwXllpEGM293VehZo; _ga_T65NVS2TQ6=GS2.1.s1762497338$o4$g1$t1762497350$j48$l0$h0
 origin
 https://pump.fun
 priority
 u=1, i
 sec-ch-ua
-"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"
+"Not)A;Brand";v="8", "Chromium";v="138", "Opera GX";v="122"
 sec-ch-ua-mobile
 ?0
 sec-ch-ua-platform
@@ -81,19 +81,7 @@ cors
 sec-fetch-site
 same-site
 user-agent
-Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36
-Full stack trace AI agent in Performance panel
-The Performance panel now integrates a more capable AI agent that has full access to the stack trace.
-
-AI code completion in Sources and Console
-Code completion powered by AI is now available in the Sources panel and the Console.
-
-Google Developer Program support
-The Google Developer Program, a ready-made subscription and community platform, is now in DevTools, offering a more personalized experience, a badge system, and easier discovery of new features.
-
-One main 'Debug with AI' button
-The primary action bar at the top of DevTools now features the primary "Debug with AI" button which opens the 'AI assistance' panel in a right-hand side bar.
-
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0 (Edition std-1)
 [{mint: "3is9dUusWoYfu3k62WSVMuUMa9rQLyBdckz6grsypump", name: "Example coin", symbol: "EXAMPLE",…},…]
 0
 : 

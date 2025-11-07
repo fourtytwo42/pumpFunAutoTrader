@@ -62,14 +62,22 @@ export interface TrendingToken {
   mint: string
   name: string
   symbol: string
+  description?: string
+  imageUri?: string
   marketCapUSD: number
-  volume24h?: number
-  priceChange24h?: number
-  virtualSolReserves?: number
-  virtualTokenReserves?: number
+  marketCap: number
+  volume24h: number // Always 0 from /coins/for-you - use get_token_metrics for actual volume
+  priceChange24h: number // Always 0 from /coins/for-you - use get_token_metrics for actual change
+  virtualSolReserves: number
+  virtualTokenReserves: number
   complete: boolean
   isLive: boolean
-  creator?: string
+  creator: string
+  createdTimestamp: number
+  bondingCurve: string
+  associatedBondingCurve: string
+  replyCount: number
+  kingOfTheHillTimestamp: number | null
 }
 
 export async function getTrendingTokens(
@@ -93,14 +101,22 @@ export async function getTrendingTokens(
     mint: token.mint,
     name: token.name || '',
     symbol: token.symbol || '',
+    description: token.description || '',
+    imageUri: token.image_uri || '',
     marketCapUSD: Number(token.usd_market_cap || token.market_cap || 0),
-    volume24h: Number(token.volume_24h || 0),
-    priceChange24h: Number(token.price_change_24h || 0),
+    marketCap: Number(token.market_cap || 0),
+    volume24h: 0, // Not provided by /coins/for-you endpoint - need to call market-activity
+    priceChange24h: 0, // Not provided by /coins/for-you endpoint - need to call market-activity
     virtualSolReserves: Number(token.virtual_sol_reserves || 0),
     virtualTokenReserves: Number(token.virtual_token_reserves || 0),
     complete: Boolean(token.complete),
     isLive: Boolean(token.is_currently_live),
     creator: token.creator,
+    createdTimestamp: Number(token.created_timestamp || 0),
+    bondingCurve: token.bonding_curve || '',
+    associatedBondingCurve: token.associated_bonding_curve || '',
+    replyCount: Number(token.reply_count || 0),
+    kingOfTheHillTimestamp: token.king_of_the_hill_timestamp ? Number(token.king_of_the_hill_timestamp) : null,
   }))
 }
 
