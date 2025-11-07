@@ -135,8 +135,8 @@ export async function getDashboardSnapshot(userId: string, walletId?: string) {
 
     const realizedUsd = Number(realizedUsdAgg._sum.amountUsd ?? 0)
 
-    const totalTrades = await prisma.tradeTape.count({
-      where: { walletId: wallet.id },
+    const totalTrades = await prisma.userTrade.count({
+      where: { userId },
     })
 
     const totalTokens = positions.length

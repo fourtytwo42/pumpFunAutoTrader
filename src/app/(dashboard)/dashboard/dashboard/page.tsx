@@ -10,6 +10,7 @@ import {
   Avatar,
   Stack,
   Divider,
+  Chip,
 } from '@mui/material'
 import { TrendingUp } from '@mui/icons-material'
 import { prisma } from '@/lib/db'
@@ -73,9 +74,18 @@ export default async function DashboardPage() {
       orderBy: { createdAt: 'desc' },
       take: 5,
     }),
-    prisma.tradeTape.findMany({
-      where: { walletId: wallet.id },
-      orderBy: { ts: 'desc' },
+    prisma.userTrade.findMany({
+      where: { userId: session.user.id },
+      include: {
+        token: {
+          select: {
+            mintAddress: true,
+            symbol: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
       take: 5,
     }),
     prisma.agentEvent.findMany({
@@ -115,15 +125,17 @@ export default async function DashboardPage() {
   }))
 
   const initialTrades = initialTradesRaw.map((trade) => ({
-    id: trade.id,
-    ts: trade.ts.toISOString(),
-    tokenMint: trade.tokenMint,
-    side: trade.isBuy ? 'buy' as const : 'sell' as const,
-    baseAmount: Number(trade.baseAmount),
-    quoteSol: Number(trade.quoteSol),
-    priceUsd: trade.priceUsd ? Number(trade.priceUsd) : null,
-    priceSol: trade.priceSol ? Number(trade.priceSol) : null,
-    txSig: trade.txSig,
+    id: trade.id.toString(),
+    ts: trade.createdAt.toISOString(),
+    tokenMint: trade.token.mintAddress,
+    tokenSymbol: trade.token.symbol,
+    tokenName: trade.token.name,
+    side: trade.type === 1 ? 'buy' as const : 'sell' as const,
+    baseAmount: Number(trade.amountTokens),
+    quoteSol: Number(trade.amountSol),
+    priceUsd: null,
+    priceSol: Number(trade.priceSol),
+    txSig: null,
   }))
 
   const initialEvents = initialEventsRaw.map((event) => ({
@@ -175,22 +187,11 @@ export default async function DashboardPage() {
               >
                 Browse Tokens
               </Button>
-              <Button component={Link} href="/dashboard/positions" variant="outlined">
-                View Positions
+              <Button component={Link} href="/dashboard/portfolio" variant="outlined">
+                View Portfolio
               </Button>
-              <Button component={Link} href="/dashboard/orders" variant="outlined">
-                Manage Orders
-              </Button>
-              <Button component={Link} href="/dashboard/chat" variant="outlined">
-                Open Chat
-              </Button>
-              <Button
-                component={Link}
-                href="/dashboard/alerts"
-                variant="outlined"
-                startIcon={<TrendingUp />}
-              >
-                Configure Alerts
+              <Button component={Link} href="/dashboard/wallet" variant="outlined">
+                Wallet Settings
               </Button>
             </Stack>
           </Paper>
@@ -253,7 +254,7 @@ export default async function DashboardPage() {
               variant="contained"
               fullWidth
               component={Link}
-              href="/dashboard/positions"
+              href="/dashboard/portfolio"
             >
               View Full Portfolio
             </Button>
@@ -263,25 +264,22 @@ export default async function DashboardPage() {
         <Grid item xs={12} md={6}>
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
-              Recent Positions
+              Recent Trades
             </Typography>
-            {recentPositions.length === 0 ? (
+            {initialTrades.length === 0 ? (
               <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                No active positions yet.
+                No trades recorded yet.
               </Typography>
             ) : (
               <Stack spacing={2} sx={{ mt: 2 }}>
-                {recentPositions.map((position) => {
-                  const qty = Number(position.qty)
-                  const priceSol = position.token.price ? Number(position.token.price.priceSol) : 0
-                  const mtmSol = qty * priceSol
-                  const updatedDate = new Date(position.updatedAt)
-                  const symbol = position.token.symbol ?? position.tokenMint.slice(0, 4).toUpperCase()
+                {initialTrades.map((trade) => {
+                  const tradeDate = new Date(trade.ts)
+                  const symbol = trade.tokenSymbol ?? trade.tokenMint.slice(0, 4).toUpperCase()
                   return (
                     <Box
-                      key={position.id}
+                      key={trade.id}
                       component={Link}
-                      href={`/dashboard/tokens/${position.tokenMint}`}
+                      href={`/dashboard/tokens/${trade.tokenMint}`}
                       sx={{
                         display: 'flex',
                         justifyContent: 'space-between',
@@ -301,20 +299,27 @@ export default async function DashboardPage() {
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <Avatar>{symbol.slice(0, 2).toUpperCase()}</Avatar>
                         <Box>
-                          <Typography variant="body2" fontWeight="bold">
-                            {position.token.name ?? symbol}
-                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Chip
+                              label={trade.side.toUpperCase()}
+                              color={trade.side === 'buy' ? 'success' : 'error'}
+                              size="small"
+                            />
+                            <Typography variant="body2" fontWeight="bold">
+                              {trade.tokenName ?? symbol}
+                            </Typography>
+                          </Box>
                           <Typography variant="caption" color="text.secondary">
-                            {qty.toFixed(2)} {symbol}
+                            {trade.baseAmount.toFixed(2)} @ {trade.priceSol.toFixed(8)} SOL
                           </Typography>
                         </Box>
                       </Box>
                       <Box sx={{ textAlign: 'right' }}>
-                        <Typography variant="body2" color="text.secondary">
-                          {mtmSol.toFixed(4)} SOL
+                        <Typography variant="body2" fontWeight="bold">
+                          {trade.quoteSol.toFixed(4)} SOL
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                          Updated {formatDistanceToNow(updatedDate, { addSuffix: true })}
+                          {formatDistanceToNow(tradeDate, { addSuffix: true })}
                         </Typography>
                       </Box>
                     </Box>
@@ -322,6 +327,15 @@ export default async function DashboardPage() {
                 })}
               </Stack>
             )}
+            <Divider sx={{ my: 2 }} />
+            <Button
+              variant="contained"
+              fullWidth
+              component={Link}
+              href="/dashboard/portfolio"
+            >
+              View Full Portfolio
+            </Button>
           </Paper>
         </Grid>
       </Grid>

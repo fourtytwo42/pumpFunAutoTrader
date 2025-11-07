@@ -30,6 +30,21 @@ interface SnapshotPosition {
   pnlPct: number
 }
 
+interface TradeHistoryItem {
+  mint: string
+  symbol?: string | null
+  name?: string | null
+  totalBought: number
+  totalSold: number
+  remainingTokens: number
+  avgBuyPriceSol: number
+  realizedPnlUsd: number
+  unrealizedPnlUsd: number
+  totalPnlUsd: number
+  tradeCount: number
+  lastTradeAt: string
+}
+
 interface PortfolioSnapshot {
   walletId: string
   solUsd: number
@@ -39,6 +54,7 @@ interface PortfolioSnapshot {
   realizedUsd: number
   unrealizedUsd: number
   positions: SnapshotPosition[]
+  tradeHistory: TradeHistoryItem[]
 }
 
 export default function PortfolioPage() {
@@ -162,68 +178,159 @@ export default function PortfolioPage() {
         </Paper>
       </Box>
 
-      {snapshot.positions.length > 0 ? (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Token</TableCell>
-                <TableCell align="right">Quantity</TableCell>
-                <TableCell align="right">Avg Cost (USD)</TableCell>
-                <TableCell align="right">Price (USD)</TableCell>
-                <TableCell align="right">MTM (USD)</TableCell>
-                <TableCell align="right">P/L (USD)</TableCell>
-                <TableCell align="right">P/L %</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {snapshot.positions.map((position) => (
-                <TableRow
-                  key={position.mint}
-                  hover
-                  sx={{ cursor: 'pointer' }}
-                  onClick={() => router.push(`/dashboard/tokens/${position.mint}`)}
-                >
-                  <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Avatar sx={{ width: 32, height: 32 }}>
-                        {(position.symbol ?? position.mint).slice(0, 2).toUpperCase()}
-                      </Avatar>
-                      <Box>
-                        <Typography variant="body2" fontWeight="bold">
-                          {position.symbol ?? position.mint.slice(0, 4).toUpperCase()}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {position.mint}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </TableCell>
-                  <TableCell align="right">{position.qty.toFixed(2)}</TableCell>
-                  <TableCell align="right">${position.avgCostUsd.toFixed(6)}</TableCell>
-                  <TableCell align="right">${position.priceUsd.toFixed(6)}</TableCell>
-                  <TableCell align="right">${position.mtmUsd.toFixed(2)}</TableCell>
-                  <TableCell align="right">
-                    <Typography color={position.pnlUsd >= 0 ? 'success.main' : 'error.main'}>
-                      {position.pnlUsd >= 0 ? '+' : '-'}${Math.abs(position.pnlUsd).toFixed(2)}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Chip
-                      label={`${position.pnlPct >= 0 ? '+' : ''}${position.pnlPct.toFixed(2)}%`}
-                      color={position.pnlPct >= 0 ? 'success' : 'error'}
-                      size="small"
-                    />
-                  </TableCell>
+      {snapshot.positions.length > 0 && (
+        <>
+          <Typography variant="h5" gutterBottom sx={{ mt: 2 }}>
+            Open Positions
+          </Typography>
+          <TableContainer component={Paper} sx={{ mb: 4 }}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Token</TableCell>
+                  <TableCell align="right">Quantity</TableCell>
+                  <TableCell align="right">Avg Cost (USD)</TableCell>
+                  <TableCell align="right">Price (USD)</TableCell>
+                  <TableCell align="right">MTM (USD)</TableCell>
+                  <TableCell align="right">Unrealized P/L</TableCell>
+                  <TableCell align="right">P/L %</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      ) : (
+              </TableHead>
+              <TableBody>
+                {snapshot.positions.map((position) => (
+                  <TableRow
+                    key={position.mint}
+                    hover
+                    sx={{ cursor: 'pointer' }}
+                    onClick={() => router.push(`/dashboard/tokens/${position.mint}`)}
+                  >
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Avatar sx={{ width: 32, height: 32 }}>
+                          {(position.symbol ?? position.mint).slice(0, 2).toUpperCase()}
+                        </Avatar>
+                        <Box>
+                          <Typography variant="body2" fontWeight="bold">
+                            {position.symbol ?? position.mint.slice(0, 4).toUpperCase()}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {position.mint}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </TableCell>
+                    <TableCell align="right">{position.qty.toFixed(2)}</TableCell>
+                    <TableCell align="right">${position.avgCostUsd.toFixed(6)}</TableCell>
+                    <TableCell align="right">${position.priceUsd.toFixed(6)}</TableCell>
+                    <TableCell align="right">${position.mtmUsd.toFixed(2)}</TableCell>
+                    <TableCell align="right">
+                      <Typography color={position.pnlUsd >= 0 ? 'success.main' : 'error.main'}>
+                        {position.pnlUsd >= 0 ? '+' : '-'}${Math.abs(position.pnlUsd).toFixed(2)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Chip
+                        label={`${position.pnlPct >= 0 ? '+' : ''}${position.pnlPct.toFixed(2)}%`}
+                        color={position.pnlPct >= 0 ? 'success' : 'error'}
+                        size="small"
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </>
+      )}
+
+      {snapshot.tradeHistory && snapshot.tradeHistory.length > 0 && (
+        <>
+          <Typography variant="h5" gutterBottom sx={{ mt: 2 }}>
+            Trade History
+          </Typography>
+          <TableContainer component={Paper}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Token</TableCell>
+                  <TableCell align="right">Trades</TableCell>
+                  <TableCell align="right">Bought</TableCell>
+                  <TableCell align="right">Sold</TableCell>
+                  <TableCell align="right">Remaining</TableCell>
+                  <TableCell align="right">Realized P/L</TableCell>
+                  <TableCell align="right">Unrealized P/L</TableCell>
+                  <TableCell align="right">Total P/L</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {snapshot.tradeHistory.map((item) => (
+                  <TableRow
+                    key={item.mint}
+                    hover
+                    sx={{ cursor: 'pointer' }}
+                    onClick={() => router.push(`/dashboard/tokens/${item.mint}`)}
+                  >
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Avatar sx={{ width: 32, height: 32 }}>
+                          {(item.symbol ?? item.mint).slice(0, 2).toUpperCase()}
+                        </Avatar>
+                        <Box>
+                          <Typography variant="body2" fontWeight="bold">
+                            {item.symbol ?? item.mint.slice(0, 4).toUpperCase()}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {item.name ?? item.mint}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </TableCell>
+                    <TableCell align="right">{item.tradeCount}</TableCell>
+                    <TableCell align="right">{item.totalBought.toFixed(2)}</TableCell>
+                    <TableCell align="right">{item.totalSold.toFixed(2)}</TableCell>
+                    <TableCell align="right">
+                      <Typography
+                        color={item.remainingTokens > 0 ? 'primary' : 'text.secondary'}
+                      >
+                        {item.remainingTokens.toFixed(2)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Typography
+                        color={item.realizedPnlUsd >= 0 ? 'success.main' : 'error.main'}
+                      >
+                        {item.realizedPnlUsd >= 0 ? '+' : ''}$
+                        {item.realizedPnlUsd.toFixed(2)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Typography
+                        color={item.unrealizedPnlUsd >= 0 ? 'success.main' : 'error.main'}
+                      >
+                        {item.unrealizedPnlUsd >= 0 ? '+' : ''}$
+                        {item.unrealizedPnlUsd.toFixed(2)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Typography
+                        fontWeight="bold"
+                        color={item.totalPnlUsd >= 0 ? 'success.main' : 'error.main'}
+                      >
+                        {item.totalPnlUsd >= 0 ? '+' : ''}${item.totalPnlUsd.toFixed(2)}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </>
+      )}
+
+      {snapshot.positions.length === 0 && (!snapshot.tradeHistory || snapshot.tradeHistory.length === 0) && (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
           <Typography variant="h6" color="text.secondary">
-            No positions yet
+            No trading activity yet
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
             Start trading to see your portfolio here
