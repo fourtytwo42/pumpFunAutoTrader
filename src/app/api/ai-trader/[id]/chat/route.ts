@@ -132,69 +132,62 @@ Always explain your reasoning with data.`
         'get_user_trades': { limit: 20 },
       }
 
-      // Check if AI is outputting raw tool syntax (bad)
-      const hasBadSyntax = (
-        response.content.includes('<|start|>') ||
-        response.content.includes('to=functions.') ||
-        response.content.includes('<|channel|>') ||
-        response.content.includes('<|constrain|>') ||
-        /\{"tool":\s*"/.test(response.content) ||
-        /\[TOOL:/.test(response.content)
-      )
-
-      if (hasBadSyntax) {
-        console.warn(`[AI Chat ${params.id}] AI outputting raw tool syntax`)
+      // SPECIAL HANDLING: Some models output their own tool syntax
+      // Extract tool names from formats like:
+      // "<|channel|>commentary to="get_sol_price""
+      // "<|start|>assistant<|channel|>commentary to=functions.get_trending_tokens"
+      const toolSyntaxMatch = response.content.match(/to=["']?(?:functions\.)?(\w+)["']?/i)
+      if (toolSyntaxMatch) {
+        const toolName = toolSyntaxMatch[1]
+        console.log(`[AI Chat ${params.id}] Extracted tool from model syntax: ${toolName}`)
         
-        // Save error message
-        await prisma.chatMessage.create({
-          data: {
-            userId: params.id,
-            role: 'system',
-            content: 'Error: Do not output tool syntax. Simply mention the tool name naturally. For example: "Let me check get_trending_tokens for opportunities" or "I\'ll use get_sol_price to get the current price".',
-            meta: { error: 'invalid_tool_syntax', rawResponse: response.content },
-          },
-        })
-        
-        return NextResponse.json({
-          response: 'Please mention tools naturally without syntax',
-          error: 'AI outputted raw syntax',
-        })
-      }
-
-      // Try to detect and auto-execute tools from natural language
-      for (const toolName of Object.keys(TOOL_REGISTRY)) {
-        // Look for natural language patterns like:
-        // "let me check get_trending_tokens"
-        // "I'll use get_sol_price"
-        // "checking get_portfolio"
-        const patterns = [
-          new RegExp(`\\b(check|use|get|fetch|look at|see|view)\\s+${toolName}\\b`, 'i'),
-          new RegExp(`\\b${toolName}\\b`, 'i'), // fallback to just tool name
-        ]
-        
-        let found = false
-        for (const pattern of patterns) {
-          if (pattern.test(response.content)) {
-            console.log(`[AI Chat ${params.id}] Detected tool mention: ${toolName}`)
-            found = true
-            break
+        // Check if it's a valid tool
+        if (TOOL_REGISTRY[toolName]) {
+          // Auto-execute with smart defaults
+          if (noArgTools.includes(toolName)) {
+            parsedToolCalls.push({ name: toolName, arguments: {} })
+          } else if (smartDefaultTools[toolName]) {
+            parsedToolCalls.push({ name: toolName, arguments: smartDefaultTools[toolName] })
           }
         }
-        
-        if (found) {
-          // Auto-execute tools that don't require arguments
-          if (noArgTools.includes(toolName)) {
-            parsedToolCalls.push({
-              name: toolName,
-              arguments: {},
-            })
+      }
+
+      // If no tools extracted from syntax, try natural language detection
+      if (parsedToolCalls.length === 0) {
+        for (const toolName of Object.keys(TOOL_REGISTRY)) {
+          // Look for natural language patterns like:
+          // "let me check get_trending_tokens"
+          // "I'll use get_sol_price"
+          // "checking get_portfolio"
+          const patterns = [
+            new RegExp(`\\b(check|use|get|fetch|look at|see|view)\\s+${toolName}\\b`, 'i'),
+            new RegExp(`\\b${toolName}\\b`, 'i'), // fallback to just tool name
+          ]
+          
+          let found = false
+          for (const pattern of patterns) {
+            if (pattern.test(response.content)) {
+              console.log(`[AI Chat ${params.id}] Detected tool mention: ${toolName}`)
+              found = true
+              break
+            }
           }
-          // Auto-execute tools with smart defaults
-          else if (smartDefaultTools[toolName]) {
-            parsedToolCalls.push({
-              name: toolName,
-              arguments: smartDefaultTools[toolName],
-            })
+          
+          if (found) {
+            // Auto-execute tools that don't require arguments
+            if (noArgTools.includes(toolName)) {
+              parsedToolCalls.push({
+                name: toolName,
+                arguments: {},
+              })
+            }
+            // Auto-execute tools with smart defaults
+            else if (smartDefaultTools[toolName]) {
+              parsedToolCalls.push({
+                name: toolName,
+                arguments: smartDefaultTools[toolName],
+              })
+            }
           }
         }
       }
