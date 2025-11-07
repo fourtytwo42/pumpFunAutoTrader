@@ -25,6 +25,8 @@ import {
   Code,
   ClearAll,
 } from '@mui/icons-material'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 interface ChatMessage {
   id: string
@@ -426,9 +428,66 @@ export default function AiTraderChatPage() {
                         </Typography>
                       </Box>
                     ) : (
-                      <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                        {message.content}
-                      </Typography>
+                      <Box
+                        sx={{
+                          '& p': { margin: '0.5em 0' },
+                          '& p:first-of-type': { marginTop: 0 },
+                          '& p:last-of-type': { marginBottom: 0 },
+                          '& ul, & ol': { margin: '0.5em 0', paddingLeft: '1.5em' },
+                          '& li': { margin: '0.25em 0' },
+                          '& code': {
+                            backgroundColor: 'rgba(0,0,0,0.3)',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontFamily: 'monospace',
+                            fontSize: '0.9em',
+                          },
+                          '& pre': {
+                            backgroundColor: 'rgba(0,0,0,0.3)',
+                            padding: '12px',
+                            borderRadius: '8px',
+                            overflow: 'auto',
+                            margin: '0.5em 0',
+                          },
+                          '& pre code': {
+                            backgroundColor: 'transparent',
+                            padding: 0,
+                          },
+                          '& table': {
+                            borderCollapse: 'collapse',
+                            margin: '0.5em 0',
+                            width: '100%',
+                          },
+                          '& th, & td': {
+                            border: '1px solid rgba(255,255,255,0.2)',
+                            padding: '8px',
+                            textAlign: 'left',
+                          },
+                          '& th': {
+                            backgroundColor: 'rgba(255,255,255,0.05)',
+                            fontWeight: 'bold',
+                          },
+                          '& blockquote': {
+                            borderLeft: '4px solid rgba(255,255,255,0.3)',
+                            paddingLeft: '12px',
+                            margin: '0.5em 0',
+                            color: 'rgba(255,255,255,0.7)',
+                          },
+                          '& a': {
+                            color: traderInfo?.themeColor || '#00ff88',
+                            textDecoration: 'underline',
+                          },
+                          '& hr': {
+                            border: 'none',
+                            borderTop: '1px solid rgba(255,255,255,0.2)',
+                            margin: '1em 0',
+                          },
+                        }}
+                      >
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {message.content}
+                        </ReactMarkdown>
+                      </Box>
                     )}
                     {debugMode && message.toolCall && (
                       <Box sx={{ mt: 2, p: 1, backgroundColor: '#0a0a0a', borderRadius: 1 }}>
