@@ -128,11 +128,13 @@ export default function AiTraderChatPage() {
     scrollToBottom()
   }, [messages])
 
-  // Poll for new messages every 2 seconds
+  // Poll for new messages every 2 seconds (but not while sending)
   useEffect(() => {
-    if (!params?.id) return
+    if (!params?.id || sending) return
 
     const interval = setInterval(async () => {
+      if (sending) return // Skip polling while streaming
+
       try {
         const res = await fetch(`/api/ai-trader/${params.id}/messages`)
         if (res.ok) {
@@ -147,7 +149,7 @@ export default function AiTraderChatPage() {
     }, 2000)
 
     return () => clearInterval(interval)
-  }, [params?.id, messages.length])
+  }, [params?.id, messages.length, sending])
 
   const handleSend = async () => {
     if (!input.trim() || !params?.id) return
@@ -207,42 +209,40 @@ export default function AiTraderChatPage() {
             const event = JSON.parse(line.slice(6))
 
             if (event.type === 'content' && event.content) {
-              // Append to AI message and clean up tool syntax
+              // Append to AI message (don't clean yet - wait for full response)
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === aiMsgId ? { ...m, content: m.content + event.content } : m
+                )
+              )
+            } else if (event.type === 'tool_start') {
+              // Track tool execution in the AI message meta AND clean content
+              toolCalls.set(event.tool, { status: 'running' })
               setMessages((prev) =>
                 prev.map((m) => {
                   if (m.id !== aiMsgId) return m
                   
-                  const newContent = m.content + event.content
-                  // Strip LM Studio tool syntax for clean display
-                  const cleanContent = newContent
+                  // Strip out tool syntax when tool detected
+                  const cleanContent = m.content
                     .replace(/<\|start\|>/g, '')
-                    .replace(/<\|channel\|>commentary\s+to=["']?(?:functions\.)?(\w+)["']?/g, '')
+                    .replace(/<\|channel\|>commentary\s+to=["']?(?:functions\.)?[\w]+["']?/g, '')
                     .replace(/<\|constrain\|>json/g, '')
                     .replace(/<\|message\|>\{[^}]*\}/g, '')
                     .trim()
                   
-                  return { ...m, content: cleanContent }
+                  return {
+                    ...m,
+                    content: cleanContent,
+                    meta: {
+                      ...m.meta,
+                      toolCalls: Array.from(toolCalls.entries()).map(([name, data]) => ({
+                        name,
+                        status: data.status,
+                        result: data.result,
+                      })),
+                    },
+                  }
                 })
-              )
-            } else if (event.type === 'tool_start') {
-              // Track tool execution in the AI message meta
-              toolCalls.set(event.tool, { status: 'running' })
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === aiMsgId
-                    ? {
-                        ...m,
-                        meta: {
-                          ...m.meta,
-                          toolCalls: Array.from(toolCalls.entries()).map(([name, data]) => ({
-                            name,
-                            status: data.status,
-                            result: data.result,
-                          })),
-                        },
-                      }
-                    : m
-                )
               )
             } else if (event.type === 'tool_complete') {
               // Update tool status to completed
@@ -292,13 +292,8 @@ export default function AiTraderChatPage() {
         }
       }
 
-      // Reload messages from DB to ensure consistency
-      setTimeout(() => {
-        fetch(`/api/ai-trader/${params.id}/messages`)
-          .then((res) => res.json())
-          .then((data) => setMessages(data.messages || []))
-          .catch(console.error)
-      }, 1000)
+      // Don't reload from DB - it would overwrite our streaming state
+      // Messages are already saved by the streaming endpoint
     } catch (error) {
       console.error('Failed to send message:', error)
       // Fallback: remove the placeholder AI message

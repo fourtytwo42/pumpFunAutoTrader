@@ -64,32 +64,33 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       'You are an AI trading agent monitoring pump.fun tokens. Analyze market data and provide insights.'
 
     const contextWindowTokens = config.llm?.contextWindow ?? 20000
+    // Get full tool list from registry
+    const { TOOL_REGISTRY } = await import('@/lib/ai-tools')
+    const toolList = Object.entries(TOOL_REGISTRY)
+      .map(([name, def]) => `• ${name} - ${def.description}`)
+      .join('\n')
+
     const enhancedSystemPrompt = `${systemPrompt}
 
-AVAILABLE TOOLS:
-You have access to trading tools. Simply mention them naturally in your response like "Let me check get_trending_tokens" and the system will execute them automatically.
+AVAILABLE TOOLS (${Object.keys(TOOL_REGISTRY).length} total):
+Simply mention tool names naturally and the system executes them automatically.
 
-Key tools:
-• get_trending_tokens - find hot tokens with multi-timeframe data, holder analysis, volatility
-• get_token_details - detailed info on a specific token
-• get_portfolio - your current positions
-• get_wallet_balance - check SOL balance
-• get_sol_price - current SOL price
-• buy_token / sell_token - execute trades
+${toolList}
 
 IMPORTANT:
 - Just mention tool names naturally - NO syntax, NO JSON
-- System auto-executes and calls you back with results
+- You can chain multiple tools: "I'll check get_trending_tokens and get_sol_price"
+- System auto-executes ALL mentioned tools and calls you back with results
 - Do NOT provide URLs/links - you don't know the UI structure
 - Focus on data analysis and trading recommendations
 
-When analyzing tokens from get_trending_tokens, evaluate:
-- Multi-timeframe momentum (5m, 1h, 6h, 24h trends)
-- Holder concentration (top 10 > 50% = risky)
-- Whale presence (>100 SOL = manipulation risk)
-- Buy/sell ratio (>60% = bullish)
-- Unique traders (more = healthier market)
-- Volatility (MODERATE = good, HIGH = risky)
+ANALYSIS WORKFLOW:
+When user asks to find tokens:
+1. Call get_trending_tokens (rich data: multi-timeframe, holders, volatility, unique traders)
+2. Evaluate: momentum, buy/sell ratio (>60% bullish), holder concentration (<50% safe), whales (>100 SOL risky)
+3. For top candidates, chain: get_token_details, get_recent_trades
+4. Cross-reference: get_portfolio, get_risk_profile
+5. Provide comprehensive analysis with data
 
 Always explain your reasoning with actual data.`
 
