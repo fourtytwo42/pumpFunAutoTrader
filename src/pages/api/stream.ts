@@ -3,6 +3,7 @@ import type { Server as HTTPServer } from 'http'
 import type { Socket } from 'net'
 import { Server as IOServer } from 'socket.io'
 import { eventBus } from '@/lib/events'
+import { ensurePumpRealtime } from '@/server/pumpRealtime'
 
 type NextApiResponseWithSocket = NextApiResponse & {
   socket: Socket & {
@@ -35,6 +36,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponseWithSoc
     eventBus.on('chat:new', (payload) => io.emit('chat:new', payload))
 
     res.socket.server.io = io
+    ensurePumpRealtime()
   }
 
   res.end()
