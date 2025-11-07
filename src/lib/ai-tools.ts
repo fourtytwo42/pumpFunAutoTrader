@@ -6,7 +6,8 @@
 import * as PumpAPI from './pump-api'
 import * as RiskProfiles from './risk-profiles'
 import { parsePaginationParams, parseDateRange, parseTimeSeriesParams } from './pagination'
-import { getUserBalance, getUserPortfolio, submitBuyOrder, submitSellOrder } from './trading'
+import { getUserBalance, getUserPortfolio } from './trading'
+import { submitBuyOrder, submitSellOrder } from './orders'
 import { prisma } from './db'
 import { Decimal } from '@prisma/client/runtime/library'
 
@@ -450,12 +451,12 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
 
       return {
         trades: trades.map((t) => ({
-          timestamp: t.timestamp.getTime(),
+          timestamp: Number(t.timestamp),
           side: t.type === 1 ? 'buy' : 'sell',
           amountSol: Number(t.amountSol),
-          amountTokens: Number(t.amountTokens),
+          amountTokens: Number(t.baseAmount),
           amountUSD: Number(t.amountUsd),
-          priceUsd: Number(t.priceUsd),
+          priceSol: Number(t.priceSol),
           userAddress: t.userAddress,
         })),
         count: trades.length,
@@ -689,9 +690,23 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
         }
       }
 
+      // Get wallet ID
+      const wallet = await prisma.wallet.findFirst({
+        where: { userId },
+        select: { id: true },
+      })
+
+      if (!wallet) {
+        return {
+          success: false,
+          error: 'Wallet not found',
+        }
+      }
+
       const order = await prisma.order.create({
         data: {
           userId,
+          walletId: wallet.id,
           tokenMint: args.mintAddress,
           side: args.side,
           status: 'pending',
@@ -909,9 +924,34 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
         }
       }
 
+      // Get token ID
+      const token = await prisma.token.findUnique({
+        where: { mintAddress: args.mintAddress },
+        select: { id: true },
+      })
+
+      if (!token) {
+        return {
+          success: false,
+          error: 'Token not found',
+        }
+      }
+
       // Execute trade
       try {
-        const result = await submitBuyOrder(userId, args.mintAddress, args.amountSol)
+        const result = await submitBuyOrder({
+          userId,
+          tokenId: token.id,
+          amountSol: args.amountSol,
+          limitPriceSol: args.limitPrice,
+        })
+
+        if (!result.success) {
+          return {
+            success: false,
+            error: result.error,
+          }
+        }
 
         // Update risk usage
         await RiskProfiles.updateRiskUsage(userId, {
@@ -923,10 +963,11 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
 
         return {
           success: true,
-          tradeId: result.trade?.id.toString(),
-          amountSol: args.amountSol,
-          amountTokens: result.trade ? Number(result.trade.amountTokens) : 0,
-          fillPriceSol: result.trade ? Number(result.trade.priceSol) : 0,
+          status: result.status,
+          orderId: result.orderId,
+          walletId: result.walletId,
+          tokensReceived: result.tokensReceived,
+          fillPrice: result.fillPrice,
           timestamp: new Date().toISOString(),
         }
       } catch (error: any) {
@@ -974,14 +1015,36 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
         }
       }
 
+      // Get token ID
+      const tokenData = await prisma.token.findUnique({
+        where: { mintAddress: args.mintAddress },
+        select: { id: true },
+      })
+
+      if (!tokenData) {
+        return {
+          success: false,
+          error: 'Token not found',
+        }
+      }
+
       // Execute trade
       try {
-        const result = await submitSellOrder(userId, args.mintAddress, args.amountTokens)
+        const result = await submitSellOrder({
+          userId,
+          tokenId: tokenData.id,
+          amountTokens: args.amountTokens,
+          limitPriceSol: args.limitPrice,
+        })
+
+        if (!result.success) {
+          return {
+            success: false,
+            error: result.error,
+          }
+        }
 
         // Calculate USD value for risk tracking
-        const solPrice = await PumpAPI.getSolPrice()
-        const amountUSD = (result.trade ? Number(result.trade.amountSol) : 0) * (solPrice?.solUsd || 0)
-
         await RiskProfiles.updateRiskUsage(userId, {
           mintAddress: args.mintAddress,
           side: 'sell',
@@ -991,10 +1054,11 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
 
         return {
           success: true,
-          tradeId: result.trade?.id.toString(),
-          amountTokens: args.amountTokens,
-          amountSol: result.trade ? Number(result.trade.amountSol) : 0,
-          fillPriceSol: result.trade ? Number(result.trade.priceSol) : 0,
+          status: result.status,
+          orderId: result.orderId,
+          walletId: result.walletId,
+          solReceived: result.solReceived,
+          fillPrice: result.fillPrice,
           timestamp: new Date().toISOString(),
         }
       } catch (error: any) {

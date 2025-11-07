@@ -74,6 +74,13 @@ export default function AiTradersPage() {
     temperature: 0.7,
     maxTokens: 1000,
     systemPrompt: '',
+    // Risk profile settings
+    maxPositionSizeUSD: 100,
+    maxDailySpendUSD: 500,
+    maxSlippageBps: 500,
+    cooldownSeconds: 30,
+    maxConcurrentPositions: 5,
+    minLiquidityUSD: 1000,
   })
   const [availableModels, setAvailableModels] = useState<string[]>([])
   const [loadingModels, setLoadingModels] = useState(false)
@@ -512,6 +519,85 @@ export default function AiTradersPage() {
               placeholder="You are an AI trading agent that analyzes pump.fun tokens and makes informed trading decisions..."
               helperText="Define the AI agent's personality and trading approach"
             />
+
+            <Typography variant="h6" sx={{ mt: 2 }}>
+              Risk Profile
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                fullWidth
+                label="Max Position Size (USD)"
+                type="number"
+                inputProps={{ min: 10, max: 10000, step: 10 }}
+                value={formData.maxPositionSizeUSD}
+                onChange={(e) =>
+                  setFormData({ ...formData, maxPositionSizeUSD: parseFloat(e.target.value) || 100 })
+                }
+                helperText="Maximum USD value per position"
+              />
+              <TextField
+                fullWidth
+                label="Max Daily Spend (USD)"
+                type="number"
+                inputProps={{ min: 50, max: 50000, step: 50 }}
+                value={formData.maxDailySpendUSD}
+                onChange={(e) =>
+                  setFormData({ ...formData, maxDailySpendUSD: parseFloat(e.target.value) || 500 })
+                }
+                helperText="Maximum daily trading volume"
+              />
+            </Box>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                fullWidth
+                label="Max Slippage (bps)"
+                type="number"
+                inputProps={{ min: 10, max: 2000, step: 10 }}
+                value={formData.maxSlippageBps}
+                onChange={(e) =>
+                  setFormData({ ...formData, maxSlippageBps: parseInt(e.target.value) || 500 })
+                }
+                helperText="Max allowed slippage (500 = 5%)"
+              />
+              <TextField
+                fullWidth
+                label="Cooldown (seconds)"
+                type="number"
+                inputProps={{ min: 0, max: 600, step: 5 }}
+                value={formData.cooldownSeconds}
+                onChange={(e) =>
+                  setFormData({ ...formData, cooldownSeconds: parseInt(e.target.value) || 30 })
+                }
+                helperText="Time between trades"
+              />
+            </Box>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                fullWidth
+                label="Max Concurrent Positions"
+                type="number"
+                inputProps={{ min: 1, max: 20, step: 1 }}
+                value={formData.maxConcurrentPositions}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    maxConcurrentPositions: parseInt(e.target.value) || 5,
+                  })
+                }
+                helperText="Max open positions at once"
+              />
+              <TextField
+                fullWidth
+                label="Min Liquidity (USD)"
+                type="number"
+                inputProps={{ min: 100, max: 100000, step: 100 }}
+                value={formData.minLiquidityUSD}
+                onChange={(e) =>
+                  setFormData({ ...formData, minLiquidityUSD: parseFloat(e.target.value) || 1000 })
+                }
+                helperText="Minimum market liquidity required"
+              />
+            </Box>
           </Box>
         </DialogContent>
         <DialogActions>

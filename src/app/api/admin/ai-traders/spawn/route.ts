@@ -22,6 +22,13 @@ export async function POST(request: NextRequest) {
       temperature,
       maxTokens,
       systemPrompt,
+      // Risk profile settings
+      maxPositionSizeUSD,
+      maxDailySpendUSD,
+      maxSlippageBps,
+      cooldownSeconds,
+      maxConcurrentPositions,
+      minLiquidityUSD,
     } = await request.json()
 
     if (!username || !configName) {
@@ -110,6 +117,20 @@ export async function POST(request: NextRequest) {
         userId: aiUser.id,
         label: `${configName} Wallet`,
         pubkey: `AI_WALLET_${aiUser.id}`,
+      },
+    })
+
+    // Create risk profile for AI trader
+    await prisma.riskProfile.create({
+      data: {
+        userId: aiUser.id,
+        maxPositionSizeUSD: maxPositionSizeUSD || 100,
+        maxDailySpendUSD: maxDailySpendUSD || 500,
+        maxSlippageBps: maxSlippageBps || 500,
+        cooldownSeconds: cooldownSeconds || 30,
+        maxConcurrentPositions: maxConcurrentPositions || 5,
+        minLiquidityUSD: minLiquidityUSD || 1000,
+        blacklistedTokens: [],
       },
     })
 

@@ -345,11 +345,11 @@ export async function getRecentTrades(
   }))
 
   // Calculate stats
-  const buyCount = trades.filter((t) => t.side === 'buy').length
-  const sellCount = trades.filter((t) => t.side === 'sell').length
-  const whaleTradesCount = trades.filter((t) => t.amountSol >= 0.5).length
-  const totalVolumeSol = trades.reduce((sum, t) => sum + t.amountSol, 0)
-  const totalValue = trades.reduce((sum, t) => sum + t.amountSol * t.amountTokens, 0)
+  const buyCount = trades.filter((t: Trade) => t.side === 'buy').length
+  const sellCount = trades.filter((t: Trade) => t.side === 'sell').length
+  const whaleTradesCount = trades.filter((t: Trade) => t.amountSol >= 0.5).length
+  const totalVolumeSol = trades.reduce((sum: number, t: Trade) => sum + t.amountSol, 0)
+  const totalValue = trades.reduce((sum: number, t: Trade) => sum + t.amountSol * t.amountTokens, 0)
   const vwap = totalVolumeSol > 0 ? totalValue / totalVolumeSol : 0
 
   return {
