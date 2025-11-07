@@ -31,6 +31,13 @@ interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
   content: string
   timestamp: number
+  meta?: {
+    status?: 'executing' | 'completed' | 'failed'
+    toolName?: string
+    result?: any
+    error?: string
+    [key: string]: any
+  }
   toolCall?: {
     name: string
     args: any

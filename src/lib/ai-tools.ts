@@ -154,8 +154,8 @@ export async function executeAITool(
             mint: t.mintAddress,
             symbol: t.symbol,
             name: t.name,
-            price: t.price ? Number(t.price.priceSol) : 0,
-            marketCap: t.marketCapUsd || 0,
+            priceSol: t.price ? Number(t.price.priceSol) : 0,
+            priceUsd: t.price ? Number(t.price.priceUsd) : 0,
           })),
         }
       }
@@ -174,8 +174,8 @@ export async function executeAITool(
           mint: token.mintAddress,
           symbol: token.symbol,
           name: token.name,
-          price: token.price ? Number(token.price.priceSol) : 0,
-          marketCap: token.marketCapUsd || 0,
+          priceSol: token.price ? Number(token.price.priceSol) : 0,
+          priceUsd: token.price ? Number(token.price.priceUsd) : 0,
         }
       }
 

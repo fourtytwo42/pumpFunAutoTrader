@@ -15,7 +15,7 @@ export default function AiTraderFaucetPage() {
           Faucet view coming soon
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          For now, use the main faucet page or manage the AI trader's balance via the admin panel.
+          For now, use the main faucet page or manage the AI trader&apos;s balance via the admin panel.
         </Typography>
         <Button
           variant="outlined"
