@@ -11,11 +11,14 @@
 
 const fs = require('fs')
 const path = require('path')
+const crypto = require('crypto')
 const { WebSocket } = require('ws')
 const zlib = require('zlib')
 const { decode: msgpackDecode, encode: msgpackEncode } = require('@msgpack/msgpack')
 
-const DEFAULT_WS_URL = 'wss://backend2.padre.gg/_heavy_multiplex'
+const DEFAULT_WS_URL = 'wss://unified-prod.nats.realtime.pump.fun/'
+const DEFAULT_PROTOCOL = 'pump'
+const DEFAULT_SUBS = ['unifiedTradeEvent.processed']
 const MAX_MESSAGES = 50
 const REQUIRED_INTERESTING = 3
 const TIMEOUT_MS = 30_000
@@ -39,8 +42,6 @@ for (const arg of argv) {
 }
 
 const wsUrl = options.url || process.env.PADRE_WS_URL || DEFAULT_WS_URL
-let jwt = options.jwt || process.env.PADRE_JWT
-let sessionId = options.session || process.env.PADRE_SESSION
 const userId = options.user || process.env.PADRE_USER
 const extraSubs = options.sub
 const cookieHeader = options.cookie || process.env.PADRE_COOKIE
@@ -50,8 +51,12 @@ const logPath =
   process.env.PADRE_LOG ||
   path.resolve(process.cwd(), `padre-ws-log-${new Date().toISOString().replace(/[:.]/g, '-')}.jsonl`)
 const handshakeBase64 = options.handshake || process.env.PADRE_HANDSHAKE
+const protocol = options.protocol || process.env.PADRE_PROTOCOL || DEFAULT_PROTOCOL
 
-if (handshakeBase64) {
+let jwt = options.jwt || process.env.PADRE_JWT
+let sessionId = options.session || process.env.PADRE_SESSION
+
+if (handshakeBase64 && protocol === 'padre') {
   try {
     const buffer = Buffer.from(handshakeBase64, 'base64')
     const decoded = msgpackDecode(buffer)
@@ -64,22 +69,55 @@ if (handshakeBase64) {
   }
 }
 
-if (!jwt || !sessionId) {
-  console.error('[padre] Missing credentials. Provide --jwt and --session (or PADRE_JWT / PADRE_SESSION env vars).')
-  console.error('        Example: node scripts/inspect-padre-trending.js --jwt="<token>" --session="dc3c..." --user="w_..."')
-  process.exit(1)
+if (protocol === 'padre') {
+  if (!jwt || !sessionId) {
+    console.error('[padre] Missing credentials. Provide --jwt and --session (or PADRE_JWT / PADRE_SESSION env vars).')
+    console.error('        Example: node scripts/pump-ws-inspect.js --jwt="<token>" --session="dc3c..." --user="w_..."')
+    process.exit(1)
+  }
 }
 
-const DEFAULT_SUBSCRIPTIONS = [
-  '/padre-news/news/all/current-version',
-  userId && `/twitter/tweet/subscribe-feed/v3/${userId}?encodedCategoryFilters=&onlySubscribedAccounts=1`,
-  userId && `/orders/users/${userId}/subscribe-orders?limit=1`,
-  userId && `/watchlist/users/${userId}/on-watchlist-update`,
-]
-  .filter(Boolean)
-  .concat(extraSubs ? (Array.isArray(extraSubs) ? extraSubs : [extraSubs]) : [])
+function buildPumpMessages(subs) {
+  const connectPayload = {
+    no_responders: true,
+    protocol: 1,
+    verbose: false,
+    pedantic: false,
+    user: 'subscriber',
+    pass: 'OX745xvUbNQMuFqV',
+    lang: 'nats.ws',
+    version: '1.30.3',
+    headers: true,
+  }
+  const messages = [
+    Buffer.from(`CONNECT ${JSON.stringify(connectPayload)}\r\n`, 'utf8'),
+  ]
+  messages.push(Buffer.from('PING\r\n', 'utf8'))
+  subs.forEach((subject) => {
+    const sid = crypto.randomBytes(8).toString('hex')
+    messages.push(Buffer.from(`SUB ${subject} ${sid}\r\n`, 'utf8'))
+  })
+  return messages
+}
 
-const subscriptionEnvelope = DEFAULT_SUBSCRIPTIONS.map((path, index) => [4, 100 + index, path])
+const DEFAULT_SUBSCRIPTIONS =
+  protocol === 'padre'
+    ? [
+        '/padre-news/news/all/current-version',
+        userId && `/twitter/tweet/subscribe-feed/v3/${userId}?encodedCategoryFilters=&onlySubscribedAccounts=1`,
+        userId && `/orders/users/${userId}/subscribe-orders?limit=1`,
+        userId && `/watchlist/users/${userId}/on-watchlist-update`,
+      ].filter(Boolean)
+    : DEFAULT_SUBS
+
+const combinedSubs = DEFAULT_SUBSCRIPTIONS.concat(
+  extraSubs ? (Array.isArray(extraSubs) ? extraSubs : [extraSubs]) : [],
+)
+
+const subscriptionEnvelope =
+  protocol === 'padre'
+    ? combinedSubs.map((path, index) => [4, 100 + index, path])
+    : buildPumpMessages(combinedSubs)
 
 const results = []
 let interestingCount = 0
@@ -244,46 +282,63 @@ function sendMsgpack(ws, payload) {
 function main() {
   console.log(`[padre] Connecting to ${wsUrl}`)
 
-  const headers = {
-    Origin: 'https://trade.padre.gg',
-    'User-Agent': 'Mozilla/5.0 (compatible; PadreInspector/1.0)',
-    'Cache-Control': 'no-cache',
-    Pragma: 'no-cache',
-  }
+  const headers =
+    protocol === 'padre'
+      ? {
+          Origin: 'https://trade.padre.gg',
+          'User-Agent': 'Mozilla/5.0 (compatible; PadreInspector/1.0)',
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+        }
+      : {
+          Origin: 'https://pump.fun',
+          'User-Agent': 'Mozilla/5.0 (compatible; PumpInspector/1.0)',
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+        }
   if (cookieHeader) {
     headers.Cookie = cookieHeader
   }
 
-  const ws = new WebSocket(wsUrl, { headers })
+  const ws = new WebSocket(wsUrl, { headers, perMessageDeflate: true })
 
   ws.on('open', () => {
-    console.log('[padre] WebSocket connected')
-    console.log('[padre] Sending auth handshake…')
-    if (handshakeBase64) {
-      const raw = Buffer.from(handshakeBase64, 'base64')
-      ws.send(raw)
-    } else {
-      sendMsgpack(ws, [1, jwt, sessionId])
-    }
+    console.log(`[${protocol}] WebSocket connected`)
+    if (protocol === 'padre') {
+      console.log('[padre] Sending auth handshake…')
+      if (handshakeBase64) {
+        const raw = Buffer.from(handshakeBase64, 'base64')
+        ws.send(raw)
+      } else {
+        sendMsgpack(ws, [1, jwt, sessionId])
+      }
 
-    if (subscriptionEnvelope.length > 0) {
-      console.log(`[padre] Queuing ${subscriptionEnvelope.length} subscription requests`)
+      if (subscriptionEnvelope.length > 0) {
+        console.log(`[padre] Queuing ${subscriptionEnvelope.length} subscription requests`)
+        subscriptionEnvelope.forEach((payload, idx) => {
+          setTimeout(() => {
+            console.log(`[padre] → subscribe ${payload[2]}`)
+            sendMsgpack(ws, payload)
+          }, (idx + 1) * 200)
+        })
+      }
+    } else {
       subscriptionEnvelope.forEach((payload, idx) => {
         setTimeout(() => {
-          console.log(`[padre] → subscribe ${payload[2]}`)
-          sendMsgpack(ws, payload)
-        }, (idx + 1) * 200)
+          console.log(`[${protocol}] → ${payload.toString('utf8').trim()}`)
+          ws.send(payload)
+        }, idx * 100)
       })
     }
 
     timeout = setTimeout(() => {
-      console.warn('[padre] Timeout waiting for messages')
+      console.warn(`[${protocol}] Timeout waiting for messages`)
       ws.close()
       finalizeAndExit(1)
     }, TIMEOUT_MS)
 
     durationTimer = setTimeout(() => {
-      console.log(`[padre] Duration ${durationSeconds}s reached, closing connection`)
+      console.log(`[${protocol}] Duration ${durationSeconds}s reached, closing connection`)
       ws.close()
       finalizeAndExit(0)
     }, durationSeconds * 1000)
@@ -297,10 +352,10 @@ function main() {
     if (entry.rawLength > 2 || buffer.length > 2) {
       interestingCount += 1
       console.log(
-        `[padre] Message #${results.length} captured (interesting, length=${entry.rawLength})`,
+        `[${protocol}] Message #${results.length} captured (interesting, length=${entry.rawLength})`,
       )
     } else {
-      console.log(`[padre] Message #${results.length} captured (heartbeat, length=2)`) 
+      console.log(`[${protocol}] Message #${results.length} captured (heartbeat, length=2)`)
     }
 
     if (interestingCount >= REQUIRED_INTERESTING || results.length >= MAX_MESSAGES) {
@@ -310,7 +365,7 @@ function main() {
   })
 
   ws.on('error', (err) => {
-    console.error('[padre] WebSocket error:', err.message)
+    console.error(`[${protocol}] WebSocket error:`, err.message)
     finalizeAndExit(1)
   })
 
