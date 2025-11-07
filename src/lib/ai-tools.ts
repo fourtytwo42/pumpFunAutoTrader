@@ -79,6 +79,10 @@ After finding interesting tokens, use get_token_details for bonding curve status
       const timeframe = args.timeframe || '1h'
       const limit = Math.min(args.limit || 10, 100)
 
+      // Get current SOL price for USD conversions
+      const { getLatestSolPrice } = await import('./metrics')
+      const solPrice = (await getLatestSolPrice()) || 157
+
       // Calculate timeframe cutoff
       const timeframeMs: Record<string, number> = {
         '1m': 60 * 1000,
@@ -107,8 +111,10 @@ After finding interesting tokens, use get_token_details for bonding curve status
             select: {
               amountSol: true,
               amountUsd: true,
+              priceSol: true,
               type: true,
               createdAt: true,
+              userAddress: true,
             },
           },
         },
@@ -120,30 +126,28 @@ After finding interesting tokens, use get_token_details for bonding curve status
         .map((token) => {
           const trades = token.trades
           const volumeSol = trades.reduce((sum, t) => sum + Number(t.amountSol), 0)
-          const volumeUSD = trades.reduce((sum, t) => sum + Number(t.amountUsd), 0)
+          const volumeUSD = volumeSol * solPrice
           const tradeCount = trades.length
           const buyCount = trades.filter((t) => t.type === 1).length
           const sellCount = trades.filter((t) => t.type === 2).length
+          const uniqueTraders = new Set(trades.map((t) => t.userAddress)).size
 
-          // Calculate price change (first to last trade in timeframe)
+          // Calculate price change using actual priceSol from trades
           let priceChange = 0
           if (trades.length >= 2) {
             const sortedTrades = [...trades].sort(
               (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
             )
-            const firstPrice =
-              Number(sortedTrades[0].amountSol) / Number(sortedTrades[0].amountUsd || 1)
-            const lastPrice =
-              Number(sortedTrades[sortedTrades.length - 1].amountSol) /
-              Number(sortedTrades[sortedTrades.length - 1].amountUsd || 1)
+            const firstPrice = Number(sortedTrades[0].priceSol)
+            const lastPrice = Number(sortedTrades[sortedTrades.length - 1].priceSol)
             if (firstPrice > 0) {
               priceChange = ((lastPrice - firstPrice) / firstPrice) * 100
             }
           }
 
           const currentPriceSol = token.price ? Number(token.price.priceSol) : 0
-          const currentPriceUSD = token.price ? Number(token.price.priceUsd) : 0
-          const marketCapUSD = currentPriceUSD * (Number(token.totalSupply) / 1e6)
+          const currentPriceUSD = currentPriceSol * solPrice
+          const marketCapUSD = currentPriceUSD * Number(token.totalSupply)
 
           return {
             ...token,
@@ -153,6 +157,7 @@ After finding interesting tokens, use get_token_details for bonding curve status
               tradeCount,
               buyCount,
               sellCount,
+              uniqueTraders,
               priceChange,
               marketCapUSD,
               currentPriceSol,
@@ -193,7 +198,7 @@ After finding interesting tokens, use get_token_details for bonding curve status
       const includeHolders = args.includeHolderAnalysis !== false
       const enrichedTokens = await Promise.all(
         topTokens.map(async (t) => {
-          // Calculate multi-timeframe volume and price changes
+          // Calculate multi-timeframe volume and price changes using createdAt (DateTime) not timestamp (BigInt)
           const timeframes = {
             '5m': 5 * 60 * 1000,
             '1h': 60 * 60 * 1000,
@@ -212,9 +217,9 @@ After finding interesting tokens, use get_token_details for bonding curve status
               select: {
                 amountSol: true,
                 priceSol: true,
-                timestamp: true,
+                createdAt: true,
               },
-              orderBy: { timestamp: 'asc' },
+              orderBy: { createdAt: 'asc' },
             })
 
             const volume = tfTrades.reduce((sum, tr) => sum + Number(tr.amountSol), 0)
@@ -229,19 +234,21 @@ After finding interesting tokens, use get_token_details for bonding curve status
 
             multiTimeframeData[tf] = {
               volumeSol: volume,
+              volumeUSD: volume * solPrice,
               priceChangePct,
               tradeCount: tfTrades.length,
             }
           }
 
-          // Calculate volatility (standard deviation of price changes)
+          // Calculate volatility (standard deviation of price changes) using createdAt
+          const volatilityCutoff = new Date(Date.now() - timeframeMs[timeframe])
           const recentPrices = await prisma.trade.findMany({
             where: {
               tokenId: t.mintAddress,
-              createdAt: { gte: new Date(Date.now() - timeframeMs[timeframe]) },
+              createdAt: { gte: volatilityCutoff },
             },
             select: { priceSol: true },
-            orderBy: { timestamp: 'desc' },
+            orderBy: { createdAt: 'desc' },
             take: 50,
           })
 
@@ -284,12 +291,11 @@ After finding interesting tokens, use get_token_details for bonding curve status
             mint: t.mintAddress,
             symbol: t.symbol,
             name: t.name,
-            imageUri: t.imageUri || null,
             
             // Price metrics
             marketCapUSD: t.stats.marketCapUSD,
             priceSol: t.stats.currentPriceSol,
-            pricePerMillionTokens: t.stats.currentPriceSol * 1e6,
+            pricePerMillion: t.stats.currentPriceSol * 1e6,
             priceUSD: t.stats.currentPriceUSD,
             
             // Current timeframe data
@@ -302,6 +308,7 @@ After finding interesting tokens, use get_token_details for bonding curve status
               total: t.stats.tradeCount,
               buys: t.stats.buyCount,
               sells: t.stats.sellCount,
+              uniqueTraders: t.stats.uniqueTraders,
               buyRatio: t.stats.tradeCount > 0 ? t.stats.buyCount / t.stats.tradeCount : 0,
             },
             priceChange: {
@@ -315,17 +322,14 @@ After finding interesting tokens, use get_token_details for bonding curve status
             // Risk indicators
             volatility: {
               coefficient: volatility,
-              interpretation: volatility > 0.5 ? 'HIGH' : volatility > 0.2 ? 'MODERATE' : 'LOW',
+              level: volatility > 0.5 ? 'HIGH' : volatility > 0.2 ? 'MODERATE' : 'LOW',
             },
             
-            // Holder analysis
-            holders: holderAnalysis,
+            // Holder analysis (if included)
+            ...(holderAnalysis ? { holders: holderAnalysis } : {}),
             
-            // Token status
-            complete: t.completed,
-            isLive: !t.completed,
-            creator: t.creatorAddress,
-            age: Date.now() - Number(t.createdAt),
+            // Age in hours for readability (createdAt is in microseconds, convert to ms)
+            ageHours: Math.floor((Date.now() - Number(t.createdAt) / 1000) / (1000 * 60 * 60)),
           }
         })
       )
@@ -333,18 +337,8 @@ After finding interesting tokens, use get_token_details for bonding curve status
       return {
         tokens: enrichedTokens,
         count: enrichedTokens.length,
-        filters: {
-          sortBy,
-          timeframe,
-          appliedFilters: {
-            minVolumeSol: args.minVolumeSol,
-            maxVolumeSol: args.maxVolumeSol,
-            minTrades: args.minTrades,
-            minMarketCapUSD: args.minMarketCapUSD,
-            maxMarketCapUSD: args.maxMarketCapUSD,
-          },
-        },
-        analysisNote: 'Use get_token_details for bonding curve info, get_recent_trades for order flow, get_position to check your holdings',
+        sortedBy: sortBy,
+        timeframe,
         timestamp: Date.now(),
       }
     },
