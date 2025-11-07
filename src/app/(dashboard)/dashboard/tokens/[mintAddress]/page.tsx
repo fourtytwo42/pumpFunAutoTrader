@@ -226,11 +226,9 @@ const formatSolPrice = (value?: number) => {
   if (value === undefined || value === null || Number.isNaN(value)) return "N/A";
   if (value === 0) return "0 SOL";
   const absValue = Math.abs(value);
-  if (absValue < 1e-8) {
-    return `${value.toExponential(2)} SOL`;
-  }
   if (absValue < 1e-4) {
-    return `${value.toFixed(8)} SOL`;
+    // Use toFixed with enough decimals to show the value without scientific notation
+    return `${value.toFixed(12)} SOL`;
   }
   return `${value.toFixed(6)} SOL`;
 };
@@ -571,7 +569,7 @@ export default function TokenDetailPage() {
       : null;
 
   const BUY_PRESETS = [0.1, 0.5, 1];
-  const SELL_PRESETS = [25, 50, 75, 100];
+  const SELL_PRESETS = [25, 50, 75];
   const normalizedPnl = Number.isFinite(pnlPct) ? Math.max(Math.min(pnlPct, 200), -200) : 0;
   const pnlBarValue = Math.max(Math.min(((normalizedPnl + 200) / 4), 100), 0);
 
@@ -590,7 +588,9 @@ export default function TokenDetailPage() {
       return;
     }
     const amount = (tokensHeld * percent) / 100;
-    setSellAmount(amount > 0 ? amount.toFixed(4) : '');
+    // Round down to 6 decimals to avoid precision issues
+    const roundedAmount = Math.floor(amount * 1000000) / 1000000;
+    setSellAmount(roundedAmount > 0 ? String(roundedAmount) : '');
   };
 
   return (
@@ -1019,7 +1019,9 @@ export default function TokenDetailPage() {
                   Holdings
                 </Typography>
                 <Typography variant="body1" fontWeight={600}>
-                  {tokensHeld > 0 ? `${tokensHeld.toFixed(4)} ${token.symbol}` : `0 ${token.symbol}`}
+                  {tokensHeld > 0
+                    ? `${formatCompactNumber(tokensHeld / 1_000_000)} M ${token.symbol}`
+                    : `0 ${token.symbol}`}
                 </Typography>
               </Box>
               {activeTab === 'buy' ? (
@@ -1082,7 +1084,15 @@ export default function TokenDetailPage() {
                     <Button
                       size="small"
                       variant="outlined"
-                      onClick={() => setSellAmount(tokensHeld > 0 ? tokensHeld.toFixed(4) : '')}
+                      onClick={() => {
+                        if (tokensHeld > 0) {
+                          // Round down to avoid selling more than held due to floating point precision
+                          const roundedAmount = Math.floor(tokensHeld * 1000000) / 1000000;
+                          setSellAmount(String(roundedAmount));
+                        } else {
+                          setSellAmount('');
+                        }
+                      }}
                     >
                       100%
                     </Button>
@@ -1097,6 +1107,7 @@ export default function TokenDetailPage() {
                 onClick={activeTab === 'buy' ? handleBuy : handleSell}
                 disabled={
                   trading ||
+                  userSummaryLoading ||
                   (activeTab === 'buy'
                     ? !buyAmount ||
                       parseFloat(buyAmount) <= 0 ||
@@ -1106,7 +1117,13 @@ export default function TokenDetailPage() {
                       parseFloat(sellAmount) > tokensHeld)
                 }
               >
-                {trading ? 'Processing...' : activeTab === 'buy' ? 'Buy' : 'Sell'}
+                {trading
+                  ? 'Processing...'
+                  : userSummaryLoading
+                    ? 'Loading...'
+                    : activeTab === 'buy'
+                      ? 'Buy'
+                      : 'Sell'}
               </Button>
             </Stack>
           </Paper>

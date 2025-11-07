@@ -2,6 +2,7 @@ import type { UserSession } from '@prisma/client'
 import { Decimal } from '@prisma/client/runtime/library'
 import { prisma } from './db'
 import { advanceSimulationSession } from './simulation'
+import { getLatestSolPrice } from './metrics'
 
 export async function getUserBalance(
   userId: string,
@@ -295,6 +296,9 @@ export async function recordSellFill({
         tokenId,
       },
     },
+    include: {
+      token: true,
+    },
   })
 
   if (!portfolio || Number(portfolio.amount) < amountTokens) {
@@ -302,18 +306,53 @@ export async function recordSellFill({
   }
 
   const solReceived = amountTokens * priceSol
+  const avgBuyPriceSol = Number(portfolio.avgBuyPrice)
+  const costBasisSol = amountTokens * avgBuyPriceSol
+  const realizedPnlSol = solReceived - costBasisSol
 
-  await prisma.userTrade.create({
-    data: {
-      userId,
-      tokenId,
-      type: 2,
-      amountSol: solReceived,
-      amountTokens,
-      priceSol,
-      simulatedTimestamp: timestamp,
-    },
+  // Get SOL price in USD for realized P/L calculation
+  const solPriceUsd = (await getLatestSolPrice()) ?? 0
+  const realizedPnlUsd = realizedPnlSol * solPriceUsd
+
+  // Get user's wallet
+  const wallet = await prisma.wallet.findFirst({
+    where: { userId },
   })
+
+  if (!wallet) {
+    throw new Error('Wallet not found')
+  }
+
+  await prisma.$transaction([
+    // Record the trade
+    prisma.userTrade.create({
+      data: {
+        userId,
+        tokenId,
+        type: 2,
+        amountSol: solReceived,
+        amountTokens,
+        priceSol,
+        simulatedTimestamp: timestamp,
+      },
+    }),
+    // Record realized P/L in ledger
+    prisma.pnLLedger.create({
+      data: {
+        walletId: wallet.id,
+        tokenMint: portfolio.token.mintAddress,
+        type: 'realized',
+        amountUsd: realizedPnlUsd,
+        meta: {
+          amountTokens,
+          sellPriceSol: priceSol,
+          avgBuyPriceSol,
+          realizedPnlSol,
+          timestamp: timestamp.toString(),
+        },
+      },
+    }),
+  ])
 
   const newAmount = Number(portfolio.amount) - amountTokens
   if (newAmount <= 0) {

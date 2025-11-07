@@ -15,11 +15,11 @@ import { Box, CircularProgress, Typography } from '@mui/material'
 
 interface CandleData {
   timestamp: string
-  volume: number
-  open?: number
-  close?: number
-  buyVolume?: number | null
-  sellVolume?: number | null
+  volume: string
+  open?: string
+  close?: string
+  buyVolume?: string | null
+  sellVolume?: string | null
 }
 
 interface VolumeChartProps {
@@ -72,20 +72,23 @@ export default function VolumeChart({ tokenAddress, interval = '1m', height = 20
 
   const chartData = data.map((candle) => {
     const timestampMs = Number.parseInt(candle.timestamp)
-    const buyVolume = candle.buyVolume ?? undefined
-    const sellVolume = candle.sellVolume ?? undefined
+    const volume = parseFloat(candle.volume)
+    const buyVolume = candle.buyVolume ? parseFloat(candle.buyVolume) : undefined
+    const sellVolume = candle.sellVolume ? parseFloat(candle.sellVolume) : undefined
+    const open = candle.open ? parseFloat(candle.open) : 0
+    const close = candle.close ? parseFloat(candle.close) : 0
     const direction = (() => {
       if (buyVolume !== undefined && sellVolume !== undefined && buyVolume !== null && sellVolume !== null) {
         if (buyVolume === sellVolume) {
-          return (candle.close ?? 0) >= (candle.open ?? 0) ? 'up' : 'down'
+          return close >= open ? 'up' : 'down'
         }
         return buyVolume > sellVolume ? 'up' : 'down'
       }
-      return (candle.close ?? 0) >= (candle.open ?? 0) ? 'up' : 'down'
+      return close >= open ? 'up' : 'down'
     })()
     return {
       time: new Date(timestampMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      volume: Number(candle.volume),
+      volume,
       color: direction === 'up' ? '#00ff88' : '#ff4d4d',
     }
   })

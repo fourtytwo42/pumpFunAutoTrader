@@ -15,13 +15,13 @@ import { Box, CircularProgress, Typography, Paper, Stack } from '@mui/material'
 
 interface CandleData {
   timestamp: string
-  open: number
-  high: number
-  low: number
-  close: number
-  volume: number
-  buyVolume?: number | null
-  sellVolume?: number | null
+  open: string
+  high: string
+  low: string
+  close: string
+  volume: string
+  buyVolume?: string | null
+  sellVolume?: string | null
 }
 
 interface PriceChartProps {
@@ -30,7 +30,15 @@ interface PriceChartProps {
   height?: number
 }
 
-interface ChartDatum extends CandleData {
+interface ChartDatum {
+  timestamp: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+  buyVolume?: number | null
+  sellVolume?: number | null
   timeLabel: string
   timestampMs: number
   body: number
@@ -236,14 +244,24 @@ export default function PriceChart({ tokenAddress, interval = '1m', height = 300
   const chartData: ChartDatum[] = useMemo(() => {
     return data.map((candle) => {
       const timestampMs = Number.parseInt(candle.timestamp, 10)
-      const open = Number(candle.open)
-      const close = Number(candle.close)
-      const high = Number(candle.high)
-      const low = Number(candle.low)
+      const open = parseFloat(candle.open)
+      const close = parseFloat(candle.close)
+      const high = parseFloat(candle.high)
+      const low = parseFloat(candle.low)
+      const volume = parseFloat(candle.volume)
+      const buyVolume = candle.buyVolume ? parseFloat(candle.buyVolume) : null
+      const sellVolume = candle.sellVolume ? parseFloat(candle.sellVolume) : null
       const base = Math.min(open, close)
       const body = Math.max(Math.abs(close - open), Number.EPSILON)
       return {
-        ...candle,
+        timestamp: candle.timestamp,
+        open,
+        close,
+        high,
+        low,
+        volume,
+        buyVolume,
+        sellVolume,
         timestampMs,
         timeLabel: new Date(timestampMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         base,

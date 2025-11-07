@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { Decimal } from '@prisma/client/runtime/library'
 
 const PUMP_HEADERS = {
   accept: 'application/json, text/plain, */*',
@@ -32,90 +31,6 @@ async function fetchPumpJson<T>(url: string, init: RequestInit = {}): Promise<T 
   }
 }
 
-// Generate candles on-demand from trades (memory efficient, always accurate)
-async function generateCandlesFromTrades(
-  tokenId: string,
-  intervalMinutes: number,
-  startTime?: bigint,
-  endTime?: bigint,
-  limit: number = 100
-) {
-  const where: any = {
-    tokenId,
-  }
-
-  if (startTime) {
-    where.timestamp = { ...where.timestamp, gte: startTime }
-  }
-  if (endTime) {
-    where.timestamp = { ...where.timestamp, lte: endTime }
-  }
-
-  const trades = await prisma.trade.findMany({
-    where,
-    orderBy: { timestamp: 'asc' },
-  })
-
-  if (trades.length === 0) {
-    return []
-  }
-
-  const candlesMap = new Map<string, {
-    timestamp: bigint
-    open: Decimal
-    high: Decimal
-    low: Decimal
-    close: Decimal
-    volume: Decimal
-    buyVolume: Decimal | null
-    sellVolume: Decimal | null
-  }>()
-
-  const intervalMs = intervalMinutes * 60 * 1000
-
-  for (const trade of trades) {
-    const tradeTimestamp = Number(trade.timestamp)
-    const candleTimestamp = BigInt(Math.floor(tradeTimestamp / intervalMs) * intervalMs)
-
-    const key = candleTimestamp.toString()
-    let candle = candlesMap.get(key)
-
-    if (!candle) {
-      candle = {
-        timestamp: candleTimestamp,
-        open: trade.priceSol,
-        high: trade.priceSol,
-        low: trade.priceSol,
-        close: trade.priceSol,
-        volume: new Decimal(0),
-        buyVolume: new Decimal(0),
-        sellVolume: new Decimal(0),
-      }
-      candlesMap.set(key, candle)
-    }
-
-    candle.high = Decimal.max(candle.high, trade.priceSol)
-    candle.low = Decimal.min(candle.low, trade.priceSol)
-    candle.close = trade.priceSol
-    candle.volume = candle.volume.add(trade.amountSol)
-    if (trade.type === 1) {
-      candle.buyVolume = (candle.buyVolume ?? new Decimal(0)).add(trade.amountSol)
-    } else {
-      candle.sellVolume = (candle.sellVolume ?? new Decimal(0)).add(trade.amountSol)
-    }
-  }
-
-  const candles = Array.from(candlesMap.values())
-    .sort((a, b) => {
-      if (a.timestamp < b.timestamp) return -1
-      if (a.timestamp > b.timestamp) return 1
-      return 0
-    })
-    .slice(-limit)
-
-  return candles
-}
-
 export async function GET(
   request: NextRequest,
   { params }: { params: { mintAddress: string } }
@@ -124,14 +39,12 @@ export async function GET(
     const searchParams = request.nextUrl.searchParams
     const interval = searchParams.get('interval') || '1m'
     const limit = parseInt(searchParams.get('limit') || '500')
-    const startTime = searchParams.get('start_time')
-    const endTime = searchParams.get('end_time')
-    const simulationTime = searchParams.get('simulation_time')
 
     console.log('[Candles API] Request for mint:', params.mintAddress, 'interval:', interval, 'limit:', limit)
 
     const token = await prisma.token.findUnique({
       where: { mintAddress: params.mintAddress },
+      select: { createdAt: true },
     })
 
     if (!token) {
@@ -139,143 +52,52 @@ export async function GET(
       return NextResponse.json({ error: 'Token not found' }, { status: 404 })
     }
 
-    console.log('[Candles API] Token found:', token.id, token.symbol)
+    const createdAtMs = token.createdAt ? Number(token.createdAt) : 0
+    const createdTs = createdAtMs > 0 ? createdAtMs : undefined
+    const pumpUrl = `https://swap-api.pump.fun/v2/coins/${params.mintAddress}/candles?interval=${interval}&limit=${limit}&currency=USD${createdTs ? `&createdTs=${createdTs}` : ''}`
+    
+    console.log('[Candles API] Fetching from pump.fun:', pumpUrl)
+    const remoteCandles = await fetchPumpJson<any>(pumpUrl)
 
-    const intervalMinutes: Record<string, number> = {
-      '1m': 1,
-      '5m': 5,
-      '1h': 60,
-      '6h': 360,
-      '24h': 1440,
+    const remoteCandleArray = Array.isArray(remoteCandles?.candles)
+      ? remoteCandles.candles
+      : Array.isArray(remoteCandles)
+        ? remoteCandles
+        : []
+
+    console.log('[Candles API] Remote candles fetched:', remoteCandleArray.length)
+
+    if (remoteCandleArray.length === 0) {
+      return NextResponse.json({ candles: [] })
     }
 
-    const intervalMin = intervalMinutes[interval] || 60
+    const candles = remoteCandleArray.map((candle: any) => {
+      const timestamp = candle?.timestamp ?? candle?.time
+      const tsNumber = Number(timestamp)
+      const needsMillis = tsNumber < 1_000_000_000_000
+      const tsMs = needsMillis ? tsNumber * 1000 : tsNumber
 
-    let startTimestamp: bigint | undefined
-    let endTimestamp: bigint | undefined
+      const open = candle?.open ?? candle?.o ?? '0'
+      const high = candle?.high ?? candle?.h ?? open
+      const low = candle?.low ?? candle?.l ?? open
+      const close = candle?.close ?? candle?.c ?? open
+      const volume = candle?.volume ?? candle?.v ?? '0'
 
-    if (simulationTime) {
-      endTimestamp = BigInt(simulationTime)
-    } else if (endTime) {
-      endTimestamp = BigInt(endTime)
-    }
-
-    if (startTime) {
-      startTimestamp = BigInt(startTime)
-    }
-
-    const localCandles = await generateCandlesFromTrades(
-      token.id,
-      intervalMin,
-      startTimestamp,
-      endTimestamp,
-      limit
-    )
-
-    console.log('[Candles API] Generated', localCandles.length, 'local candles from trades')
-
-    const candleMap = new Map<string, {
-      timestamp: bigint
-      open: Decimal
-      high: Decimal
-      low: Decimal
-      close: Decimal
-      volume: Decimal
-      buyVolume: Decimal | null
-      sellVolume: Decimal | null
-    }>()
-
-    for (const candle of localCandles) {
-      candleMap.set(candle.timestamp.toString(), candle)
-    }
-
-    if (candleMap.size < limit) {
-      const createdAtMs = token.createdAt ? Number(token.createdAt) : 0
-      const createdTs = createdAtMs > 0 ? createdAtMs : undefined
-      const pumpUrl = `https://swap-api.pump.fun/v2/coins/${params.mintAddress}/candles?interval=${interval}&limit=${limit}&currency=USD${createdTs ? `&createdTs=${createdTs}` : ''}`
-      console.log('[Candles API] Fetching from pump.fun:', pumpUrl)
-      const remoteCandles = await fetchPumpJson<any>(pumpUrl)
-
-      const remoteCandleArray = Array.isArray(remoteCandles?.candles)
-        ? remoteCandles.candles
-        : Array.isArray(remoteCandles)
-          ? remoteCandles
-          : []
-
-      console.log('[Candles API] Remote candles fetched:', remoteCandleArray.length)
-
-      if (remoteCandleArray.length > 0) {
-        for (const candle of remoteCandleArray) {
-          const timestamp = candle?.timestamp ?? candle?.time
-          if (timestamp === undefined || timestamp === null) continue
-          const tsNumber = Number(timestamp)
-          if (!Number.isFinite(tsNumber)) continue
-          const needsMillis = tsNumber < 1_000_000_000_000
-          const tsBigInt = BigInt(Math.floor(needsMillis ? tsNumber * 1000 : tsNumber))
-          const key = tsBigInt.toString()
-          if (candleMap.has(key)) continue
-
-          const open = candle?.open ?? candle?.o
-          const high = candle?.high ?? candle?.h ?? open
-          const low = candle?.low ?? candle?.l ?? open
-          const close = candle?.close ?? candle?.c ?? open
-          const volume = candle?.volume ?? candle?.v ?? 0
-
-          try {
-            candleMap.set(key, {
-              timestamp: tsBigInt,
-              open: new Decimal(open || 0),
-              high: new Decimal(high || open || 0),
-              low: new Decimal(low || open || 0),
-              close: new Decimal(close || open || 0),
-              volume: new Decimal(volume || 0),
-              buyVolume: null,
-              sellVolume: null,
-            })
-          } catch (error) {
-            console.warn('Failed to normalize remote candle', error)
-          }
-        }
+      return {
+        timestamp: Math.floor(tsMs).toString(),
+        open: String(open),
+        high: String(high),
+        low: String(low),
+        close: String(close),
+        volume: String(volume),
+        buyVolume: null,
+        sellVolume: null,
       }
-    }
-
-    let mergedCandles = Array.from(candleMap.values()).sort((a, b) => {
-      if (a.timestamp < b.timestamp) return -1
-      if (a.timestamp > b.timestamp) return 1
-      return 0
     })
 
-    console.log('[Candles API] Merged candles before filtering:', mergedCandles.length)
-    console.log('[Candles API] Start timestamp:', startTimestamp, 'End timestamp:', endTimestamp)
+    console.log('[Candles API] Returning', candles.length, 'candles')
 
-    if (startTimestamp !== undefined) {
-      const beforeFilter = mergedCandles.length
-      mergedCandles = mergedCandles.filter((candle) => candle.timestamp >= startTimestamp)
-      console.log('[Candles API] Filtered by start time:', beforeFilter, '->', mergedCandles.length)
-    }
-
-    if (endTimestamp !== undefined) {
-      const beforeFilter = mergedCandles.length
-      mergedCandles = mergedCandles.filter((candle) => candle.timestamp <= endTimestamp)
-      console.log('[Candles API] Filtered by end time:', beforeFilter, '->', mergedCandles.length)
-    }
-
-    mergedCandles = mergedCandles.slice(-limit)
-
-    console.log('[Candles API] Returning', mergedCandles.length, 'total candles')
-
-    return NextResponse.json({
-      candles: mergedCandles.map((c) => ({
-        timestamp: c.timestamp.toString(),
-        open: Number(c.open),
-        high: Number(c.high),
-        low: Number(c.low),
-        close: Number(c.close),
-        volume: Number(c.volume),
-        buyVolume: c.buyVolume === null ? null : Number(c.buyVolume),
-        sellVolume: c.sellVolume === null ? null : Number(c.sellVolume),
-      })),
-    })
+    return NextResponse.json({ candles })
   } catch (error) {
     console.error('Get candles error:', error)
     return NextResponse.json(
