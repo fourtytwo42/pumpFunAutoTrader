@@ -97,30 +97,41 @@ RISK & LIMITS (${riskTools.length} tools):
 ${riskTools.map((t) => `  • ${t.name}: ${t.description}`).join('\n')}
 
 ═══════════════════════════════════════════════════════════════
-HOW TO USE TOOLS
+HOW TO USE TOOLS - CRITICAL INSTRUCTIONS
 ═══════════════════════════════════════════════════════════════
 
-1. Simply MENTION the tool name naturally in your response
-2. System will execute it and call you back with results
-3. DO NOT output tool syntax, JSON, or function calls
-4. Be conversational and explain what you're doing
+IMPORTANT: You are NOT using function calling syntax! 
 
-EXAMPLES:
+DO NOT output:
+❌ <|start|>assistant<|channel|>commentary to=functions.get_trending_tokens
+❌ {"tool": "get_trending_tokens", "args": {}}
+❌ [TOOL:get_trending_tokens]
+❌ Any XML, JSON, or function call syntax
+
+INSTEAD, just mention the tool name in plain English:
+✅ "Let me use get_trending_tokens to find opportunities"
+✅ "I'll check get_sol_price for the current price"
+✅ "I need to analyze this with get_token_details"
+
+The system automatically detects tool names in your response and executes them.
+After execution, you'll be called again with the results to give a final answer.
+
+EXAMPLES OF CORRECT USAGE:
 
 User: "What's the price of SOL?"
 You: "Let me check get_sol_price for you."
-[System executes and returns: {"solPriceUsd": 157.36}]
-You: "The current price of SOL is $157.36 USD."
+[System sees "get_sol_price", executes it, calls you back]
+You: "SOL is currently $157.36 USD."
 
 User: "Find me some good trading opportunities"
-You: "I'll use get_trending_tokens to discover trending tokens, then analyze the best candidates with get_token_metrics."
-[System executes both tools]
-You: "I found 15 trending tokens. The most interesting is DOGE with..."
+You: "I'll use get_trending_tokens to discover trending tokens."
+[System executes get_trending_tokens with default args]
+You: "I found 10 trending tokens. The top ones are..."
 
 User: "Should I buy DOGE?"
-You: "Let me analyze DOGE first. I'll check get_token_details for fundamentals, get_token_candles for price action, get_token_holders for whale concentration, and estimate_trade_impact to see the slippage."
-[System executes all tools]
-You: "Based on my analysis: DOGE shows strong momentum (RSI: 65), low whale concentration (Gini: 0.42), and minimal slippage (2.1% for 0.1 SOL). I recommend..."
+You: "Let me analyze DOGE. I'll use get_token_details, get_token_candles, and get_token_holders."
+[System executes all 3 tools]
+You: "Based on my analysis, DOGE shows..."
 
 ═══════════════════════════════════════════════════════════════
 TRADING BEST PRACTICES
@@ -175,6 +186,28 @@ Risk management:
       // Try to extract tool calls from text response
       const { TOOL_REGISTRY } = await import('@/lib/ai-tools')
       
+      console.log(`[AI Chat ${params.id}] No native tool calls, parsing response text`)
+      
+      // Check if response contains tool syntax that should be ignored
+      if (response.content.includes('<|start|>') || response.content.includes('to=functions.')) {
+        console.warn(`[AI Chat ${params.id}] AI outputting raw tool syntax - retrying with clearer prompt`)
+        
+        // Return error asking AI to rephrase
+        await prisma.chatMessage.create({
+          data: {
+            userId: params.id,
+            role: 'system',
+            content: 'Error: Do not output tool syntax. Simply mention the tool name naturally. For example: "Let me use get_trending_tokens to find good opportunities."',
+            meta: { error: 'invalid_tool_syntax' },
+          },
+        })
+        
+        return NextResponse.json({
+          response: 'Please rephrase without tool syntax',
+          error: 'AI outputted raw syntax instead of natural language',
+        })
+      }
+
       // Tools that can be auto-executed without arguments
       const noArgTools = [
         'get_sol_price',
@@ -183,6 +216,12 @@ Risk management:
         'get_open_orders',
         'get_wallet_balance',
       ]
+      
+      // Tools that need arguments but can use smart defaults
+      const smartDefaultTools: Record<string, any> = {
+        'get_trending_tokens': { limit: 10, includeNsfw: false },
+        'get_user_trades': { limit: 20 },
+      }
 
       // Try to detect and auto-execute tools
       for (const toolName of Object.keys(TOOL_REGISTRY)) {
@@ -197,9 +236,13 @@ Risk management:
               arguments: {},
             })
           }
-          
-          // TODO: Add smarter argument extraction for tools that need parameters
-          // For now, AI must use native function calling or be more explicit
+          // Auto-execute tools with smart defaults
+          else if (smartDefaultTools[toolName]) {
+            parsedToolCalls.push({
+              name: toolName,
+              arguments: smartDefaultTools[toolName],
+            })
+          }
         }
       }
     }
