@@ -402,8 +402,19 @@ export default function AiTraderChatPage() {
                   >
                     {message.role === 'tool' ? (
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <CircularProgress size={16} sx={{ color: '#ffa726' }} />
-                        <Typography variant="body2" color="warning.main">
+                        {message.meta?.status === 'executing' && (
+                          <CircularProgress size={16} sx={{ color: '#ffa726' }} />
+                        )}
+                        <Typography
+                          variant="body2"
+                          color={
+                            message.meta?.status === 'completed'
+                              ? 'success.main'
+                              : message.meta?.status === 'failed'
+                                ? 'error.main'
+                                : 'warning.main'
+                          }
+                        >
                           {message.content}
                         </Typography>
                       </Box>

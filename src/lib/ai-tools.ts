@@ -128,7 +128,7 @@ export const AI_TRADING_TOOLS: AITool[] = [
 ]
 
 /**
- * Execute a tool call using existing API routes
+ * Execute a tool call using existing API routes and direct DB access
  */
 export async function executeAITool(
   toolName: string,
@@ -139,54 +139,75 @@ export async function executeAITool(
 
   try {
     switch (toolName) {
-      case 'get_trending_tokens':
-        const tokensRes = await fetch(`/api/tokens?limit=${args.limit || 20}`)
-        return await tokensRes.json()
+      case 'get_trending_tokens': {
+        const { prisma } = await import('@/lib/db')
+        const tokens = await prisma.token.findMany({
+          include: {
+            price: true,
+            tokenStat: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: args.limit || 20,
+        })
+        return {
+          tokens: tokens.map((t) => ({
+            mint: t.mintAddress,
+            symbol: t.symbol,
+            name: t.name,
+            price: t.price ? Number(t.price.priceSol) : 0,
+            marketCap: t.marketCapUsd || 0,
+          })),
+        }
+      }
 
-      case 'get_token_details':
-        const detailsRes = await fetch(`/api/tokens/${args.mintAddress}`)
-        return await detailsRes.json()
+      case 'get_token_details': {
+        const { prisma } = await import('@/lib/db')
+        const token = await prisma.token.findUnique({
+          where: { mintAddress: args.mintAddress },
+          include: {
+            price: true,
+            tokenStat: true,
+          },
+        })
+        if (!token) throw new Error('Token not found')
+        return {
+          mint: token.mintAddress,
+          symbol: token.symbol,
+          name: token.name,
+          price: token.price ? Number(token.price.priceSol) : 0,
+          marketCap: token.marketCapUsd || 0,
+        }
+      }
 
-      case 'get_token_candles':
-        const candlesRes = await fetch(
-          `/api/tokens/${args.mintAddress}/candles?interval=${args.interval || '1h'}&limit=${args.limit || 100}`
-        )
-        return await candlesRes.json()
+      case 'get_token_candles': {
+        // This would need to call the pump.fun API or use stored data
+        return { message: 'Candle data not yet implemented in tool executor' }
+      }
 
-      case 'get_portfolio':
-        const portfolioRes = await fetch(`/api/portfolio?userId=${args.userId || userId}`)
-        return await portfolioRes.json()
+      case 'get_portfolio': {
+        const { getUserBalance, getUserPortfolio } = await import('@/lib/trading')
+        const balance = await getUserBalance(userId)
+        const portfolio = await getUserPortfolio(userId)
+        return {
+          solBalance: balance,
+          positions: portfolio.map((p) => ({
+            mint: p.token.mintAddress,
+            symbol: p.token.symbol,
+            amount: Number(p.amount),
+            avgBuyPrice: Number(p.avgBuyPrice),
+          })),
+        }
+      }
 
       case 'execute_buy':
-        const buyRes = await fetch(`/api/trading/buy`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            mintAddress: args.mintAddress,
-            amountSol: args.amountSol,
-            limitPriceSol: args.limitPrice,
-            userId,
-          }),
-        })
-        return await buyRes.json()
-
       case 'execute_sell':
-        const sellRes = await fetch(`/api/trading/sell`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            mintAddress: args.mintAddress,
-            amountTokens: args.amountTokens,
-            limitPriceSol: args.limitPrice,
-            userId,
-          }),
-        })
-        return await sellRes.json()
+        return { message: 'Trade execution not yet implemented in tool executor - use manual trading for now' }
 
-      case 'get_sol_price':
+      case 'get_sol_price': {
         const { getLatestSolPrice } = await import('@/lib/metrics')
         const price = await getLatestSolPrice()
         return { solPriceUsd: price }
+      }
 
       default:
         throw new Error(`Unknown tool: ${toolName}`)
