@@ -25,7 +25,10 @@ const argv = process.argv.slice(2)
 const options = {}
 for (const arg of argv) {
   if (!arg.startsWith('--')) continue
-  const [key, rawValue] = arg.slice(2).split('=')
+  const body = arg.slice(2)
+  const eq = body.indexOf('=')
+  const key = eq === -1 ? body : body.slice(0, eq)
+  const rawValue = eq === -1 ? undefined : body.slice(eq + 1)
   const value = rawValue === undefined ? true : rawValue
   if (options[key]) {
     if (!Array.isArray(options[key])) options[key] = [options[key]]
