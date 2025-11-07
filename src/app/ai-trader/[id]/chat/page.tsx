@@ -23,6 +23,7 @@ import {
   ShoppingCart,
   Assessment,
   Code,
+  ClearAll,
 } from '@mui/icons-material'
 
 interface ChatMessage {
@@ -168,6 +169,26 @@ export default function AiTraderChatPage() {
     }
   }
 
+  const handleClearChat = async () => {
+    if (!params?.id) return
+    if (!confirm('Are you sure you want to clear all chat history? This cannot be undone.')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/ai-trader/${params.id}/messages/clear`, {
+        method: 'POST',
+      })
+
+      if (response.ok) {
+        setMessages([])
+        console.log('[AI Chat] Chat history cleared')
+      }
+    } catch (error) {
+      console.error('Failed to clear chat:', error)
+    }
+  }
+
   const handleTriggerAction = async (action: string) => {
     if (!params?.id) return
 
@@ -247,51 +268,64 @@ export default function AiTraderChatPage() {
         </Paper>
       )}
 
-      <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<Refresh />}
-          onClick={() => handleTriggerAction('poll_market')}
-          disabled={sending}
-        >
-          Poll Market Data
-        </Button>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<Psychology />}
-          onClick={() => handleTriggerAction('analyze_opportunities')}
-          disabled={sending}
-        >
-          Analyze Opportunities
-        </Button>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<ShoppingCart />}
-          onClick={() => handleTriggerAction('execute_trades')}
-          disabled={sending}
-        >
-          Execute Trades
-        </Button>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<Assessment />}
-          onClick={() => handleTriggerAction('review_portfolio')}
-          disabled={sending}
-        >
-          Review Portfolio
-        </Button>
-        <Button
-          variant={debugMode ? 'contained' : 'outlined'}
-          size="small"
-          startIcon={<Code />}
-          onClick={() => setDebugMode(!debugMode)}
-        >
-          {debugMode ? 'Hide' : 'Show'} Debug
-        </Button>
+      <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap', justifyContent: 'space-between' }}>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<Refresh />}
+            onClick={() => handleTriggerAction('poll_market')}
+            disabled={sending}
+          >
+            Poll Market
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<Psychology />}
+            onClick={() => handleTriggerAction('analyze_opportunities')}
+            disabled={sending}
+          >
+            Analyze
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<ShoppingCart />}
+            onClick={() => handleTriggerAction('execute_trades')}
+            disabled={sending}
+          >
+            Execute Trades
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<Assessment />}
+            onClick={() => handleTriggerAction('review_portfolio')}
+            disabled={sending}
+          >
+            Review Portfolio
+          </Button>
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant={debugMode ? 'contained' : 'outlined'}
+            size="small"
+            startIcon={<Code />}
+            onClick={() => setDebugMode(!debugMode)}
+          >
+            Debug
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
+            color="error"
+            startIcon={<ClearAll />}
+            onClick={handleClearChat}
+          >
+            Clear Chat
+          </Button>
+        </Box>
       </Box>
 
       <Paper sx={{ height: 600, display: 'flex', flexDirection: 'column' }}>

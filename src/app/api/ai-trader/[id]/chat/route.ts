@@ -74,7 +74,12 @@ You have access to the following trading tools:
 
 ${toolsDescription}
 
-When you need data or want to take action, explain which tool you would use and why. The user can manually execute tools via the action buttons above the chat.`
+To use a tool, simply mention its name naturally in your response. For example:
+- "I'll check get_sol_price to see the current SOL price"
+- "Let me get_portfolio to review your holdings"
+- "I should get_trending_tokens to find opportunities"
+
+The tools will be executed automatically when you mention them. Be conversational and helpful.`
 
     // Build conversation
     const messages = [
@@ -94,9 +99,29 @@ When you need data or want to take action, explain which tool you would use and 
 
     const executedTools: any[] = []
 
+    // Parse response for tool calls (fallback for models without native function calling)
+    let parsedToolCalls = response.toolCalls || []
+    
+    if (parsedToolCalls.length === 0 && response.content) {
+      // Try to extract tool calls from text response
+      AI_TRADING_TOOLS.forEach((tool) => {
+        const toolNamePattern = new RegExp(`\\b${tool.name}\\b`, 'i')
+        if (toolNamePattern.test(response.content)) {
+          console.log(`[AI Chat ${params.id}] Detected tool mention: ${tool.name}`)
+          // For simple tools with no args (like get_sol_price), auto-execute
+          if (tool.name === 'get_sol_price' || tool.name === 'get_portfolio') {
+            parsedToolCalls.push({
+              name: tool.name,
+              arguments: {},
+            })
+          }
+        }
+      })
+    }
+
     // Execute tool calls if present
-    if (response.toolCalls && response.toolCalls.length > 0) {
-      for (const toolCall of response.toolCalls) {
+    if (parsedToolCalls.length > 0) {
+      for (const toolCall of parsedToolCalls) {
         console.log(`[AI Chat ${params.id}] Executing tool: ${toolCall.name}`, toolCall.arguments)
 
         // Save tool call message
