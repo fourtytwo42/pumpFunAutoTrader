@@ -9,6 +9,8 @@
  * frames that the browser issues so we can see real token/trade payloads.
  */
 
+const fs = require('fs')
+const path = require('path')
 const { WebSocket } = require('ws')
 const zlib = require('zlib')
 const { decode: msgpackDecode, encode: msgpackEncode } = require('@msgpack/msgpack')
@@ -34,11 +36,30 @@ for (const arg of argv) {
 }
 
 const wsUrl = options.url || process.env.PADRE_WS_URL || DEFAULT_WS_URL
-const jwt = options.jwt || process.env.PADRE_JWT
-const sessionId = options.session || process.env.PADRE_SESSION
+let jwt = options.jwt || process.env.PADRE_JWT
+let sessionId = options.session || process.env.PADRE_SESSION
 const userId = options.user || process.env.PADRE_USER
 const extraSubs = options.sub
 const cookieHeader = options.cookie || process.env.PADRE_COOKIE
+const durationSeconds = Number(options.duration || process.env.PADRE_DURATION || 60)
+const logPath =
+  options.log ||
+  process.env.PADRE_LOG ||
+  path.resolve(process.cwd(), `padre-ws-log-${new Date().toISOString().replace(/[:.]/g, '-')}.jsonl`)
+const handshakeBase64 = options.handshake || process.env.PADRE_HANDSHAKE
+
+if (handshakeBase64) {
+  try {
+    const buffer = Buffer.from(handshakeBase64, 'base64')
+    const decoded = msgpackDecode(buffer)
+    if (Array.isArray(decoded) && decoded.length >= 3) {
+      if (!jwt) jwt = decoded[1]
+      if (!sessionId) sessionId = decoded[2]
+    }
+  } catch (error) {
+    console.warn('[padre] Failed to decode handshake base64 payload:', error.message)
+  }
+}
 
 if (!jwt || !sessionId) {
   console.error('[padre] Missing credentials. Provide --jwt and --session (or PADRE_JWT / PADRE_SESSION env vars).')
@@ -60,6 +81,8 @@ const subscriptionEnvelope = DEFAULT_SUBSCRIPTIONS.map((path, index) => [4, 100 
 const results = []
 let interestingCount = 0
 let timeout
+let durationTimer
+const logStream = fs.createWriteStream(logPath, { flags: 'a' })
 
 function isPrintable(str) {
   if (!str) return false
@@ -187,6 +210,8 @@ function analyseMessage(rawData) {
 
 function finalizeAndExit(code) {
   if (timeout) clearTimeout(timeout)
+  if (durationTimer) clearTimeout(durationTimer)
+  if (logStream) logStream.end()
   console.log('\n=== Padre /trending websocket analysis ===')
   console.log(
     JSON.stringify(
@@ -195,6 +220,7 @@ function finalizeAndExit(code) {
         messageCount: results.length,
         interestingCount,
         messages: results,
+        logPath,
       },
       null,
       2,
@@ -230,7 +256,12 @@ function main() {
   ws.on('open', () => {
     console.log('[padre] WebSocket connected')
     console.log('[padre] Sending auth handshake…')
-    sendMsgpack(ws, [1, jwt, sessionId])
+    if (handshakeBase64) {
+      const raw = Buffer.from(handshakeBase64, 'base64')
+      ws.send(raw)
+    } else {
+      sendMsgpack(ws, [1, jwt, sessionId])
+    }
 
     if (subscriptionEnvelope.length > 0) {
       console.log(`[padre] Queuing ${subscriptionEnvelope.length} subscription requests`)
@@ -247,11 +278,18 @@ function main() {
       ws.close()
       finalizeAndExit(1)
     }, TIMEOUT_MS)
+
+    durationTimer = setTimeout(() => {
+      console.log(`[padre] Duration ${durationSeconds}s reached, closing connection`)
+      ws.close()
+      finalizeAndExit(0)
+    }, durationSeconds * 1000)
   })
 
   ws.on('message', (data) => {
     const { entry, buffer } = analyseMessage(data)
     results.push(entry)
+    logStream.write(JSON.stringify(entry) + '\n')
 
     if (entry.rawLength > 2 || buffer.length > 2) {
       interestingCount += 1
