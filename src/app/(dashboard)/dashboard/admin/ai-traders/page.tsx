@@ -84,6 +84,8 @@ export default function AiTradersPage() {
   })
   const [availableModels, setAvailableModels] = useState<string[]>([])
   const [loadingModels, setLoadingModels] = useState(false)
+  const [spawnedApiKey, setSpawnedApiKey] = useState<string | null>(null)
+  const [spawnedEndpoint, setSpawnedEndpoint] = useState<string | null>(null)
 
   useEffect(() => {
     fetchTraders()
@@ -134,6 +136,10 @@ export default function AiTradersPage() {
       })
 
       if (response.ok) {
+        const data = await response.json()
+        // Store API key to show user
+        setSpawnedApiKey(data.apiKey)
+        setSpawnedEndpoint(data.apiEndpoint)
         setOpenDialog(false)
         fetchTraders()
       }
@@ -613,6 +619,104 @@ export default function AiTradersPage() {
             }
           >
             Spawn
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* API Key Display Dialog */}
+      <Dialog 
+        open={!!spawnedApiKey} 
+        onClose={() => setSpawnedApiKey(null)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>AI Trader Created Successfully! 🎉</DialogTitle>
+        <DialogContent>
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="body1" paragraph>
+              Your AI trader has been spawned. Below is the API key for external access.
+            </Typography>
+            <Typography variant="body2" color="warning.main" paragraph>
+              ⚠️ IMPORTANT: Save this API key now! It will not be shown again.
+            </Typography>
+          </Box>
+
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" gutterBottom>
+              API Endpoint:
+            </Typography>
+            <TextField
+              fullWidth
+              value={spawnedEndpoint || ''}
+              InputProps={{
+                readOnly: true,
+                sx: { fontFamily: 'monospace', fontSize: '0.875rem' },
+              }}
+              onClick={(e) => (e.target as HTMLInputElement).select()}
+            />
+          </Box>
+
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" gutterBottom>
+              API Key:
+            </Typography>
+            <TextField
+              fullWidth
+              value={spawnedApiKey || ''}
+              InputProps={{
+                readOnly: true,
+                sx: { fontFamily: 'monospace', fontSize: '0.875rem' },
+              }}
+              onClick={(e) => (e.target as HTMLInputElement).select()}
+            />
+          </Box>
+
+          <Box sx={{ p: 2, bgcolor: 'grey.900', borderRadius: 1 }}>
+            <Typography variant="subtitle2" gutterBottom>
+              Example Usage (curl):
+            </Typography>
+            <pre style={{ 
+              margin: 0, 
+              fontSize: '0.75rem', 
+              fontFamily: 'monospace',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+            }}>
+{`curl -X POST ${spawnedEndpoint || ''} \\
+  -H "X-API-Key: ${spawnedApiKey || ''}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "tool": "get_trending_tokens",
+    "arguments": {
+      "sortBy": "volume",
+      "timeframe": "1h",
+      "limit": 5
+    }
+  }'`}
+            </pre>
+          </Box>
+
+          <Box sx={{ mt: 2, p: 2, bgcolor: 'info.dark', borderRadius: 1 }}>
+            <Typography variant="body2">
+              📚 <strong>Documentation:</strong> Use GET {spawnedEndpoint} to list all available tools.
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => {
+              navigator.clipboard.writeText(spawnedApiKey || '')
+              alert('API Key copied to clipboard!')
+            }}
+            variant="outlined"
+          >
+            Copy API Key
+          </Button>
+          <Button 
+            onClick={() => setSpawnedApiKey(null)} 
+            variant="contained"
+          >
+            Done
           </Button>
         </DialogActions>
       </Dialog>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminOrPowerUser } from '@/lib/middleware'
 import { prisma } from '@/lib/db'
 import bcrypt from 'bcryptjs'
+import crypto from 'crypto'
 
 export async function POST(request: NextRequest) {
   try {
@@ -61,6 +62,9 @@ export async function POST(request: NextRequest) {
     const password = `ai_${Math.random().toString(36).slice(2, 15)}`
     const passwordHash = await bcrypt.hash(password, 10)
 
+    // Generate secure API key for external access
+    const apiKey = `at_${crypto.randomBytes(32).toString('hex')}`
+
     // Create AI agent user
     const aiUser = await prisma.user.create({
       data: {
@@ -82,6 +86,7 @@ export async function POST(request: NextRequest) {
         configJson: {
           initialBalance: initialBalance || 10,
           themeColor: themeColor || '#00ff88',
+          apiKey: apiKey, // Store API key for external tool access
           llm: {
             provider: llmProvider,
             model: llmModel,
@@ -138,7 +143,8 @@ export async function POST(request: NextRequest) {
       success: true,
       userId: aiUser.id,
       username: aiUser.username,
-      apiKey: `AI_${aiUser.id}_${password.slice(0, 8)}`, // Simplified API key generation
+      apiKey: apiKey, // Return API key once - save it!
+      apiEndpoint: `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/ai-trader/${aiUser.id}/tools`,
     })
   } catch (error) {
     console.error('Spawn AI trader error:', error)
