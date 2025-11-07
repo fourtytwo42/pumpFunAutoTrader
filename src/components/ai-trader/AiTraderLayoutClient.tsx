@@ -15,6 +15,7 @@ import {
   ListItemText,
   IconButton,
   Chip,
+  CircularProgress,
 } from '@mui/material'
 import {
   Dashboard,
@@ -25,7 +26,7 @@ import {
   ArrowBack,
   SmartToy,
 } from '@mui/icons-material'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { AiTraderThemeProvider } from './AiTraderThemeProvider'
 
 const drawerWidth = 240
@@ -48,6 +49,22 @@ export function AiTraderLayoutClient({
   const router = useRouter()
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [walletBalance, setWalletBalance] = useState<number | null>(null)
+  const [loadingBalance, setLoadingBalance] = useState(true)
+
+  useEffect(() => {
+    // Fetch AI trader's wallet balance
+    fetch(`/api/portfolio?userId=${traderId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setWalletBalance(data.balanceSol || 0)
+        setLoadingBalance(false)
+      })
+      .catch((error) => {
+        console.error('Failed to load wallet balance:', error)
+        setLoadingBalance(false)
+      })
+  }, [traderId])
 
   const menuItems = [
     { text: 'Dashboard', icon: <Dashboard />, path: `/ai-trader/${traderId}/dashboard` },
@@ -123,6 +140,29 @@ export function AiTraderLayoutClient({
                 @{traderUsername}
               </Typography>
             </Typography>
+            {loadingBalance ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 2 }}>
+                <CircularProgress size={16} />
+                <Typography variant="body2">Loading...</Typography>
+              </Box>
+            ) : (
+              <Button
+                color="inherit"
+                variant="outlined"
+                size="small"
+                sx={{
+                  borderColor: themeColor,
+                  color: themeColor,
+                  mr: 2,
+                  '&:hover': {
+                    borderColor: themeColor,
+                    backgroundColor: `${themeColor}20`,
+                  },
+                }}
+              >
+                {walletBalance !== null ? `${walletBalance.toFixed(2)} SOL` : '0 SOL'}
+              </Button>
+            )}
             <Chip
               label="AI Trader"
               size="small"
