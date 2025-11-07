@@ -1,9 +1,29 @@
-import { PrismaClient } from '@prisma/client'
+import { Prisma, PrismaClient } from '@prisma/client'
 import { Decimal } from '@prisma/client/runtime/library'
 import WebSocket from 'ws'
 import { decodePumpUnifiedTradePayload, normaliseMetadataUri, PumpUnifiedTrade } from '@/lib/pump/unified-trade'
 
-const prisma = new PrismaClient()
+function enforceConnectionLimit(url?: string): string | undefined {
+  if (!url) return url
+
+  try {
+    const parsed = new URL(url)
+    parsed.searchParams.set('connection_limit', parsed.searchParams.get('connection_limit') ?? '1')
+    parsed.searchParams.set('pool_timeout', parsed.searchParams.get('pool_timeout') ?? '0')
+    return parsed.toString()
+  } catch {
+    const separator = url.includes('?') ? '&' : '?'
+    return `${url}${separator}connection_limit=1&pool_timeout=0`
+  }
+}
+
+const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: enforceConnectionLimit(process.env.DATABASE_URL),
+    },
+  },
+})
 
 // Pump.fun tokens use 6 decimal places (1 token = 1_000_000 base units)
 const TOKEN_DECIMALS = new Decimal(1_000_000)
@@ -39,11 +59,27 @@ interface TokenMetadata {
   [key: string]: unknown
 }
 
-// Batch inserts for efficiency
-const TRADE_BATCH_SIZE = 100
-const tradeBuffer: any[] = []
 const metadataCache = new Map<string, Promise<TokenMetadata | null>>()
-const FLUSH_INTERVAL = 5000 // 5 seconds
+const tradeQueue: PumpUnifiedTrade[] = []
+let isProcessingQueue = false
+
+interface PreparedTradeContext {
+  trade: PumpUnifiedTrade
+  isBuy: boolean
+  amountSol: Decimal
+  amountUsd: Decimal
+  baseAmountTokens: Decimal
+  baseAmountRaw: Decimal
+  timestampMs: number
+  priceSol: Decimal
+  priceUsd: Decimal
+  metadata: TokenMetadata | null
+  fallbackSymbol: string
+  fallbackName: string
+  creatorAddress: string
+  createdTs: number
+  logSymbol: string
+}
 
 async function fetchTokenMetadata(uri: string): Promise<TokenMetadata | null> {
   if (metadataCache.has(uri)) {
@@ -69,52 +105,215 @@ async function fetchTokenMetadata(uri: string): Promise<TokenMetadata | null> {
   return task
 }
 
-async function flushTradeBuffer() {
-  if (tradeBuffer.length === 0) return
+let solPriceCache = {
+  value: 160,
+  updatedAt: 0,
+}
 
-  const tradesToInsert = [...tradeBuffer]
-  tradeBuffer.length = 0
+async function getSolPriceUsd(): Promise<number> {
+  const now = Date.now()
+  if (now - solPriceCache.updatedAt < 60_000) {
+    return solPriceCache.value
+  }
 
   try {
-    await prisma.$transaction(
-      async (tx) => {
-        for (const trade of tradesToInsert) {
-          await tx.trade.upsert({
-            where: { txSignature: trade.txSignature },
-            update: {},
-            create: trade,
-          })
-        }
-      },
-      { timeout: 30000 }
+    const response = await fetch(
+      'https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd',
+      { headers: { accept: 'application/json' } }
     )
 
-    console.log(`✅ Flushed ${tradesToInsert.length} trades to database`)
-  } catch (error: any) {
-    console.error('❌ Error flushing trades:', error.message)
-    tradeBuffer.push(...tradesToInsert)
-  }
-}
-
-setInterval(() => {
-  void flushTradeBuffer()
-}, FLUSH_INTERVAL)
-
-async function getLatestSolPrice(): Promise<number> {
-  try {
-    const latestSolPrice = await prisma.solPrice.findFirst({
-      orderBy: { timestamp: 'desc' },
-    })
-    if (latestSolPrice) {
-      return Number(latestSolPrice.priceUsd)
+    if (response.ok) {
+      const data = (await response.json()) as { solana?: { usd?: number } }
+      const price = data.solana?.usd
+      if (typeof price === 'number' && Number.isFinite(price)) {
+        solPriceCache = { value: price, updatedAt: now }
+        return price
+      }
     }
   } catch (error) {
-    console.warn('[pump-feed] Failed to retrieve cached SOL price, falling back to default')
+    console.warn('[pump-feed] Failed to fetch SOL price from CoinGecko:', (error as Error).message)
   }
-  return 160
+
+  return solPriceCache.value
 }
 
-async function upsertTradeTape(trade: PumpUnifiedTrade, baseAmountTokens: Decimal, amountSol: Decimal, priceUsd: Decimal, priceSol: Decimal, timestampMs: number) {
+async function prepareTradeContext(
+  trade: PumpUnifiedTrade,
+  solPriceUsd: number
+): Promise<PreparedTradeContext | null> {
+  if (!trade.mintAddress || !trade.tx || !trade.userAddress) {
+    console.warn('[pump-feed] Missing required trade fields:', trade)
+    return null
+  }
+
+  const isBuy = trade.type?.toLowerCase() === 'buy'
+
+  const amountSol = new Decimal(
+    trade.amountSol?.toString() ?? trade.quoteAmount?.toString() ?? '0'
+  ).toDecimalPlaces(9)
+  const baseAmountTokens = new Decimal(trade.baseAmount?.toString() ?? '0').toDecimalPlaces(9)
+  const baseAmountRaw = baseAmountTokens.mul(TOKEN_DECIMALS).toDecimalPlaces(0)
+
+  if (amountSol.lte(0) || baseAmountTokens.lte(0)) {
+    console.warn(`[pump-feed] Skipping trade ${trade.tx} with zero amounts`)
+    return null
+  }
+
+  const timestampMs = Number.isFinite(Date.parse(trade.timestamp))
+    ? Date.parse(trade.timestamp)
+    : Date.now()
+
+  let priceSol = trade.priceSol
+    ? new Decimal(trade.priceSol.toString())
+    : trade.priceQuotePerBase
+      ? new Decimal(trade.priceQuotePerBase.toString())
+      : amountSol.div(baseAmountTokens)
+  priceSol = priceSol.toDecimalPlaces(18)
+
+  let priceUsd = trade.priceUsd
+    ? new Decimal(trade.priceUsd.toString())
+    : priceSol.mul(solPriceUsd)
+  priceUsd = priceUsd.toDecimalPlaces(8)
+
+  let amountUsd = trade.amountUsd
+    ? new Decimal(trade.amountUsd.toString())
+    : amountSol.mul(priceUsd)
+  amountUsd = amountUsd.toDecimalPlaces(2)
+
+  const metadataUri = normaliseMetadataUri(trade.coinMeta?.uri)
+  const metadata = metadataUri ? await fetchTokenMetadata(metadataUri) : null
+
+  const creatorAddress = trade.creatorAddress ?? trade.coinMeta?.creator ?? 'unknown'
+  const createdTs = trade.coinMeta?.createdTs ?? timestampMs
+
+  const symbolFromName = (name?: string | null) =>
+    name ? name.replace(/[^A-Za-z0-9]/g, '').slice(0, 10).toUpperCase() : undefined
+
+  const fallbackSymbol =
+    trade.coinMeta?.symbol ??
+    metadata?.symbol ??
+    symbolFromName(trade.coinMeta?.name) ??
+    symbolFromName(metadata?.name) ??
+    (trade.mintAddress ? trade.mintAddress.slice(0, 6).toUpperCase() : 'TOKEN')
+
+  const fallbackName =
+    trade.coinMeta?.name ??
+    metadata?.name ??
+    fallbackSymbol ??
+    trade.mintAddress ??
+    'Unknown Token'
+
+  const logSymbol =
+    fallbackSymbol ??
+    metadata?.symbol ??
+    metadata?.name ??
+    trade.coinMeta?.name ??
+    (trade.mintAddress ? `${trade.mintAddress.slice(0, 4)}…` : 'UNKNOWN')
+
+  return {
+    trade,
+    isBuy,
+    amountSol,
+    amountUsd,
+    baseAmountTokens,
+    baseAmountRaw,
+    timestampMs,
+    priceSol,
+    priceUsd,
+    metadata,
+    fallbackSymbol,
+    fallbackName,
+    creatorAddress,
+    createdTs,
+    logSymbol,
+  }
+}
+
+async function persistPreparedTrade(ctx: PreparedTradeContext): Promise<void> {
+  const { trade } = ctx
+
+  let token
+  try {
+    token = await prisma.token.upsert({
+      where: { mintAddress: trade.mintAddress },
+      update: {
+        imageUri: ctx.metadata?.image ?? undefined,
+        twitter: ctx.metadata?.twitter ?? undefined,
+        telegram: ctx.metadata?.telegram ?? undefined,
+        website: ctx.metadata?.website ?? undefined,
+        symbol: ctx.fallbackSymbol,
+        name: ctx.fallbackName,
+        price: {
+          upsert: {
+            create: {
+              priceSol: ctx.priceSol,
+              priceUsd: ctx.priceUsd,
+              lastTradeTimestamp: BigInt(ctx.timestampMs),
+            },
+            update: {
+              priceSol: ctx.priceSol,
+              priceUsd: ctx.priceUsd,
+              lastTradeTimestamp: BigInt(ctx.timestampMs),
+            },
+          },
+        },
+      },
+      create: {
+        mintAddress: trade.mintAddress,
+        symbol: ctx.fallbackSymbol,
+        name: ctx.fallbackName,
+        imageUri: ctx.metadata?.image ?? null,
+        twitter: ctx.metadata?.twitter ?? null,
+        telegram: ctx.metadata?.telegram ?? null,
+        website: ctx.metadata?.website ?? null,
+        creatorAddress: ctx.creatorAddress,
+        createdAt: BigInt(ctx.createdTs),
+        kingOfTheHillTimestamp: null,
+        completed: false,
+        totalSupply: TOTAL_SUPPLY_RAW,
+        price: {
+          create: {
+            priceSol: ctx.priceSol,
+            priceUsd: ctx.priceUsd,
+            lastTradeTimestamp: BigInt(ctx.timestampMs),
+          },
+        },
+      },
+      select: { id: true },
+    })
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      token = await prisma.token.update({
+        where: { mintAddress: trade.mintAddress },
+        data: {
+          imageUri: ctx.metadata?.image ?? undefined,
+          twitter: ctx.metadata?.twitter ?? undefined,
+          telegram: ctx.metadata?.telegram ?? undefined,
+          website: ctx.metadata?.website ?? undefined,
+          symbol: ctx.fallbackSymbol,
+          name: ctx.fallbackName,
+          price: {
+            upsert: {
+              create: {
+                priceSol: ctx.priceSol,
+                priceUsd: ctx.priceUsd,
+                lastTradeTimestamp: BigInt(ctx.timestampMs),
+              },
+              update: {
+                priceSol: ctx.priceSol,
+                priceUsd: ctx.priceUsd,
+                lastTradeTimestamp: BigInt(ctx.timestampMs),
+              },
+            },
+          },
+        },
+        select: { id: true },
+      })
+    } else {
+      throw error
+    }
+  }
+
   try {
     await prisma.tradeTape.upsert({
       where: { txSig: trade.tx },
@@ -122,12 +321,12 @@ async function upsertTradeTape(trade: PumpUnifiedTrade, baseAmountTokens: Decima
       create: {
         tokenMint: trade.mintAddress,
         txSig: trade.tx,
-        ts: new Date(timestampMs),
-        isBuy: trade.type?.toLowerCase() === 'buy',
-        baseAmount: baseAmountTokens,
-        quoteSol: amountSol,
-        priceUsd,
-        priceSol,
+        ts: new Date(ctx.timestampMs),
+        isBuy: ctx.isBuy,
+        baseAmount: ctx.baseAmountTokens,
+        quoteSol: ctx.amountSol,
+        priceUsd: ctx.priceUsd,
+        priceSol: ctx.priceSol,
         userAddress: trade.userAddress ?? null,
         slot: (() => {
           try {
@@ -140,131 +339,48 @@ async function upsertTradeTape(trade: PumpUnifiedTrade, baseAmountTokens: Decima
       },
     })
   } catch (error) {
-    console.warn(`[pump-feed] Failed to upsert trade tape for ${trade.tx}:`, (error as Error).message)
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025')) {
+      console.warn(`[pump-feed] Failed to store trade tape for ${trade.tx}:`, (error as Error).message)
+    }
   }
-}
 
-async function processTrade(trade: PumpUnifiedTrade) {
-  try {
-    if (!trade.mintAddress || !trade.tx || !trade.userAddress) {
-      console.warn('[pump-feed] Missing required trade fields:', trade)
-      return
-    }
-
-    const isBuy = trade.type?.toLowerCase() === 'buy'
-
-    const amountSol = new Decimal(
-      trade.amountSol?.toString() ?? trade.quoteAmount?.toString() ?? '0'
-    ).toDecimalPlaces(9)
-    const baseAmountTokens = new Decimal(trade.baseAmount?.toString() ?? '0').toDecimalPlaces(9)
-    const baseAmountRaw = baseAmountTokens.mul(TOKEN_DECIMALS).toDecimalPlaces(0)
-
-    if (amountSol.lte(0) || baseAmountTokens.lte(0)) {
-      console.warn(`[pump-feed] Skipping trade ${trade.tx} with zero amounts`)
-      return
-    }
-
-    const timestampMs = Number.isFinite(Date.parse(trade.timestamp))
-      ? Date.parse(trade.timestamp)
-      : Date.now()
-
-    const solPriceUsd = await getLatestSolPrice()
-
-    let priceSol = trade.priceSol
-      ? new Decimal(trade.priceSol.toString())
-      : trade.priceQuotePerBase
-        ? new Decimal(trade.priceQuotePerBase.toString())
-        : amountSol.div(baseAmountTokens)
-    priceSol = priceSol.toDecimalPlaces(18)
-
-    let priceUsd = trade.priceUsd
-      ? new Decimal(trade.priceUsd.toString())
-      : priceSol.mul(solPriceUsd)
-    priceUsd = priceUsd.toDecimalPlaces(8)
-
-    let amountUsd = trade.amountUsd
-      ? new Decimal(trade.amountUsd.toString())
-      : amountSol.mul(priceUsd)
-    amountUsd = amountUsd.toDecimalPlaces(2)
-
-    const metadataUri = normaliseMetadataUri(trade.coinMeta?.uri)
-    const metadata = metadataUri ? await fetchTokenMetadata(metadataUri) : null
-
-    const creatorAddress = trade.creatorAddress ?? trade.coinMeta?.creator ?? 'unknown'
-    const createdTs = trade.coinMeta?.createdTs ?? timestampMs
-
-    const updateData: any = {
-      imageUri: metadata?.image ?? undefined,
-      twitter: metadata?.twitter ?? undefined,
-      telegram: metadata?.telegram ?? undefined,
-      website: metadata?.website ?? undefined,
-      price: {
-        upsert: {
-          create: {
-            priceSol,
-            priceUsd,
-            lastTradeTimestamp: BigInt(timestampMs),
-          },
-          update: {
-            priceSol,
-            priceUsd,
-            lastTradeTimestamp: BigInt(timestampMs),
-          },
-        },
-      },
-    }
-
-    const token = await prisma.token.upsert({
-      where: { mintAddress: trade.mintAddress },
-      update: updateData,
-      create: {
-        mintAddress: trade.mintAddress,
-        symbol: trade.coinMeta?.symbol ?? metadata?.symbol ?? 'UNKNOWN',
-        name: trade.coinMeta?.name ?? metadata?.name ?? 'Unknown Token',
-        imageUri: metadata?.image ?? null,
-        twitter: metadata?.twitter ?? null,
-        telegram: metadata?.telegram ?? null,
-        website: metadata?.website ?? null,
-        creatorAddress,
-        createdAt: BigInt(createdTs),
-        kingOfTheHillTimestamp: null,
-        completed: false,
-        totalSupply: TOTAL_SUPPLY_RAW,
-        price: {
-          create: {
-            priceSol,
-            priceUsd,
-            lastTradeTimestamp: BigInt(timestampMs),
-          },
-        },
-      },
-      select: { id: true },
-    })
-
-    await upsertTradeTape(trade, baseAmountTokens, amountSol, priceUsd, priceSol, timestampMs)
-
-    tradeBuffer.push({
+  await prisma.trade.upsert({
+    where: { txSignature: trade.tx },
+    update: {},
+    create: {
       tokenId: token.id,
       txSignature: trade.tx,
       userAddress: trade.userAddress,
-      type: isBuy ? 1 : 2,
-      amountSol,
-      amountUsd,
-      baseAmount: baseAmountRaw,
-      priceSol,
-      timestamp: BigInt(timestampMs),
-    })
+      type: ctx.isBuy ? 1 : 2,
+      amountSol: ctx.amountSol,
+      amountUsd: ctx.amountUsd,
+      baseAmount: ctx.baseAmountRaw,
+      priceSol: ctx.priceSol,
+      timestamp: BigInt(ctx.timestampMs),
+    },
+  })
+}
 
-    if (tradeBuffer.length >= TRADE_BATCH_SIZE) {
-      await flushTradeBuffer()
+async function processTradeBatch(batch: PumpUnifiedTrade[]): Promise<void> {
+  if (batch.length === 0) return
+
+  const solPriceUsd = await getSolPriceUsd()
+  const prepared = (
+    await Promise.all(batch.map((trade) => prepareTradeContext(trade, solPriceUsd)))
+  ).filter(Boolean) as PreparedTradeContext[]
+
+  if (prepared.length === 0) return
+
+  for (const ctx of prepared) {
+    try {
+      await persistPreparedTrade(ctx)
+      console.log(
+        `📊 [${ctx.logSymbol}] ${ctx.isBuy ? 'BUY' : 'SELL'} | ` +
+          `${ctx.amountSol.toString()} SOL @ ${ctx.priceSol.toString()} SOL (${ctx.priceUsd.toString()} USD)`
+      )
+    } catch (error) {
+      console.error(`[pump-feed] Failed to persist trade ${ctx.trade.tx}:`, (error as Error).message)
     }
-
-    console.log(
-      `📊 [${trade.coinMeta?.symbol ?? '???'}] ${isBuy ? 'BUY' : 'SELL'} | ` +
-        `${amountSol.toString()} SOL @ ${priceSol.toString()} SOL (${priceUsd.toString()} USD)`
-    )
-  } catch (error: any) {
-    console.error('❌ Error processing trade:', error.message, error.stack)
   }
 }
 
@@ -330,8 +446,29 @@ function handleMessageChunk(chunk: string) {
 
     const trade = decodePumpUnifiedTradePayload(payload)
     if (trade) {
-      void processTrade(trade)
+      tradeQueue.push(trade)
+      void scheduleQueueProcessing()
     }
+  }
+}
+
+async function scheduleQueueProcessing() {
+  if (isProcessingQueue) return
+  isProcessingQueue = true
+
+  try {
+    while (tradeQueue.length > 0) {
+      const batch = tradeQueue.splice(0, 50)
+      try {
+        await processTradeBatch(batch)
+      } catch (error) {
+        console.error('❌ Error processing batch:', (error as Error).message)
+        tradeQueue.unshift(...batch)
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+      }
+    }
+  } finally {
+    isProcessingQueue = false
   }
 }
 
@@ -369,7 +506,6 @@ connectToFeed()
 
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down...')
-  await flushTradeBuffer()
   ws?.close()
   await prisma.$disconnect()
   process.exit(0)
@@ -377,7 +513,6 @@ process.on('SIGINT', async () => {
 
 process.on('SIGTERM', async () => {
   console.log('\n🛑 Shutting down...')
-  await flushTradeBuffer()
   ws?.close()
   await prisma.$disconnect()
   process.exit(0)
