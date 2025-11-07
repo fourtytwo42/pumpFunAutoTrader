@@ -249,26 +249,6 @@ Risk management:
       const { TOOL_REGISTRY } = await import('@/lib/ai-tools')
       
       console.log(`[AI Chat ${params.id}] No native tool calls, parsing response text`)
-      
-      // Check if response contains tool syntax that should be ignored
-      if (response.content.includes('<|start|>') || response.content.includes('to=functions.')) {
-        console.warn(`[AI Chat ${params.id}] AI outputting raw tool syntax - retrying with clearer prompt`)
-        
-        // Return error asking AI to rephrase
-        await prisma.chatMessage.create({
-          data: {
-            userId: params.id,
-            role: 'system',
-            content: 'Error: Do not output tool syntax. Simply mention the tool name naturally. For example: "Let me use get_trending_tokens to find good opportunities."',
-            meta: { error: 'invalid_tool_syntax' },
-          },
-        })
-        
-        return NextResponse.json({
-          response: 'Please rephrase without tool syntax',
-          error: 'AI outputted raw syntax instead of natural language',
-        })
-      }
 
       // Tools that can be auto-executed without arguments
       const noArgTools = [
@@ -285,12 +265,56 @@ Risk management:
         'get_user_trades': { limit: 20 },
       }
 
-      // Try to detect and auto-execute tools
+      // Check if AI is outputting raw tool syntax (bad)
+      const hasBadSyntax = (
+        response.content.includes('<|start|>') ||
+        response.content.includes('to=functions.') ||
+        response.content.includes('<|channel|>') ||
+        response.content.includes('<|constrain|>') ||
+        /\{"tool":\s*"/.test(response.content) ||
+        /\[TOOL:/.test(response.content)
+      )
+
+      if (hasBadSyntax) {
+        console.warn(`[AI Chat ${params.id}] AI outputting raw tool syntax`)
+        
+        // Save error message
+        await prisma.chatMessage.create({
+          data: {
+            userId: params.id,
+            role: 'system',
+            content: 'Error: Do not output tool syntax. Simply mention the tool name naturally. For example: "Let me check get_trending_tokens for opportunities" or "I\'ll use get_sol_price to get the current price".',
+            meta: { error: 'invalid_tool_syntax', rawResponse: response.content },
+          },
+        })
+        
+        return NextResponse.json({
+          response: 'Please mention tools naturally without syntax',
+          error: 'AI outputted raw syntax',
+        })
+      }
+
+      // Try to detect and auto-execute tools from natural language
       for (const toolName of Object.keys(TOOL_REGISTRY)) {
-        const toolNamePattern = new RegExp(`\\b${toolName}\\b`, 'i')
-        if (toolNamePattern.test(response.content)) {
-          console.log(`[AI Chat ${params.id}] Detected tool mention: ${toolName}`)
-          
+        // Look for natural language patterns like:
+        // "let me check get_trending_tokens"
+        // "I'll use get_sol_price"
+        // "checking get_portfolio"
+        const patterns = [
+          new RegExp(`\\b(check|use|get|fetch|look at|see|view)\\s+${toolName}\\b`, 'i'),
+          new RegExp(`\\b${toolName}\\b`, 'i'), // fallback to just tool name
+        ]
+        
+        let found = false
+        for (const pattern of patterns) {
+          if (pattern.test(response.content)) {
+            console.log(`[AI Chat ${params.id}] Detected tool mention: ${toolName}`)
+            found = true
+            break
+          }
+        }
+        
+        if (found) {
           // Auto-execute tools that don't require arguments
           if (noArgTools.includes(toolName)) {
             parsedToolCalls.push({
