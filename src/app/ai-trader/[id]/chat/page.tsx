@@ -28,6 +28,8 @@ import {
   Code,
   ClearAll,
   ExpandMore,
+  Fullscreen,
+  FullscreenExit,
 } from '@mui/icons-material'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -74,6 +76,7 @@ export default function AiTraderChatPage() {
   const [sending, setSending] = useState(false)
   const [debugMode, setDebugMode] = useState(true)
   const [availableTools, setAvailableTools] = useState<string[]>([])
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const [currentUserName, setCurrentUserName] = useState<string>('You')
@@ -252,12 +255,27 @@ export default function AiTraderChatPage() {
   }
 
   return (
-    <Container maxWidth="lg">
-      <Typography variant="h4" component="h1" gutterBottom>
-        Chat & Control Center
-      </Typography>
+    <Box
+      sx={{
+        position: isFullscreen ? 'fixed' : 'relative',
+        top: isFullscreen ? 0 : 'auto',
+        left: isFullscreen ? 0 : 'auto',
+        right: isFullscreen ? 0 : 'auto',
+        bottom: isFullscreen ? 0 : 'auto',
+        width: isFullscreen ? '100vw' : 'auto',
+        height: isFullscreen ? '100vh' : 'auto',
+        zIndex: isFullscreen ? 9999 : 'auto',
+        backgroundColor: isFullscreen ? '#121212' : 'transparent',
+        overflow: isFullscreen ? 'auto' : 'visible',
+        p: isFullscreen ? 3 : 0,
+      }}
+    >
+      <Container maxWidth={isFullscreen ? false : 'lg'} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <Typography variant="h4" component="h1" gutterBottom>
+          Chat & Control Center
+        </Typography>
 
-      <Alert severity="info" sx={{ mb: 2 }}>
+        <Alert severity="info" sx={{ mb: 2 }}>
         <Typography variant="body2">
           <strong>Status:</strong> {traderInfo.isRunning ? 'Running' : 'Stopped'} |{' '}
           <strong>Model:</strong> {traderInfo.llmProvider}/{traderInfo.llmModel}
@@ -321,28 +339,43 @@ export default function AiTraderChatPage() {
             Review Portfolio
           </Button>
         </Box>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button
-            variant={debugMode ? 'contained' : 'outlined'}
-            size="small"
-            startIcon={<Code />}
-            onClick={() => setDebugMode(!debugMode)}
-          >
-            Debug
-          </Button>
-          <Button
-            variant="outlined"
-            size="small"
-            color="error"
-            startIcon={<ClearAll />}
-            onClick={handleClearChat}
-          >
-            Clear Chat
-          </Button>
-        </Box>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button
+                variant={debugMode ? 'contained' : 'outlined'}
+                size="small"
+                startIcon={<Code />}
+                onClick={() => setDebugMode(!debugMode)}
+              >
+                Debug
+              </Button>
+              <Button
+                variant={isFullscreen ? 'contained' : 'outlined'}
+                size="small"
+                startIcon={isFullscreen ? <FullscreenExit /> : <Fullscreen />}
+                onClick={() => setIsFullscreen(!isFullscreen)}
+              >
+                {isFullscreen ? 'Exit' : 'Full'}
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                color="error"
+                startIcon={<ClearAll />}
+                onClick={handleClearChat}
+              >
+                Clear Chat
+              </Button>
+            </Box>
       </Box>
 
-      <Paper sx={{ height: 600, display: 'flex', flexDirection: 'column' }}>
+      <Paper 
+        sx={{ 
+          height: isFullscreen ? 'calc(100vh - 300px)' : 600, 
+          display: 'flex', 
+          flexDirection: 'column',
+          flexGrow: isFullscreen ? 1 : 0,
+        }}
+      >
         <Box sx={{ p: 2, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
           <Typography variant="h6">AI Chat</Typography>
           <Typography variant="caption" color="text.secondary">
@@ -599,7 +632,8 @@ export default function AiTraderChatPage() {
           </Box>
         </Box>
       </Paper>
-    </Container>
+      </Container>
+    </Box>
   )
 }
 
