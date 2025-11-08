@@ -60,8 +60,8 @@ const TRADE_AMOUNT_MAX = 100;
 const TOKEN_AGE_MIN_HOURS = 0;
 const TOKEN_AGE_MAX_HOURS = 168; // 7 days
 
-const PUMP_COIN_ENDPOINT = "https://frontend-api-v3.pump.fun/coins";
-const PUMP_SEARCH_ENDPOINT = "https://frontend-api-v3.pump.fun/coins/search-v2";
+const PUMP_SEARCH_ENDPOINT = "/api/pump/search";
+const TOKEN_METADATA_ENDPOINT = "/api/tokens";
 const PINATA_IPFS_BASE = "https://pump.mypinata.cloud/ipfs/";
 
 type FilterState = {
@@ -110,66 +110,48 @@ type PumpSearchCoin = {
   mint: string;
   name?: string;
   symbol?: string;
-  image_uri?: string;
-  metadata_uri?: string;
+  imageUri?: string;
+  metadataUri?: string;
   twitter?: string;
   telegram?: string;
   website?: string;
-  created_timestamp?: number;
-  usd_market_cap?: number;
+  createdTimestamp?: number;
+  usdMarketCap?: number;
 };
 
 type RemoteMetadata = {
-  name?: string;
-  symbol?: string;
-  image?: string;
-  twitter?: string;
-  telegram?: string;
-  website?: string;
+  name?: string | null;
+  symbol?: string | null;
+  imageUri?: string | null;
+  twitter?: string | null;
+  telegram?: string | null;
+  website?: string | null;
 };
 
 const fetchRemoteMetadata = async (mintAddress: string): Promise<RemoteMetadata | null> => {
-  const coinResponse = await fetch(`${PUMP_COIN_ENDPOINT}/${mintAddress}`, {
-    cache: "no-store",
-  });
+  try {
+    const response = await fetch(
+      `${TOKEN_METADATA_ENDPOINT}/${encodeURIComponent(mintAddress)}/metadata`,
+      { cache: "no-store" }
+    );
 
-  if (!coinResponse.ok) {
-    throw new Error(`Failed to fetch coin metadata for ${mintAddress}: ${coinResponse.status}`);
-  }
-
-  const coinJson = await coinResponse.json();
-  let metadata: RemoteMetadata | null =
-    (coinJson?.metadata as RemoteMetadata | undefined) ?? null;
-  const metadataUri =
-    coinJson?.metadata_uri ??
-    coinJson?.metadataUri ??
-    (metadata && "uri" in metadata ? (metadata as any).uri : null);
-
-  if ((!metadata || !metadata.name || !metadata.symbol) && typeof metadataUri === "string") {
-    const normalizedUri = normaliseIpfsUri(metadataUri);
-    if (normalizedUri) {
-      const metadataResponse = await fetch(normalizedUri, {
-        cache: "no-store",
-        headers: { accept: "application/json" },
-      });
-      if (metadataResponse.ok) {
-        metadata = (await metadataResponse.json()) as RemoteMetadata;
-      }
+    if (!response.ok) {
+      return null;
     }
-  }
 
-  if (!metadata) {
+    const data = await response.json();
+    return {
+      name: data.name ?? null,
+      symbol: data.symbol ?? null,
+      imageUri: data.imageUri ?? null,
+      twitter: data.twitter ?? null,
+      telegram: data.telegram ?? null,
+      website: data.website ?? null,
+    };
+  } catch (error) {
+    console.warn(`[tokens-page] Metadata proxy failed for ${mintAddress}:`, error);
     return null;
   }
-
-  return {
-    name: metadata.name ?? coinJson?.name ?? undefined,
-    symbol: metadata.symbol ?? coinJson?.symbol ?? undefined,
-    image: metadata.image ?? coinJson?.image ?? undefined,
-    twitter: metadata.twitter ?? coinJson?.twitter ?? undefined,
-    telegram: metadata.telegram ?? coinJson?.telegram ?? undefined,
-    website: metadata.website ?? coinJson?.website ?? undefined,
-  };
 };
 
 const searchPumpTokens = async (term: string, limit = 20): Promise<PumpSearchCoin[]> => {
@@ -177,12 +159,8 @@ const searchPumpTokens = async (term: string, limit = 20): Promise<PumpSearchCoi
   if (!trimmed) return [];
 
   const params = new URLSearchParams({
-    offset: "0",
+    term: trimmed,
     limit: Math.min(Math.max(limit, 1), 50).toString(),
-    sort: "market_cap",
-    includeNsfw: "false",
-    order: "DESC",
-    searchTerm: trimmed,
   });
 
   const response = await fetch(`${PUMP_SEARCH_ENDPOINT}?${params.toString()}`, {
@@ -190,15 +168,15 @@ const searchPumpTokens = async (term: string, limit = 20): Promise<PumpSearchCoi
   });
 
   if (!response.ok) {
-    throw new Error(`Pump search failed: ${response.status} ${response.statusText}`);
+    throw new Error(`Pump search proxy failed: ${response.status} ${response.statusText}`);
   }
 
-  const results = (await response.json()) as unknown;
-  if (!Array.isArray(results)) {
+  const data = await response.json();
+  if (!data || !Array.isArray(data.results)) {
     return [];
   }
 
-  return results as PumpSearchCoin[];
+  return data.results as PumpSearchCoin[];
 };
 
 const clampValue = (value: number, min: number, max: number) =>
@@ -365,7 +343,7 @@ export default function TokensPage() {
 
       const tokensToRefresh = tokenList.filter((token) => {
         if (!token) return false;
-        if (metadataCacheRef.current.get(token.mintAddress)) return false;
+        if (metadataCacheRef.current.has(token.mintAddress)) return false;
         return shouldHydrateToken(token);
       });
 
@@ -378,7 +356,6 @@ export default function TokensPage() {
           try {
             const metadata = await fetchRemoteMetadata(token.mintAddress);
             if (!metadata) {
-              metadataCacheRef.current.delete(token.mintAddress);
               return;
             }
 
@@ -389,7 +366,7 @@ export default function TokensPage() {
                       ...existing,
                       name: metadata.name ?? existing.name,
                       symbol: metadata.symbol ?? existing.symbol,
-                      imageUri: normaliseIpfsUri(metadata.image) ?? existing.imageUri,
+                      imageUri: normaliseIpfsUri(metadata.imageUri) ?? existing.imageUri,
                       twitter: metadata.twitter ?? existing.twitter,
                       telegram: metadata.telegram ?? existing.telegram,
                       website: metadata.website ?? existing.website,
@@ -398,7 +375,6 @@ export default function TokensPage() {
               )
             );
           } catch (error) {
-            metadataCacheRef.current.delete(token.mintAddress);
             console.warn(
               `[tokens-page] Failed to fetch metadata for ${token.mintAddress}:`,
               error
@@ -493,7 +469,8 @@ export default function TokensPage() {
                   ...dbToken,
                   name: remote?.name ?? dbToken.name,
                   symbol: remote?.symbol ?? dbToken.symbol,
-                  imageUri: normaliseIpfsUri(remote?.image_uri) ?? dbToken.imageUri,
+                  imageUri:
+                    normaliseIpfsUri(remote?.imageUri ?? undefined) ?? dbToken.imageUri,
                   twitter: remote?.twitter ?? dbToken.twitter,
                   telegram: remote?.telegram ?? dbToken.telegram,
                   website: remote?.website ?? dbToken.website,
@@ -509,12 +486,12 @@ export default function TokensPage() {
                 mintAddress: mint,
                 name: remote.name ?? mint.slice(0, 6),
                 symbol: remote.symbol ?? mint.slice(0, 6).toUpperCase(),
-                imageUri: normaliseIpfsUri(remote.image_uri),
+                imageUri: normaliseIpfsUri(remote.imageUri ?? null),
                 twitter: remote.twitter ?? null,
                 telegram: remote.telegram ?? null,
                 website: remote.website ?? null,
                 price: null,
-                createdAt: Number(remote.created_timestamp ?? Date.now()),
+                createdAt: Number(remote.createdTimestamp ?? Date.now()),
                 lastTradeTimestamp: null,
                 kingOfTheHillTimestamp: null,
                 completed: false,
@@ -527,7 +504,7 @@ export default function TokensPage() {
                 sellVolumeSol: 0,
                 totalVolumeSol: 0,
                 totalSupplyTokens: undefined,
-                marketCapUsd: remote.usd_market_cap ?? undefined,
+                marketCapUsd: remote.usdMarketCap ?? undefined,
                 marketCapSol: undefined,
               } as Token;
             })
