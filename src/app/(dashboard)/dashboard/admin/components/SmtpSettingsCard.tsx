@@ -334,12 +334,7 @@ export function SmtpSettingsCard({ initialConfig }: SmtpSettingsCardProps) {
             fullWidth
             placeholder="Email address to send a test message"
           />
-          <Button
-            variant="outlined"
-            onClick={handleTest}
-            disabled={testing}
-            sx={{ minWidth: 160 }}
-          >
+          <Button variant="outlined" onClick={handleTest} disabled={testing} sx={{ minWidth: 160 }}>
             {testing ? <CircularProgress size={20} /> : 'Send Test Email'}
           </Button>
         </Stack>

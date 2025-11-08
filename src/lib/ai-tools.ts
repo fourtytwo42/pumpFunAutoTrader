@@ -35,6 +35,68 @@ export interface ToolDefinition {
 export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
   // ========== CATEGORY 1: Market Discovery & Token Data ==========
 
+  search_tokens: {
+    name: 'search_tokens',
+    description:
+      'Search pump.fun tokens by name, symbol, or keyword. Returns matching mints with metadata so you can pick the correct token before requesting detailed analytics.',
+    category: 'market',
+    riskLevel: 'safe',
+    cacheSeconds: 0,
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Token name, symbol, or keyword to search for' },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of results to return (default: 10, max: 50)',
+        },
+        includeNsfw: {
+          type: 'boolean',
+          description: 'Include NSFW tokens in results (default: false)',
+        },
+      },
+      required: ['query'],
+    },
+    validate: (args) => {
+      const raw = (args.query ?? args.searchTerm ?? '').trim()
+      if (!raw || raw.length < 2) {
+        return { valid: false, errors: ['query must be at least 2 characters'] }
+      }
+      return { valid: true }
+    },
+    execute: async (args) => {
+      const query = (args.query ?? args.searchTerm ?? '').trim()
+      const limit = Math.min(args.limit || 10, 50)
+      const includeNsfw = Boolean(args.includeNsfw)
+
+      const results = await PumpAPI.searchTokens(query, { limit, includeNsfw })
+
+      return {
+        query,
+        count: results.length,
+        tokens: results.map((token) => ({
+          mint: token.mint,
+          name: token.name,
+          symbol: token.symbol,
+          description: token.description || '',
+          imageUri: token.imageUri || '',
+          metadataUri: token.metadataUri || '',
+          socials: {
+            twitter: token.twitter || null,
+            telegram: token.telegram || null,
+            website: token.website || null,
+          },
+          createdTimestamp: token.createdTimestamp ?? null,
+          usdMarketCap: token.usdMarketCap ?? null,
+          marketCap: token.marketCap ?? null,
+          complete: token.complete ?? null,
+          isLive: token.isLive ?? null,
+        })),
+        timestamp: Date.now(),
+      }
+    },
+  },
+
   get_trending_tokens: {
     name: 'get_trending_tokens',
     description: `Get trending tokens with comprehensive analytics. This is your PRIMARY discovery tool - use it FIRST to find opportunities.

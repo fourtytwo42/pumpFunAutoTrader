@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Container,
   Typography,
@@ -60,6 +60,10 @@ const TRADE_AMOUNT_MAX = 100;
 const TOKEN_AGE_MIN_HOURS = 0;
 const TOKEN_AGE_MAX_HOURS = 168; // 7 days
 
+const PUMP_COIN_ENDPOINT = "https://frontend-api-v3.pump.fun/coins";
+const PUMP_SEARCH_ENDPOINT = "https://frontend-api-v3.pump.fun/coins/search-v2";
+const PINATA_IPFS_BASE = "https://pump.mypinata.cloud/ipfs/";
+
 type FilterState = {
   marketCap: [number, number];
   uniqueTraders: [number, number];
@@ -72,6 +76,129 @@ const DEFAULT_FILTERS: FilterState = {
   uniqueTraders: [1, UNIQUE_TRADERS_MAX],
   tradeAmount: [TRADE_AMOUNT_MIN, TRADE_AMOUNT_MAX],
   tokenAge: [TOKEN_AGE_MIN_HOURS, TOKEN_AGE_MAX_HOURS],
+};
+
+const normaliseIpfsUri = (uri?: string | null) => {
+  if (!uri) return null;
+  if (uri.startsWith("ipfs://")) {
+    return `${PINATA_IPFS_BASE}${uri.replace("ipfs://", "")}`;
+  }
+  return uri;
+};
+
+const looksLikeMintPrefix = (value: string | null | undefined, mint: string) => {
+  if (!value) return true;
+  const cleaned = value.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+  if (!cleaned) return true;
+  if (cleaned.length < 3) return false;
+  const mintUpper = mint.toUpperCase();
+  return mintUpper.startsWith(cleaned);
+};
+
+const shouldHydrateToken = (token: Token) => {
+  const name = token.name?.trim() ?? "";
+  const symbol = token.symbol?.trim() ?? "";
+
+  if (!name || !symbol) return true;
+  if (looksLikeMintPrefix(name, token.mintAddress)) return true;
+  if (looksLikeMintPrefix(symbol, token.mintAddress)) return true;
+  if (!token.imageUri) return true;
+  return false;
+};
+
+type PumpSearchCoin = {
+  mint: string;
+  name?: string;
+  symbol?: string;
+  image_uri?: string;
+  metadata_uri?: string;
+  twitter?: string;
+  telegram?: string;
+  website?: string;
+  created_timestamp?: number;
+  usd_market_cap?: number;
+};
+
+type RemoteMetadata = {
+  name?: string;
+  symbol?: string;
+  image?: string;
+  twitter?: string;
+  telegram?: string;
+  website?: string;
+};
+
+const fetchRemoteMetadata = async (mintAddress: string): Promise<RemoteMetadata | null> => {
+  const coinResponse = await fetch(`${PUMP_COIN_ENDPOINT}/${mintAddress}`, {
+    cache: "no-store",
+  });
+
+  if (!coinResponse.ok) {
+    throw new Error(`Failed to fetch coin metadata for ${mintAddress}: ${coinResponse.status}`);
+  }
+
+  const coinJson = await coinResponse.json();
+  let metadata: RemoteMetadata | null =
+    (coinJson?.metadata as RemoteMetadata | undefined) ?? null;
+  const metadataUri =
+    coinJson?.metadata_uri ??
+    coinJson?.metadataUri ??
+    (metadata && "uri" in metadata ? (metadata as any).uri : null);
+
+  if ((!metadata || !metadata.name || !metadata.symbol) && typeof metadataUri === "string") {
+    const normalizedUri = normaliseIpfsUri(metadataUri);
+    if (normalizedUri) {
+      const metadataResponse = await fetch(normalizedUri, {
+        cache: "no-store",
+        headers: { accept: "application/json" },
+      });
+      if (metadataResponse.ok) {
+        metadata = (await metadataResponse.json()) as RemoteMetadata;
+      }
+    }
+  }
+
+  if (!metadata) {
+    return null;
+  }
+
+  return {
+    name: metadata.name ?? coinJson?.name ?? undefined,
+    symbol: metadata.symbol ?? coinJson?.symbol ?? undefined,
+    image: metadata.image ?? coinJson?.image ?? undefined,
+    twitter: metadata.twitter ?? coinJson?.twitter ?? undefined,
+    telegram: metadata.telegram ?? coinJson?.telegram ?? undefined,
+    website: metadata.website ?? coinJson?.website ?? undefined,
+  };
+};
+
+const searchPumpTokens = async (term: string, limit = 20): Promise<PumpSearchCoin[]> => {
+  const trimmed = term.trim();
+  if (!trimmed) return [];
+
+  const params = new URLSearchParams({
+    offset: "0",
+    limit: Math.min(Math.max(limit, 1), 50).toString(),
+    sort: "market_cap",
+    includeNsfw: "false",
+    order: "DESC",
+    searchTerm: trimmed,
+  });
+
+  const response = await fetch(`${PUMP_SEARCH_ENDPOINT}?${params.toString()}`, {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Pump search failed: ${response.status} ${response.statusText}`);
+  }
+
+  const results = (await response.json()) as unknown;
+  if (!Array.isArray(results)) {
+    return [];
+  }
+
+  return results as PumpSearchCoin[];
 };
 
 const clampValue = (value: number, min: number, max: number) =>
@@ -166,6 +293,8 @@ interface Token {
 
 export default function TokensPage() {
   const router = useRouter();
+  const metadataCacheRef = useRef<Map<string, boolean>>(new Map());
+  const fetchSeqRef = useRef(0);
   const [tokens, setTokens] = useState<Token[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -213,68 +342,6 @@ export default function TokensPage() {
     localStorage.setItem("tokenFeedFilters", JSON.stringify(filters));
   }, [filters]);
 
-  const fetchTokens = useCallback(async (showLoading = true) => {
-    if (showLoading) setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        page: page.toString(),
-        limit: "20",
-      });
-      if (search) {
-        params.append("search", search);
-      }
-      params.append("sortBy", sortBy);
-      if (timeframe) {
-        params.append("timeframe", timeframe);
-      }
-      if (filters.marketCap[0] > MARKET_CAP_MIN) {
-        params.append("marketCapMin", Math.round(filters.marketCap[0]).toString());
-      }
-      if (filters.marketCap[1] < MARKET_CAP_MAX) {
-        params.append("marketCapMax", Math.round(filters.marketCap[1]).toString());
-      }
-      if (filters.uniqueTraders[0] > UNIQUE_TRADERS_MIN) {
-        params.append("uniqueTradersMin", Math.round(filters.uniqueTraders[0]).toString());
-      }
-      if (filters.uniqueTraders[1] < UNIQUE_TRADERS_MAX) {
-        params.append("uniqueTradersMax", Math.round(filters.uniqueTraders[1]).toString());
-      }
-      if (filters.tradeAmount[0] > TRADE_AMOUNT_MIN) {
-        params.append("tradeAmountMin", filters.tradeAmount[0].toString());
-      }
-      if (filters.tradeAmount[1] < TRADE_AMOUNT_MAX) {
-        params.append("tradeAmountMax", filters.tradeAmount[1].toString());
-      }
-      if (filters.tokenAge[0] > TOKEN_AGE_MIN_HOURS) {
-        params.append("tokenAgeMin", filters.tokenAge[0].toString());
-      }
-      if (filters.tokenAge[1] < TOKEN_AGE_MAX_HOURS) {
-        params.append("tokenAgeMax", filters.tokenAge[1].toString());
-      }
-
-      const response = await fetch(`/api/tokens?${params}`);
-      const data = await response.json();
-      setTokens(data.tokens || []);
-      setTotalPages(data.pagination?.totalPages || 1);
-    } catch (error) {
-      console.error("Error fetching tokens:", error);
-    } finally {
-      if (showLoading) setLoading(false);
-    }
-  }, [filters, page, search, sortBy, timeframe]);
-
-  useEffect(() => {
-    // Initial fetch with loading indicator
-    fetchTokens(true);
-
-    // Poll for updates every 5 seconds for real-time data (without loading indicator)
-    const interval = setInterval(() => {
-      fetchTokens(false);
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [fetchTokens]);
-
   const handleTimeframeChange = (value: TimeframeOption) => {
     setTimeframe(value);
     setPage(1);
@@ -292,6 +359,217 @@ export default function TokensPage() {
     []
   );
 
+  const hydrateTokenMetadata = useCallback(
+    (tokenList: Token[]) => {
+      if (!Array.isArray(tokenList) || tokenList.length === 0) return;
+
+      const tokensToRefresh = tokenList.filter((token) => {
+        if (!token) return false;
+        if (metadataCacheRef.current.get(token.mintAddress)) return false;
+        return shouldHydrateToken(token);
+      });
+
+      if (tokensToRefresh.length === 0) return;
+
+      tokensToRefresh.forEach((token) => {
+        metadataCacheRef.current.set(token.mintAddress, true);
+
+        (async () => {
+          try {
+            const metadata = await fetchRemoteMetadata(token.mintAddress);
+            if (!metadata) {
+              metadataCacheRef.current.delete(token.mintAddress);
+              return;
+            }
+
+            setTokens((prev) =>
+              prev.map((existing) =>
+                existing.mintAddress === token.mintAddress
+                  ? {
+                      ...existing,
+                      name: metadata.name ?? existing.name,
+                      symbol: metadata.symbol ?? existing.symbol,
+                      imageUri: normaliseIpfsUri(metadata.image) ?? existing.imageUri,
+                      twitter: metadata.twitter ?? existing.twitter,
+                      telegram: metadata.telegram ?? existing.telegram,
+                      website: metadata.website ?? existing.website,
+                    }
+                  : existing
+              )
+            );
+          } catch (error) {
+            metadataCacheRef.current.delete(token.mintAddress);
+            console.warn(
+              `[tokens-page] Failed to fetch metadata for ${token.mintAddress}:`,
+              error
+            );
+          }
+        })();
+      });
+    },
+    []
+  );
+
+  const fetchTokens = useCallback(
+    async (showLoading = true) => {
+      if (showLoading) setLoading(true);
+      const fetchId = (fetchSeqRef.current += 1);
+
+      try {
+        const trimmedSearch = search.trim();
+        const params = new URLSearchParams();
+        params.set("limit", "20");
+        params.set("sortBy", sortBy);
+        params.set("timeframe", timeframe);
+
+        const appendFilterParams = () => {
+          if (filters.marketCap[0] > MARKET_CAP_MIN) {
+            params.set("marketCapMin", Math.round(filters.marketCap[0]).toString());
+          }
+          if (filters.marketCap[1] < MARKET_CAP_MAX) {
+            params.set("marketCapMax", Math.round(filters.marketCap[1]).toString());
+          }
+          if (filters.uniqueTraders[0] > UNIQUE_TRADERS_MIN) {
+            params.set("uniqueTradersMin", Math.round(filters.uniqueTraders[0]).toString());
+          }
+          if (filters.uniqueTraders[1] < UNIQUE_TRADERS_MAX) {
+            params.set("uniqueTradersMax", Math.round(filters.uniqueTraders[1]).toString());
+          }
+          if (filters.tradeAmount[0] > TRADE_AMOUNT_MIN) {
+            params.set("tradeAmountMin", filters.tradeAmount[0].toString());
+          }
+          if (filters.tradeAmount[1] < TRADE_AMOUNT_MAX) {
+            params.set("tradeAmountMax", filters.tradeAmount[1].toString());
+          }
+          if (filters.tokenAge[0] > TOKEN_AGE_MIN_HOURS) {
+            params.set("tokenAgeMin", filters.tokenAge[0].toString());
+          }
+          if (filters.tokenAge[1] < TOKEN_AGE_MAX_HOURS) {
+            params.set("tokenAgeMax", filters.tokenAge[1].toString());
+          }
+        };
+
+        let remoteSearchResults: PumpSearchCoin[] = [];
+        let mintList: string[] | null = null;
+
+        if (trimmedSearch.length >= 2) {
+          try {
+            remoteSearchResults = await searchPumpTokens(trimmedSearch, 20);
+            if (remoteSearchResults.length > 0) {
+              mintList = remoteSearchResults.map((result) => result.mint);
+              params.set("mints", mintList.join(","));
+              params.set("limit", mintList.length.toString());
+            }
+          } catch (error) {
+            console.warn("[tokens-page] Pump search failed:", error);
+          }
+        }
+
+        if (mintList) {
+          appendFilterParams();
+        } else {
+          params.set("page", page.toString());
+          if (trimmedSearch.length > 0) {
+            params.set("search", trimmedSearch);
+          }
+          appendFilterParams();
+        }
+
+        const response = await fetch(`/api/tokens?${params.toString()}`);
+        const data = await response.json();
+
+        let tokensResult: Token[] = data.tokens || [];
+
+        if (mintList && remoteSearchResults.length > 0) {
+          const remoteMap = new Map(remoteSearchResults.map((result) => [result.mint, result]));
+          const dbTokenMap = new Map(tokensResult.map((token) => [token.mintAddress, token]));
+
+          tokensResult = mintList
+            .map((mint) => {
+              const dbToken = dbTokenMap.get(mint);
+              const remote = remoteMap.get(mint);
+              if (dbToken) {
+                return {
+                  ...dbToken,
+                  name: remote?.name ?? dbToken.name,
+                  symbol: remote?.symbol ?? dbToken.symbol,
+                  imageUri: normaliseIpfsUri(remote?.image_uri) ?? dbToken.imageUri,
+                  twitter: remote?.twitter ?? dbToken.twitter,
+                  telegram: remote?.telegram ?? dbToken.telegram,
+                  website: remote?.website ?? dbToken.website,
+                };
+              }
+
+              if (!remote) {
+                return null;
+              }
+
+              return {
+                id: `search-${mint}`,
+                mintAddress: mint,
+                name: remote.name ?? mint.slice(0, 6),
+                symbol: remote.symbol ?? mint.slice(0, 6).toUpperCase(),
+                imageUri: normaliseIpfsUri(remote.image_uri),
+                twitter: remote.twitter ?? null,
+                telegram: remote.telegram ?? null,
+                website: remote.website ?? null,
+                price: null,
+                createdAt: Number(remote.created_timestamp ?? Date.now()),
+                lastTradeTimestamp: null,
+                kingOfTheHillTimestamp: null,
+                completed: false,
+                buyVolume: 0,
+                sellVolume: 0,
+                totalVolume: 0,
+                volumeRatio: 0.5,
+                uniqueTraders: 0,
+                buyVolumeSol: 0,
+                sellVolumeSol: 0,
+                totalVolumeSol: 0,
+                totalSupplyTokens: undefined,
+                marketCapUsd: remote.usd_market_cap ?? undefined,
+                marketCapSol: undefined,
+              } as Token;
+            })
+            .filter((token): token is Token => Boolean(token));
+
+          if (fetchId === fetchSeqRef.current) {
+            setTotalPages(tokensResult.length > 0 ? 1 : 0);
+          }
+        } else if (fetchId === fetchSeqRef.current) {
+          setTotalPages(data.pagination?.totalPages || 1);
+        }
+
+        if (fetchId === fetchSeqRef.current) {
+          setTokens(tokensResult);
+          hydrateTokenMetadata(tokensResult);
+        }
+      } catch (error) {
+        console.error("Error fetching tokens:", error);
+      } finally {
+        if (showLoading && fetchId === fetchSeqRef.current) {
+          setLoading(false);
+        }
+      }
+    },
+    [filters, page, search, sortBy, timeframe, hydrateTokenMetadata]
+  );
+
+  useEffect(() => {
+    const shouldPoll = search.trim().length === 0;
+
+    fetchTokens(true);
+
+    if (!shouldPoll) {
+      return () => {};
+    }
+
+    const interval = setInterval(() => {
+      fetchTokens(false);
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [fetchTokens, search]);
   const formatPricePerMillion = (priceUsd: number | null | undefined) => {
     // Check for null/undefined/NaN/zero
     if (priceUsd == null || isNaN(priceUsd) || priceUsd <= 0) {

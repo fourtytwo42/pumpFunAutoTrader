@@ -1,3 +1,5 @@
+import { normaliseMetadataUri } from './pump/unified-trade'
+
 /**
  * Centralized Pump.fun API Client
  * All external API calls to pump.fun services
@@ -117,6 +119,67 @@ export async function getTrendingTokens(
     associatedBondingCurve: token.associated_bonding_curve || '',
     replyCount: Number(token.reply_count || 0),
     kingOfTheHillTimestamp: token.king_of_the_hill_timestamp ? Number(token.king_of_the_hill_timestamp) : null,
+  }))
+}
+
+export interface PumpSearchToken {
+  mint: string
+  name: string
+  symbol: string
+  description?: string
+  imageUri?: string
+  metadataUri?: string
+  twitter?: string
+  telegram?: string
+  website?: string
+  createdTimestamp?: number
+  usdMarketCap?: number
+  marketCap?: number
+  complete?: boolean
+  isLive?: boolean
+}
+
+export async function searchTokens(
+  term: string,
+  options: {
+    limit?: number
+    offset?: number
+    includeNsfw?: boolean
+    sort?: string
+    order?: 'ASC' | 'DESC'
+  } = {}
+): Promise<PumpSearchToken[]> {
+  const query = term.trim()
+  if (!query) return []
+
+  const params = new URLSearchParams()
+  params.set('offset', String(options.offset ?? 0))
+  params.set('limit', String(Math.min(Math.max(options.limit ?? 10, 1), 50)))
+  params.set('sort', options.sort ?? 'market_cap')
+  params.set('includeNsfw', String(options.includeNsfw ?? false))
+  params.set('order', options.order ?? 'DESC')
+  params.set('searchTerm', query)
+
+  const url = `${API_ENDPOINTS.frontend}/coins/search-v2?${params.toString()}`
+  const data = await fetchPumpFun<any>(url)
+
+  if (!data || !Array.isArray(data)) return []
+
+  return data.map((token: any) => ({
+    mint: token.mint,
+    name: token.name || '',
+    symbol: token.symbol || '',
+    description: token.description || '',
+    imageUri: token.image_uri ? normaliseMetadataUri(token.image_uri) || token.image_uri : undefined,
+    metadataUri: token.metadata_uri ? normaliseMetadataUri(token.metadata_uri) || token.metadata_uri : undefined,
+    twitter: token.twitter || undefined,
+    telegram: token.telegram || undefined,
+    website: token.website || undefined,
+    createdTimestamp: token.created_timestamp ? Number(token.created_timestamp) : undefined,
+    usdMarketCap: token.usd_market_cap ? Number(token.usd_market_cap) : undefined,
+    marketCap: token.market_cap ? Number(token.market_cap) : undefined,
+    complete: token.complete !== undefined ? Boolean(token.complete) : undefined,
+    isLive: token.is_currently_live !== undefined ? Boolean(token.is_currently_live) : undefined,
   }))
 }
 

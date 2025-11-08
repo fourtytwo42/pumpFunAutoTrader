@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { Decimal } from '@prisma/client/runtime/library'
 import { matchOpenOrdersForToken } from '@/lib/orders'
-import { ensureTokensMetadata } from '@/lib/pump/metadata-service'
 
 const PUMP_HEADERS = {
   accept: 'application/json, text/plain, */*',
@@ -52,6 +51,17 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
     const search = searchParams.get('search') || ''
+    const mintsParam = searchParams.get('mints')
+    const mintList = mintsParam
+      ? Array.from(
+          new Set(
+            mintsParam
+              .split(',')
+              .map((mint) => mint.trim())
+              .filter((mint) => mint.length > 0)
+          )
+        )
+      : []
     const sortBy = searchParams.get('sortBy') || 'marketCap'
     const skip = (page - 1) * limit
 
@@ -126,9 +136,13 @@ export async function GET(request: NextRequest) {
 
     const tradeWhere = Object.keys(tradeWhereConditions).length > 0 ? tradeWhereConditions : undefined
 
+    const applyActivityFilter =
+      mintList.length === 0 && (timeframeStartMs || Object.keys(amountCondition).length > 0)
+
     const tokenWhere = {
       ...where,
-      ...((timeframeStartMs || Object.keys(amountCondition).length > 0)
+      ...(mintList.length > 0 ? { mintAddress: { in: mintList } } : {}),
+      ...(applyActivityFilter
         ? {
             trades: {
               some: {
@@ -138,13 +152,15 @@ export async function GET(request: NextRequest) {
             },
           }
         : {}),
-      ...(createdAtFilter ? { createdAt: createdAtFilter } : {}),
+      ...(createdAtFilter && mintList.length === 0 ? { createdAt: createdAtFilter } : {}),
     }
 
-    const fetchMultiple = Math.max(page + 2, 5)
-    const fetchLimit = Math.min(500, limit * fetchMultiple)
+    const effectiveLimit = mintList.length > 0 ? mintList.length : limit
+    const fetchMultiple = mintList.length > 0 ? 1 : Math.max(page + 2, 5)
+    const fetchLimit =
+      mintList.length > 0 ? mintList.length : Math.min(500, effectiveLimit * fetchMultiple)
 
-    const tokens = await prisma.token.findMany({
+    let tokens = await prisma.token.findMany({
       where: tokenWhere,
       include: {
         price: true,
@@ -156,10 +172,11 @@ export async function GET(request: NextRequest) {
       take: fetchLimit,
     })
 
-    if (tokens.length > 0) {
-      ensureTokensMetadata(prisma, tokens).catch((error) =>
-        console.warn('[tokens-api] metadata refresh failed:', (error as Error).message)
-      )
+    if (mintList.length > 0 && tokens.length > 0) {
+      const sortMap = new Map(tokens.map((token) => [token.mintAddress, token]))
+      tokens = mintList
+        .map((mint) => sortMap.get(mint))
+        .filter((token): token is (typeof tokens)[number] => Boolean(token))
     }
 
     const tokenIds = tokens.map((token) => token.id)
@@ -401,44 +418,64 @@ export async function GET(request: NextRequest) {
       return true
     })
 
-    // Sort tokens based on sortBy parameter
-    switch (sortBy) {
-      case 'totalVolume':
-        filteredTokens.sort((a, b) => (b.totalVolume ?? 0) - (a.totalVolume ?? 0))
-        break
-      case 'buyVolume':
-        filteredTokens.sort((a, b) => (b.buyVolume ?? 0) - (a.buyVolume ?? 0))
-        break
-      case 'sellVolume':
-        filteredTokens.sort((a, b) => (b.sellVolume ?? 0) - (a.sellVolume ?? 0))
-        break
-      case 'uniqueTraders':
-        filteredTokens.sort((a, b) => (b.uniqueTraders ?? 0) - (a.uniqueTraders ?? 0))
-        break
-      case 'tokenAge':
-        filteredTokens.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
-        break
-      case 'lastTrade':
-        filteredTokens.sort((a, b) => (b.lastTradeTimestamp ?? 0) - (a.lastTradeTimestamp ?? 0))
-        break
-      case 'marketCap':
-      default:
-        filteredTokens.sort((a, b) => (b.marketCapUsd ?? 0) - (a.marketCapUsd ?? 0))
-        break
+    if (mintList.length > 0) {
+      const orderMap = new Map(filteredTokens.map((token) => [token.mintAddress, token]))
+      filteredTokens = mintList
+        .map((mint) => orderMap.get(mint))
+        .filter((token): token is typeof filteredTokens[number] => Boolean(token))
+    } else {
+      switch (sortBy) {
+        case 'totalVolume':
+          filteredTokens.sort((a, b) => (b.totalVolume ?? 0) - (a.totalVolume ?? 0))
+          break
+        case 'buyVolume':
+          filteredTokens.sort((a, b) => (b.buyVolume ?? 0) - (a.buyVolume ?? 0))
+          break
+        case 'sellVolume':
+          filteredTokens.sort((a, b) => (b.sellVolume ?? 0) - (a.sellVolume ?? 0))
+          break
+        case 'uniqueTraders':
+          filteredTokens.sort((a, b) => (b.uniqueTraders ?? 0) - (a.uniqueTraders ?? 0))
+          break
+        case 'tokenAge':
+          filteredTokens.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
+          break
+        case 'lastTrade':
+          filteredTokens.sort((a, b) => (b.lastTradeTimestamp ?? 0) - (a.lastTradeTimestamp ?? 0))
+          break
+        case 'marketCap':
+        default:
+          filteredTokens.sort((a, b) => (b.marketCapUsd ?? 0) - (a.marketCapUsd ?? 0))
+          break
+      }
     }
 
     const totalFiltered = filteredTokens.length
-    const startIndex = (page - 1) * limit
     const paginatedTokens =
-      startIndex >= totalFiltered ? [] : filteredTokens.slice(startIndex, startIndex + limit)
+      mintList.length > 0
+        ? filteredTokens
+        : (() => {
+            const startIndex = Math.max((page - 1) * limit, 0)
+            if (startIndex >= totalFiltered) {
+              return []
+            }
+            return filteredTokens.slice(startIndex, startIndex + limit)
+          })()
 
     return NextResponse.json({
       tokens: paginatedTokens,
       pagination: {
-        page,
-        limit,
+        page: mintList.length > 0 ? 1 : page,
+        limit: mintList.length > 0 ? filteredTokens.length : limit,
         total: totalFiltered,
-        totalPages: totalFiltered === 0 ? 0 : Math.ceil(totalFiltered / limit),
+        totalPages:
+          mintList.length > 0
+            ? filteredTokens.length > 0
+              ? 1
+              : 0
+            : totalFiltered === 0
+              ? 0
+              : Math.ceil(totalFiltered / limit),
       },
     })
   } catch (error) {
