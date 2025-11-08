@@ -25,11 +25,15 @@ import {
   Chat,
   ArrowBack,
   SmartToy,
+  Menu as MenuIcon,
+  MenuOpen,
 } from '@mui/icons-material'
 import { useState, useEffect } from 'react'
 import { AiTraderThemeProvider } from './AiTraderThemeProvider'
 
-const drawerWidth = 240
+const EXPANDED_DRAWER_WIDTH = 240
+const COLLAPSED_DRAWER_WIDTH = 72
+const SIDEBAR_STORAGE_KEY = 'sidebarCollapsed'
 
 export function AiTraderLayoutClient({
   children,
@@ -49,8 +53,23 @@ export function AiTraderLayoutClient({
   const router = useRouter()
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(true)
   const [walletBalance, setWalletBalance] = useState<number | null>(null)
   const [loadingBalance, setLoadingBalance] = useState(true)
+  const drawerWidth = collapsed ? COLLAPSED_DRAWER_WIDTH : EXPANDED_DRAWER_WIDTH
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const saved = window.localStorage.getItem(SIDEBAR_STORAGE_KEY)
+    if (saved !== null) {
+      setCollapsed(saved === 'true')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, collapsed ? 'true' : 'false')
+  }, [collapsed])
 
   useEffect(() => {
     // Fetch AI trader's wallet balance
@@ -78,10 +97,30 @@ export function AiTraderLayoutClient({
     setMobileOpen(!mobileOpen)
   }
 
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => !prev)
+  }
+
   const drawer = (
     <Box>
-      <Toolbar>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Toolbar
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: collapsed ? 'center' : 'space-between',
+          px: collapsed ? 1 : 2,
+        }}
+      >
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            opacity: collapsed ? 0 : 1,
+            pointerEvents: collapsed ? 'none' : 'auto',
+            transition: 'opacity 0.2s ease',
+          }}
+        >
           <Box
             sx={{
               width: 10,
@@ -95,17 +134,33 @@ export function AiTraderLayoutClient({
             {traderName}
           </Typography>
         </Box>
+        <IconButton size="small" onClick={toggleCollapsed} sx={{ color: themeColor }}>
+          {collapsed ? <MenuIcon /> : <MenuOpen />}
+        </IconButton>
       </Toolbar>
       <List>
         {menuItems.map((item) => (
           <ListItem key={item.path} disablePadding>
-            <ListItemButton selected={pathname === item.path} onClick={() => router.push(item.path)}>
+            <ListItemButton
+              selected={pathname === item.path}
+              onClick={() => router.push(item.path)}
+              sx={{
+                minHeight: 48,
+                justifyContent: collapsed ? 'center' : 'flex-start',
+                px: collapsed ? 1.5 : 2.5,
+              }}
+            >
               <ListItemIcon
-                sx={{ color: pathname === item.path ? themeColor : 'inherit' }}
+                sx={{
+                  color: pathname === item.path ? themeColor : 'inherit',
+                  minWidth: collapsed ? 0 : 40,
+                  mr: collapsed ? 0 : 2,
+                  justifyContent: 'center',
+                }}
               >
                 {item.icon}
               </ListItemIcon>
-              <ListItemText primary={item.text} />
+              {!collapsed && <ListItemText primary={item.text} />}
             </ListItemButton>
           </ListItem>
         ))}
@@ -133,6 +188,14 @@ export function AiTraderLayoutClient({
             >
               <SmartToy />
             </IconButton>
+          <IconButton
+            color="inherit"
+            edge="start"
+            onClick={toggleCollapsed}
+            sx={{ mr: 2, display: { xs: 'none', sm: 'inline-flex' } }}
+          >
+            {collapsed ? <MenuIcon /> : <MenuOpen />}
+          </IconButton>
             <SmartToy sx={{ mr: 1, color: themeColor }} />
             <Typography variant="h6" noWrap sx={{ flexGrow: 1 }}>
               {traderName}{' '}

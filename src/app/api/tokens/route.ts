@@ -1,14 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { Prisma } from '@prisma/client'
 import { Decimal } from '@prisma/client/runtime/library'
 import { matchOpenOrdersForToken } from '@/lib/orders'
+import { ensureTokensMetadata } from '@/lib/pump/metadata-service'
 
 const PUMP_HEADERS = {
   accept: 'application/json, text/plain, */*',
   origin: 'https://pump.fun',
   referer: 'https://pump.fun',
   'user-agent': 'PumpFunMockTrader/1.0 (+https://pump.fun)',
+};
+
+const parseNumberParam = (value: string | null): number | undefined => {
+  if (value === null || value === '') return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const parseIntParam = (value: string | null): number | undefined => {
+  if (value === null || value === '') return undefined;
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
 };
 
 async function fetchPumpJson<T>(url: string, init: RequestInit = {}): Promise<T | null> {
@@ -40,7 +52,7 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
     const search = searchParams.get('search') || ''
-    const sortBy = searchParams.get('sortBy') || 'volume'
+    const sortBy = searchParams.get('sortBy') || 'marketCap'
     const skip = (page - 1) * limit
 
     const where: any = {}
@@ -54,82 +66,162 @@ export async function GET(request: NextRequest) {
 
     const TOKEN_DECIMALS = new Decimal('1e6')
 
-    const timeframeParam = (searchParams.get('timeframe') || '24h').toLowerCase()
+    const timeframeParam = (searchParams.get('timeframe') || '10m').toLowerCase()
     const timeframeToSeconds: Record<string, number | null> = {
       '1m': 60,
+      '2m': 2 * 60,
       '5m': 5 * 60,
+      '10m': 10 * 60,
       '15m': 15 * 60,
       '30m': 30 * 60,
-      '1h': 60 * 60,
-      '6h': 6 * 60 * 60,
-      '24h': 24 * 60 * 60,
-      '7d': 7 * 24 * 60 * 60,
-      '30d': 30 * 24 * 60 * 60,
-      all: null,
+      '60m': 60 * 60,
     }
 
-    const timeframeSeconds = timeframeToSeconds[timeframeParam] ?? timeframeToSeconds['24h']
+    const timeframeSeconds = timeframeToSeconds[timeframeParam] ?? timeframeToSeconds['10m']
+    const marketCapMin = parseNumberParam(searchParams.get('marketCapMin'))
+    const marketCapMax = parseNumberParam(searchParams.get('marketCapMax'))
+    const uniqueTradersMin = parseIntParam(searchParams.get('uniqueTradersMin'))
+    const uniqueTradersMax = parseIntParam(searchParams.get('uniqueTradersMax'))
+    const tradeAmountMin = parseNumberParam(searchParams.get('tradeAmountMin'))
+    const tradeAmountMax = parseNumberParam(searchParams.get('tradeAmountMax'))
+    const tokenAgeMinHours = parseNumberParam(searchParams.get('tokenAgeMin'))
+    const tokenAgeMaxHours = parseNumberParam(searchParams.get('tokenAgeMax'))
+
     const nowMs = BigInt(Date.now())
     const timeframeStartMs = timeframeSeconds ? nowMs - BigInt(timeframeSeconds) * 1000n : undefined
-    const tradeWhere = timeframeStartMs ? { timestamp: { gte: timeframeStartMs } } : undefined
+    const TOKEN_AGE_MAX_HOURS = 168
+    const hoursToMs = (hours: number) => BigInt(Math.round(hours * 60 * 60 * 1000))
+
+    let createdAtFilter: { gte?: bigint; lte?: bigint } | undefined
+    if (
+      (tokenAgeMinHours !== undefined && tokenAgeMinHours > 0) ||
+      (tokenAgeMaxHours !== undefined && tokenAgeMaxHours < TOKEN_AGE_MAX_HOURS)
+    ) {
+      createdAtFilter = {}
+      if (tokenAgeMaxHours !== undefined && tokenAgeMaxHours < TOKEN_AGE_MAX_HOURS) {
+        const maxAgeDelta = hoursToMs(tokenAgeMaxHours)
+        createdAtFilter.gte = nowMs - maxAgeDelta
+      }
+      if (tokenAgeMinHours !== undefined && tokenAgeMinHours > 0) {
+        const minAgeDelta = hoursToMs(tokenAgeMinHours)
+        createdAtFilter.lte = nowMs - minAgeDelta
+      }
+    }
+
+    const amountCondition: { gte?: Decimal; lte?: Decimal } = {}
+    if (tradeAmountMin !== undefined) {
+      amountCondition.gte = new Decimal(tradeAmountMin)
+    }
+    if (tradeAmountMax !== undefined) {
+      amountCondition.lte = new Decimal(tradeAmountMax)
+    }
+
+    const tradeWhereConditions: Record<string, unknown> = {}
+    if (timeframeStartMs) {
+      tradeWhereConditions.timestamp = { gte: timeframeStartMs }
+    }
+    if (Object.keys(amountCondition).length > 0) {
+      tradeWhereConditions.amountSol = amountCondition
+    }
+
+    const tradeWhere = Object.keys(tradeWhereConditions).length > 0 ? tradeWhereConditions : undefined
 
     const tokenWhere = {
       ...where,
-      ...(timeframeStartMs
+      ...((timeframeStartMs || Object.keys(amountCondition).length > 0)
         ? {
             trades: {
               some: {
-                timestamp: { gte: timeframeStartMs },
+                ...(timeframeStartMs ? { timestamp: { gte: timeframeStartMs } } : {}),
+                ...(Object.keys(amountCondition).length > 0 ? { amountSol: amountCondition } : {}),
               },
             },
           }
         : {}),
+      ...(createdAtFilter ? { createdAt: createdAtFilter } : {}),
     }
 
-    const orderBy: Prisma.TokenOrderByWithRelationInput =
-      sortBy === 'price'
-        ? { price: { priceSol: 'desc' } }
-        : { price: { lastTradeTimestamp: 'desc' } }
+    const fetchMultiple = Math.max(page + 2, 5)
+    const fetchLimit = Math.min(500, limit * fetchMultiple)
 
-    const [tokens, total] = await Promise.all([
-      prisma.token.findMany({
-        where: tokenWhere,
-        include: {
-          price: true,
-          tokenStat: {
-            select: { px: true },
+    const tokens = await prisma.token.findMany({
+      where: tokenWhere,
+      include: {
+        price: true,
+        tokenStat: {
+          select: { px: true },
+        },
+      },
+      orderBy: { price: { lastTradeTimestamp: 'desc' } },
+      take: fetchLimit,
+    })
+
+    if (tokens.length > 0) {
+      ensureTokensMetadata(prisma, tokens).catch((error) =>
+        console.warn('[tokens-api] metadata refresh failed:', (error as Error).message)
+      )
+    }
+
+    const tokenIds = tokens.map((token) => token.id)
+
+    const tradeWhereForFetched =
+      tokenIds.length > 0
+        ? {
+            ...(tradeWhere ?? {}),
+            tokenId: { in: tokenIds },
+          }
+        : tradeWhere
+
+    let volumeRows:
+      | Array<{
+          tokenId: string
+          type: number
+          _sum: { amountSol: Decimal | null; amountUsd: Decimal | null }
+        }>
+      | [] = []
+    let uniqueTraderRows: Array<{ tokenId: string }> | [] = []
+    let latestTradeRows:
+      | Array<{
+          tokenId: string
+          _max: { timestamp: bigint | null }
+        }>
+      | [] = []
+    let latestSolPrice:
+      | {
+          priceUsd: Decimal
+        }
+      | null = null
+
+    if (tokenIds.length > 0) {
+      const results = await Promise.all([
+        prisma.trade.groupBy({
+          by: ['tokenId', 'type'],
+          where: tradeWhereForFetched,
+          _sum: {
+            amountSol: true,
+            amountUsd: true,
           },
-        },
-        orderBy,
-        skip,
-        take: limit,
-      }),
-      prisma.token.count({ where: tokenWhere }),
-    ])
+        }),
+        prisma.trade.findMany({
+          where: tradeWhereForFetched,
+          distinct: ['tokenId', 'userAddress'],
+          select: { tokenId: true },
+        }),
+        prisma.trade.groupBy({
+          by: ['tokenId'],
+          where: tradeWhereForFetched,
+          _max: { timestamp: true },
+        }),
+        prisma.solPrice.findFirst({
+          orderBy: { timestamp: 'desc' },
+        }),
+      ])
 
-    const [volumeRows, uniqueTraderRows, latestTradeRows, latestSolPrice] = await Promise.all([
-      prisma.trade.groupBy({
-        by: ['tokenId', 'type'],
-        where: tradeWhere,
-        _sum: {
-          amountSol: true,
-          amountUsd: true,
-        },
-      }),
-      prisma.trade.findMany({
-        where: tradeWhere,
-        distinct: ['tokenId', 'userAddress'],
-        select: { tokenId: true },
-      }),
-      prisma.trade.groupBy({
-        by: ['tokenId'],
-        where: tradeWhere,
-        _max: { timestamp: true },
-      }),
-      prisma.solPrice.findFirst({
-        orderBy: { timestamp: 'desc' },
-      }),
-    ])
+      volumeRows = results[0]
+      uniqueTraderRows = results[1]
+      latestTradeRows = results[2]
+      latestSolPrice = results[3]
+    }
 
     const solPriceUsd = latestSolPrice ? Number(latestSolPrice.priceUsd) : 160
 
@@ -282,27 +374,71 @@ export async function GET(request: NextRequest) {
       })
     )
 
+    const nowMsNumber = Date.now()
+    const minAgeMs = tokenAgeMinHours !== undefined ? tokenAgeMinHours * 60 * 60 * 1000 : undefined
+    const maxAgeMs = tokenAgeMaxHours !== undefined ? tokenAgeMaxHours * 60 * 60 * 1000 : undefined
+
+    let filteredTokens = tokensWithStats.filter((token) => {
+      const marketCapValue = token.marketCapUsd ?? 0
+      const traderCount = token.uniqueTraders ?? 0
+      const createdAtMs = token.createdAt ?? null
+      const ageMs = createdAtMs != null ? nowMsNumber - createdAtMs : undefined
+
+      if (marketCapMin !== undefined && marketCapValue < marketCapMin) return false
+      if (marketCapMax !== undefined && marketCapValue > marketCapMax) return false
+      if (uniqueTradersMin !== undefined && traderCount < uniqueTradersMin) return false
+      if (uniqueTradersMax !== undefined && traderCount > uniqueTradersMax) return false
+      if (minAgeMs !== undefined) {
+        if (ageMs === undefined || ageMs < minAgeMs) {
+          return false
+        }
+      }
+      if (maxAgeMs !== undefined) {
+        if (ageMs === undefined || ageMs > maxAgeMs) {
+          return false
+        }
+      }
+      return true
+    })
+
     // Sort tokens based on sortBy parameter
-    let sortedTokens = tokensWithStats
-    if (sortBy === 'volume') {
-      sortedTokens.sort((a, b) => b.totalVolume - a.totalVolume)
-    } else if (sortBy === 'traders') {
-      sortedTokens.sort((a, b) => b.uniqueTraders - a.uniqueTraders)
-    } else if (sortBy === 'price') {
-      sortedTokens.sort((a, b) => {
-        const priceA = a.price?.priceSol || 0
-        const priceB = b.price?.priceSol || 0
-        return priceB - priceA
-      })
+    switch (sortBy) {
+      case 'totalVolume':
+        filteredTokens.sort((a, b) => (b.totalVolume ?? 0) - (a.totalVolume ?? 0))
+        break
+      case 'buyVolume':
+        filteredTokens.sort((a, b) => (b.buyVolume ?? 0) - (a.buyVolume ?? 0))
+        break
+      case 'sellVolume':
+        filteredTokens.sort((a, b) => (b.sellVolume ?? 0) - (a.sellVolume ?? 0))
+        break
+      case 'uniqueTraders':
+        filteredTokens.sort((a, b) => (b.uniqueTraders ?? 0) - (a.uniqueTraders ?? 0))
+        break
+      case 'tokenAge':
+        filteredTokens.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
+        break
+      case 'lastTrade':
+        filteredTokens.sort((a, b) => (b.lastTradeTimestamp ?? 0) - (a.lastTradeTimestamp ?? 0))
+        break
+      case 'marketCap':
+      default:
+        filteredTokens.sort((a, b) => (b.marketCapUsd ?? 0) - (a.marketCapUsd ?? 0))
+        break
     }
 
+    const totalFiltered = filteredTokens.length
+    const startIndex = (page - 1) * limit
+    const paginatedTokens =
+      startIndex >= totalFiltered ? [] : filteredTokens.slice(startIndex, startIndex + limit)
+
     return NextResponse.json({
-      tokens: sortedTokens,
+      tokens: paginatedTokens,
       pagination: {
         page,
         limit,
-        total,
-        totalPages: Math.ceil(total / limit),
+        total: totalFiltered,
+        totalPages: totalFiltered === 0 ? 0 : Math.ceil(totalFiltered / limit),
       },
     })
   } catch (error) {

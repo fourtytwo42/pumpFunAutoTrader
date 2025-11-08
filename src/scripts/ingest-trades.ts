@@ -1,7 +1,7 @@
 import { Prisma, PrismaClient } from '@prisma/client'
 import { Decimal } from '@prisma/client/runtime/library'
 import WebSocket from 'ws'
-import { decodePumpUnifiedTradePayload, normaliseMetadataUri, PumpUnifiedTrade } from '@/lib/pump/unified-trade'
+import { decodePumpUnifiedTradePayload, PumpUnifiedTrade } from '@/lib/pump/unified-trade'
 
 function enforceConnectionLimit(url?: string): string | undefined {
   if (!url) return url
@@ -50,18 +50,6 @@ const NATS_CONNECT_PAYLOAD = {
 }
 const SUBJECTS = ['unifiedTradeEvent.processed']
 
-interface TokenMetadata {
-  name?: string
-  symbol?: string
-  image?: string
-  description?: string
-  twitter?: string
-  telegram?: string
-  website?: string
-  [key: string]: unknown
-}
-
-const metadataCache = new Map<string, Promise<TokenMetadata | null>>()
 const tradeQueue: PumpUnifiedTrade[] = []
 let isProcessingQueue = false
 
@@ -75,36 +63,11 @@ interface PreparedTradeContext {
   timestampMs: number
   priceSol: Decimal
   priceUsd: Decimal
-  metadata: TokenMetadata | null
   fallbackSymbol: string
   fallbackName: string
   creatorAddress: string
   createdTs: number
   logSymbol: string
-}
-
-async function fetchTokenMetadata(uri: string): Promise<TokenMetadata | null> {
-  if (metadataCache.has(uri)) {
-    return metadataCache.get(uri)!
-  }
-
-  const task = (async () => {
-    try {
-      const response = await fetch(uri, { headers: { accept: 'application/json' }, cache: 'no-store' })
-      if (!response.ok) {
-        console.warn(`[pump-feed] Metadata request failed (${response.status}) for ${uri}`)
-        return null
-      }
-      const json = (await response.json()) as TokenMetadata
-      return json
-    } catch (error) {
-      console.warn(`[pump-feed] Metadata fetch error for ${uri}:`, (error as Error).message)
-      return null
-    }
-  })()
-
-  metadataCache.set(uri, task)
-  return task
 }
 
 let solPriceCache = {
@@ -182,9 +145,6 @@ async function prepareTradeContext(
     : amountSol.mul(priceUsd)
   amountUsd = amountUsd.toDecimalPlaces(2)
 
-  const metadataUri = normaliseMetadataUri(trade.coinMeta?.uri)
-  const metadata = metadataUri ? await fetchTokenMetadata(metadataUri) : null
-
   const creatorAddress = trade.creatorAddress ?? trade.coinMeta?.creator ?? 'unknown'
   const createdTs = trade.coinMeta?.createdTs ?? timestampMs
 
@@ -193,22 +153,17 @@ async function prepareTradeContext(
 
   const fallbackSymbol =
     trade.coinMeta?.symbol ??
-    metadata?.symbol ??
     symbolFromName(trade.coinMeta?.name) ??
-    symbolFromName(metadata?.name) ??
     (trade.mintAddress ? trade.mintAddress.slice(0, 6).toUpperCase() : 'TOKEN')
 
   const fallbackName =
     trade.coinMeta?.name ??
-    metadata?.name ??
     fallbackSymbol ??
     trade.mintAddress ??
     'Unknown Token'
 
   const logSymbol =
     fallbackSymbol ??
-    metadata?.symbol ??
-    metadata?.name ??
     trade.coinMeta?.name ??
     (trade.mintAddress ? `${trade.mintAddress.slice(0, 4)}…` : 'UNKNOWN')
 
@@ -222,7 +177,6 @@ async function prepareTradeContext(
     timestampMs,
     priceSol,
     priceUsd,
-    metadata,
     fallbackSymbol,
     fallbackName,
     creatorAddress,
@@ -239,10 +193,6 @@ async function persistPreparedTrade(ctx: PreparedTradeContext): Promise<void> {
     token = await prisma.token.upsert({
       where: { mintAddress: trade.mintAddress },
       update: {
-        imageUri: ctx.metadata?.image ?? undefined,
-        twitter: ctx.metadata?.twitter ?? undefined,
-        telegram: ctx.metadata?.telegram ?? undefined,
-        website: ctx.metadata?.website ?? undefined,
         symbol: ctx.fallbackSymbol,
         name: ctx.fallbackName,
         price: {
@@ -264,10 +214,10 @@ async function persistPreparedTrade(ctx: PreparedTradeContext): Promise<void> {
         mintAddress: trade.mintAddress,
         symbol: ctx.fallbackSymbol,
         name: ctx.fallbackName,
-        imageUri: ctx.metadata?.image ?? null,
-        twitter: ctx.metadata?.twitter ?? null,
-        telegram: ctx.metadata?.telegram ?? null,
-        website: ctx.metadata?.website ?? null,
+        imageUri: null,
+        twitter: null,
+        telegram: null,
+        website: null,
         creatorAddress: ctx.creatorAddress,
         createdAt: BigInt(ctx.createdTs),
         kingOfTheHillTimestamp: null,
@@ -288,10 +238,6 @@ async function persistPreparedTrade(ctx: PreparedTradeContext): Promise<void> {
       token = await prisma.token.update({
         where: { mintAddress: trade.mintAddress },
         data: {
-          imageUri: ctx.metadata?.image ?? undefined,
-          twitter: ctx.metadata?.twitter ?? undefined,
-          telegram: ctx.metadata?.telegram ?? undefined,
-          website: ctx.metadata?.website ?? undefined,
           symbol: ctx.fallbackSymbol,
           name: ctx.fallbackName,
           price: {

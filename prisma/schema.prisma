@@ -10,6 +10,7 @@ datasource db {
 model User {
   id               String           @id @default(uuid())
   username         String           @unique
+  email            String?          @unique
   passwordHash     String           @map("password_hash")
   role             UserRole         @default(user)
   isActive         Boolean          @default(true) @map("is_active")
@@ -278,6 +279,24 @@ model CacheEntry {
   @@map("cache_kv")
 }
 
+model SmtpConfig {
+  id             String   @id @default("primary")
+  host           String
+  port           Int
+  secure         Boolean  @default(false)
+  username       String?
+  password       String?
+  fromEmail      String   @map("from_email")
+  fromName       String?  @map("from_name")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+  lastTestAt     DateTime? @map("last_test_at")
+  lastTestStatus String?  @map("last_test_status")
+  lastTestError  String?  @map("last_test_error")
+
+  @@map("smtp_config")
+}
+
 model Wallet {
   id         String      @id @default(cuid())
   userId     String?     @map("user_id")
@@ -320,7 +339,6 @@ model Order {
   status          String
   qtyTokens       Decimal?    @map("qty_tokens") @db.Decimal(30, 18)
   qtySol          Decimal?    @map("qty_sol") @db.Decimal(30, 18)
-  limitPriceUsd   Decimal?    @map("limit_price_usd") @db.Decimal(30, 18)
   limitPriceSol   Decimal?    @map("limit_price_sol") @db.Decimal(30, 18)
   slippageBps     Int?        @map("slippage_bps")
   reason          String?

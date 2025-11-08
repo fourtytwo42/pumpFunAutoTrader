@@ -25,11 +25,15 @@ import {
   AdminPanelSettings,
   Logout,
   Settings,
+  Menu as MenuIcon,
+  MenuOpen,
 } from '@mui/icons-material'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { WalletProvider, useWallet } from '@/components/wallet/WalletProvider'
 
-const drawerWidth = 240
+const EXPANDED_DRAWER_WIDTH = 240
+const COLLAPSED_DRAWER_WIDTH = 72
+const SIDEBAR_STORAGE_KEY = 'sidebarCollapsed'
 
 const menuItems = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
@@ -48,7 +52,22 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(true)
+  const drawerWidth = collapsed ? COLLAPSED_DRAWER_WIDTH : EXPANDED_DRAWER_WIDTH
   const { balanceDisplay, openWallet } = useWallet()
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const saved = window.localStorage.getItem(SIDEBAR_STORAGE_KEY)
+    if (saved !== null) {
+      setCollapsed(saved === 'true')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, collapsed ? 'true' : 'false')
+  }, [collapsed])
 
   if (status === 'loading') {
     return <Box>Loading...</Box>
@@ -70,12 +89,35 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     await signOut({ callbackUrl: '/login' })
   }
 
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => !prev)
+  }
+
   const drawer = (
     <Box>
-      <Toolbar>
-        <Typography variant="h6" noWrap component="div">
+      <Toolbar
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: collapsed ? 'center' : 'space-between',
+          px: collapsed ? 1 : 2,
+        }}
+      >
+        <Typography
+          variant="h6"
+          noWrap
+          component="div"
+          sx={{
+            opacity: collapsed ? 0 : 1,
+            pointerEvents: collapsed ? 'none' : 'auto',
+            transition: 'opacity 0.2s ease',
+          }}
+        >
           Pump.fun Mock
         </Typography>
+        <IconButton size="small" onClick={toggleCollapsed} sx={{ color: 'inherit' }}>
+          {collapsed ? <MenuIcon /> : <MenuOpen />}
+        </IconButton>
       </Toolbar>
       <List>
         {allMenuItems.map((item) => (
@@ -83,11 +125,23 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
             <ListItemButton
               selected={pathname === item.path}
               onClick={() => router.push(item.path)}
+              sx={{
+                minHeight: 48,
+                justifyContent: collapsed ? 'center' : 'flex-start',
+                px: collapsed ? 1.5 : 2.5,
+              }}
             >
-              <ListItemIcon sx={{ color: pathname === item.path ? 'primary.main' : 'inherit' }}>
+              <ListItemIcon
+                sx={{
+                  color: pathname === item.path ? 'primary.main' : 'inherit',
+                  minWidth: collapsed ? 0 : 40,
+                  mr: collapsed ? 0 : 2,
+                  justifyContent: 'center',
+                }}
+              >
                 {item.icon}
               </ListItemIcon>
-              <ListItemText primary={item.text} />
+              {!collapsed && <ListItemText primary={item.text} />}
             </ListItemButton>
           </ListItem>
         ))}
@@ -109,6 +163,14 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
             sx={{ mr: 2, display: { sm: 'none' } }}
           >
             <DashboardIcon />
+          </IconButton>
+          <IconButton
+            color="inherit"
+            edge="start"
+            onClick={toggleCollapsed}
+            sx={{ mr: 2, display: { xs: 'none', sm: 'inline-flex' } }}
+          >
+            {collapsed ? <MenuIcon /> : <MenuOpen />}
           </IconButton>
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
             Pump.fun Mock Trader

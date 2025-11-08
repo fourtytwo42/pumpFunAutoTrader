@@ -10,7 +10,6 @@ import {
   Grid,
   Card,
   CardContent,
-  Avatar,
   Chip,
   CircularProgress,
   Pagination,
@@ -21,6 +20,13 @@ import {
   Paper,
   Divider,
   Stack,
+  Tooltip,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Slider,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
@@ -28,22 +34,103 @@ import TrendingDownIcon from "@mui/icons-material/TrendingDown";
 import TwitterIcon from "@mui/icons-material/Twitter";
 import TelegramIcon from "@mui/icons-material/Telegram";
 import LanguageIcon from "@mui/icons-material/Language";
+import SettingsIcon from "@mui/icons-material/Settings";
+import CloseIcon from "@mui/icons-material/Close";
 import { useRouter } from "next/navigation";
 import IconButton from "@mui/material/IconButton";
 
-const TIMEFRAME_OPTIONS = ['1m', '5m', '15m', '30m', '1h', '6h', '24h', '7d', '30d', 'all'] as const;
+const TIMEFRAME_OPTIONS = ['1m', '2m', '5m', '10m', '15m', '30m', '60m'] as const;
 type TimeframeOption = (typeof TIMEFRAME_OPTIONS)[number];
 const TIMEFRAME_LABELS: Record<TimeframeOption, string> = {
   '1m': '1 minute',
+  '2m': '2 minutes',
   '5m': '5 minutes',
+  '10m': '10 minutes',
   '15m': '15 minutes',
   '30m': '30 minutes',
-  '1h': '1 hour',
-  '6h': '6 hours',
-  '24h': '24 hours',
-  '7d': '7 days',
-  '30d': '30 days',
-  all: 'All time',
+  '60m': '60 minutes',
+};
+
+const MARKET_CAP_MIN = 0;
+const MARKET_CAP_MAX = 1_000_000;
+const UNIQUE_TRADERS_MIN = 0;
+const UNIQUE_TRADERS_MAX = 1_000;
+const TRADE_AMOUNT_MIN = 0;
+const TRADE_AMOUNT_MAX = 100;
+const TOKEN_AGE_MIN_HOURS = 0;
+const TOKEN_AGE_MAX_HOURS = 168; // 7 days
+
+type FilterState = {
+  marketCap: [number, number];
+  uniqueTraders: [number, number];
+  tradeAmount: [number, number];
+  tokenAge: [number, number];
+};
+
+const DEFAULT_FILTERS: FilterState = {
+  marketCap: [MARKET_CAP_MIN, MARKET_CAP_MAX],
+  uniqueTraders: [1, UNIQUE_TRADERS_MAX],
+  tradeAmount: [TRADE_AMOUNT_MIN, TRADE_AMOUNT_MAX],
+  tokenAge: [TOKEN_AGE_MIN_HOURS, TOKEN_AGE_MAX_HOURS],
+};
+
+const clampValue = (value: number, min: number, max: number) =>
+  Math.min(Math.max(value, min), max);
+
+const hexToRgb = (hex: string) => {
+  const sanitized = hex.replace("#", "");
+  if (sanitized.length !== 6) {
+    return { r: 0, g: 0, b: 0 };
+  }
+  const numeric = parseInt(sanitized, 16);
+  return {
+    r: (numeric >> 16) & 255,
+    g: (numeric >> 8) & 255,
+    b: numeric & 255,
+  };
+};
+
+const rgbToHex = (r: number, g: number, b: number) =>
+  `#${[r, g, b]
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("")}`;
+
+const mixHexColors = (fromHex: string, toHex: string, amount: number) => {
+  const t = clampValue(amount, 0, 1);
+  const from = hexToRgb(fromHex);
+  const to = hexToRgb(toHex);
+
+  return rgbToHex(
+    Math.round(from.r + (to.r - from.r) * t),
+    Math.round(from.g + (to.g - from.g) * t),
+    Math.round(from.b + (to.b - from.b) * t)
+  );
+};
+
+const hexToRgba = (hex: string, alpha: number) => {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const sanitizeRange = (
+  candidate: unknown,
+  min: number,
+  max: number,
+  fallback: [number, number]
+): [number, number] => {
+  if (!Array.isArray(candidate) || candidate.length !== 2) {
+    return fallback;
+  }
+  let [start, end] = candidate.map((value) => Number(value));
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    return fallback;
+  }
+  start = Math.min(Math.max(start, min), max);
+  end = Math.min(Math.max(end, min), max);
+  if (start > end) {
+    [start, end] = [end, start];
+  }
+  return [start, end];
 };
 
 interface Token {
@@ -84,8 +171,47 @@ export default function TokensPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [sortBy, setSortBy] = useState("volume");
-  const [timeframe, setTimeframe] = useState<TimeframeOption>('24h');
+  const [sortBy, setSortBy] = useState("marketCap");
+  const [timeframe, setTimeframe] = useState<TimeframeOption>('10m');
+  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = localStorage.getItem("tokenFeedFilters");
+      if (!saved) return;
+      const parsed = JSON.parse(saved);
+      setFilters({
+        marketCap: sanitizeRange(parsed?.marketCap, MARKET_CAP_MIN, MARKET_CAP_MAX, DEFAULT_FILTERS.marketCap),
+        uniqueTraders: sanitizeRange(
+          parsed?.uniqueTraders,
+          UNIQUE_TRADERS_MIN,
+          UNIQUE_TRADERS_MAX,
+          DEFAULT_FILTERS.uniqueTraders
+        ),
+        tradeAmount: sanitizeRange(
+          parsed?.tradeAmount,
+          TRADE_AMOUNT_MIN,
+          TRADE_AMOUNT_MAX,
+          DEFAULT_FILTERS.tradeAmount
+        ),
+        tokenAge: sanitizeRange(
+          parsed?.tokenAge,
+          TOKEN_AGE_MIN_HOURS,
+          TOKEN_AGE_MAX_HOURS,
+          DEFAULT_FILTERS.tokenAge
+        ),
+      });
+    } catch (error) {
+      console.warn("Failed to parse saved token feed filters:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("tokenFeedFilters", JSON.stringify(filters));
+  }, [filters]);
 
   const fetchTokens = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -97,11 +223,33 @@ export default function TokensPage() {
       if (search) {
         params.append("search", search);
       }
-      if (sortBy) {
-        params.append("sortBy", sortBy);
-      }
+      params.append("sortBy", sortBy);
       if (timeframe) {
         params.append("timeframe", timeframe);
+      }
+      if (filters.marketCap[0] > MARKET_CAP_MIN) {
+        params.append("marketCapMin", Math.round(filters.marketCap[0]).toString());
+      }
+      if (filters.marketCap[1] < MARKET_CAP_MAX) {
+        params.append("marketCapMax", Math.round(filters.marketCap[1]).toString());
+      }
+      if (filters.uniqueTraders[0] > UNIQUE_TRADERS_MIN) {
+        params.append("uniqueTradersMin", Math.round(filters.uniqueTraders[0]).toString());
+      }
+      if (filters.uniqueTraders[1] < UNIQUE_TRADERS_MAX) {
+        params.append("uniqueTradersMax", Math.round(filters.uniqueTraders[1]).toString());
+      }
+      if (filters.tradeAmount[0] > TRADE_AMOUNT_MIN) {
+        params.append("tradeAmountMin", filters.tradeAmount[0].toString());
+      }
+      if (filters.tradeAmount[1] < TRADE_AMOUNT_MAX) {
+        params.append("tradeAmountMax", filters.tradeAmount[1].toString());
+      }
+      if (filters.tokenAge[0] > TOKEN_AGE_MIN_HOURS) {
+        params.append("tokenAgeMin", filters.tokenAge[0].toString());
+      }
+      if (filters.tokenAge[1] < TOKEN_AGE_MAX_HOURS) {
+        params.append("tokenAgeMax", filters.tokenAge[1].toString());
       }
 
       const response = await fetch(`/api/tokens?${params}`);
@@ -113,7 +261,7 @@ export default function TokensPage() {
     } finally {
       if (showLoading) setLoading(false);
     }
-  }, [page, search, sortBy, timeframe]);
+  }, [filters, page, search, sortBy, timeframe]);
 
   useEffect(() => {
     // Initial fetch with loading indicator
@@ -132,18 +280,17 @@ export default function TokensPage() {
     setPage(1);
   };
 
-  const getCardColor = (volumeRatio: number) => {
-    if (volumeRatio > 0.6) {
-      // More green for higher buy volume - pump.fun style
-      const intensity = Math.min((volumeRatio - 0.6) / 0.4, 1);
-      return `rgba(0, 255, 136, ${0.15 + intensity * 0.25})`;
-    } else if (volumeRatio < 0.4) {
-      // More red for higher sell volume
-      const intensity = Math.min((0.4 - volumeRatio) / 0.4, 1);
-      return `rgba(255, 68, 68, ${0.15 + intensity * 0.25})`;
-    }
-    return "rgba(26, 26, 26, 1)";
-  };
+  const handleRangeChange = useCallback(
+    (key: keyof FilterState) => (_event: Event, newValue: number | number[]) => {
+      if (!Array.isArray(newValue)) return;
+      setFilters((prev) => ({
+        ...prev,
+        [key]: [Number(newValue[0]), Number(newValue[1])] as [number, number],
+      }));
+      setPage(1);
+    },
+    []
+  );
 
   const formatPricePerMillion = (priceUsd: number | null | undefined) => {
     // Check for null/undefined/NaN/zero
@@ -254,14 +401,164 @@ export default function TokensPage() {
     return `${(volumeSol / 1000).toFixed(2)}K SOL`;
   };
 
-  const formatMarketCapUsd = (value?: number) => {
-    if (!value || value <= 0) return "N/A";
-    return formatVolume(value);
+const formatAge = (hours: number) => {
+  if (!Number.isFinite(hours) || hours <= 0) {
+    return "0h";
+  }
+
+  if (hours < 1) {
+    const minutes = Math.round(hours * 60);
+    return `${minutes} min${minutes === 1 ? "" : "s"}`;
+  }
+
+  const wholeHours = Math.round(hours);
+  if (wholeHours < 24) {
+    return `${wholeHours}h`;
+  }
+
+  const days = Math.floor(wholeHours / 24);
+  const remainingHours = wholeHours % 24;
+  if (remainingHours === 0) {
+    return `${days}d`;
+  }
+  return `${days}d ${remainingHours}h`;
+};
+
+  const renderUsdMetric = (
+    label: string,
+    usdValue: number | undefined,
+    solValue: number | undefined,
+    highlight?: boolean
+  ) => {
+    const usd = usdValue ?? 0;
+    const sol = solValue ?? 0;
+    const tooltipTitle =
+      sol > 0 ? `${formatVolumeSol(sol)} (SOL)` : "No SOL data";
+
+    return (
+      <Stack spacing={0.5} alignItems="flex-start">
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ fontWeight: highlight ? 600 : 500 }}
+        >
+          {label}
+        </Typography>
+        <Tooltip title={tooltipTitle} arrow disableHoverListener={sol <= 0}>
+          <Typography
+            variant="subtitle1"
+            sx={{
+              fontWeight: 700,
+              color: highlight ? "#31F28C" : "inherit",
+            }}
+          >
+            {formatVolume(usd)}
+          </Typography>
+        </Tooltip>
+      </Stack>
+    );
   };
 
-  const formatMarketCapSol = (value?: number) => {
-    if (!value || value <= 0) return "N/A";
-    return formatVolumeSol(value);
+  const getVolumeVisuals = useCallback(
+    (buyVolume?: number, sellVolume?: number) => {
+      const buy = buyVolume ?? 0;
+      const sell = sellVolume ?? 0;
+      const total = buy + sell;
+
+      if (total <= 0) {
+        return {
+          border: "#222a3c",
+          background: "linear-gradient(160deg, #111623 0%, #111623 100%)",
+          shadow: "none",
+          hoverShadow: "none",
+          hoverBorder: "#2f3b54",
+        };
+      }
+
+      const diff = buy - sell;
+      const absDiff = Math.abs(diff);
+
+      if (absDiff === 0) {
+        return {
+          border: "#2c3145",
+          background: "linear-gradient(160deg, #111623 0%, #111623 100%)",
+          shadow: "none",
+          hoverShadow: "none",
+          hoverBorder: "#39425c",
+        };
+      }
+
+      const direction = diff >= 0 ? "buy" : "sell";
+      const diffRatio = total === 0 ? 0 : absDiff / total;
+      const magnitudeFactor = clampValue(Math.log10(total + 10) / 5, 0, 1);
+      const intensity = clampValue(
+        0.15 + diffRatio * 0.55 + magnitudeFactor * 0.35,
+        0.15,
+        1
+      );
+
+      const palette =
+        direction === "buy"
+          ? {
+              borderStart: "#153127",
+              borderEnd: "#31F28C",
+              backgroundStart: "#101A15",
+              backgroundEnd: "#123527",
+              glow: "#31F28C",
+            }
+          : {
+              borderStart: "#351919",
+              borderEnd: "#FF5C5C",
+              backgroundStart: "#1A1111",
+              backgroundEnd: "#321818",
+              glow: "#FF5C5C",
+            };
+
+      const border = mixHexColors(palette.borderStart, palette.borderEnd, intensity);
+      const backgroundTint = mixHexColors(
+        palette.backgroundStart,
+        palette.backgroundEnd,
+        intensity * 0.75
+      );
+      const hoverBorder = mixHexColors(
+        border,
+        palette.borderEnd,
+        clampValue(intensity + 0.2, 0, 1)
+      );
+      const emphasize =
+        diffRatio >= 0.6 || (diffRatio >= 0.45 && magnitudeFactor >= 0.6);
+      const glow = emphasize
+        ? hexToRgba(palette.glow, 0.16 + intensity * 0.22)
+        : "transparent";
+      const hoverGlow = emphasize
+        ? hexToRgba(palette.glow, 0.24 + intensity * 0.22)
+        : glow;
+
+      return {
+        border,
+        background: `linear-gradient(160deg, #111623 0%, ${backgroundTint} 100%)`,
+        shadow: emphasize
+          ? `0 18px 42px rgba(0,0,0,0.26), 0 0 26px ${glow}`
+          : "none",
+        hoverShadow: emphasize
+          ? `0 32px 68px rgba(0,0,0,0.36), 0 0 40px ${hoverGlow}`
+          : "none",
+        hoverBorder,
+      };
+    },
+    []
+  );
+
+  const formatRangeLabel = (
+    range: [number, number],
+    formatter: (value: number) => string,
+    maxLimit: number
+  ) => {
+    const [minValue, maxValue] = range;
+    const minLabel = formatter(minValue);
+    const maxLabel =
+      maxValue >= maxLimit ? `${formatter(maxValue)}+` : formatter(maxValue);
+    return `${minLabel} – ${maxLabel}`;
   };
 
   return (
@@ -276,20 +573,41 @@ export default function TokensPage() {
           gap: 2,
         }}
       >
-        <Typography variant="h4" component="h1">
-          Tokens
-        </Typography>
+        <Stack direction="row" alignItems="center" spacing={2}>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<SettingsIcon />}
+            sx={{
+              textTransform: "none",
+              borderColor: "rgba(255,255,255,0.12)",
+            }}
+            onClick={() => setSettingsOpen(true)}
+          >
+            Settings
+          </Button>
+          <Typography variant="h4" component="h1">
+            Tokens
+          </Typography>
+        </Stack>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
           <FormControl size="small" sx={{ minWidth: 150 }}>
             <InputLabel>Sort By</InputLabel>
             <Select
               value={sortBy}
               label="Sort By"
-              onChange={(e) => setSortBy(e.target.value)}
+              onChange={(e) => {
+                setSortBy(e.target.value);
+                setPage(1);
+              }}
             >
-              <MenuItem value="volume">Volume</MenuItem>
-              <MenuItem value="traders">Traders</MenuItem>
-              <MenuItem value="price">Price</MenuItem>
+              <MenuItem value="marketCap">Market Cap</MenuItem>
+              <MenuItem value="totalVolume">Total Volume</MenuItem>
+              <MenuItem value="buyVolume">Buy Volume</MenuItem>
+              <MenuItem value="sellVolume">Sell Volume</MenuItem>
+              <MenuItem value="uniqueTraders">Unique Traders</MenuItem>
+              <MenuItem value="tokenAge">Token Age</MenuItem>
+              <MenuItem value="lastTrade">Last Trade</MenuItem>
             </Select>
           </FormControl>
           <FormControl size="small" sx={{ minWidth: 160 }}>
@@ -357,125 +675,156 @@ export default function TokensPage() {
       ) : (
         <>
           <Grid container spacing={2}>
-            {tokens.map((token) => (
-              <Grid item xs={12} sm={6} md={4} lg={3} key={token.id}>
-                <Card
-                  sx={{
-                    cursor: "pointer",
-                    transition: "all 0.2s ease",
-                    "&:hover": {
-                      transform: "translateY(-4px)",
-                      boxShadow: "0 8px 24px rgba(0, 255, 136, 0.2)",
-                    },
-                    backgroundColor: getCardColor(token.volumeRatio),
-                    border: "2px solid",
-                    borderColor:
-                      token.volumeRatio > 0.6
-                        ? "rgba(0, 255, 136, 0.3)"
-                        : token.volumeRatio < 0.4
-                          ? "rgba(255, 68, 68, 0.3)"
-                          : "#333",
-                    position: "relative",
-                  }}
-                  onClick={() =>
-                    router.push(`/dashboard/tokens/${token.mintAddress}`)
-                  }
-                >
-                  {token.completed && (
-                    <Chip
-                      label="Graduated"
-                      color="primary"
-                      size="small"
-                      sx={{ position: "absolute", top: 12, right: 12 }}
-                    />
-                  )}
-                  <CardContent
+            {tokens.map((token) => {
+              const visuals = getVolumeVisuals(
+                token.buyVolume,
+                token.sellVolume
+              );
+
+              return (
+                <Grid item xs={12} sm={6} md={4} lg={3} key={token.id}>
+                  <Card
+                    onClick={() =>
+                      router.push(`/dashboard/tokens/${token.mintAddress}`)
+                    }
                     sx={{
-                      p: 2,
+                      cursor: "pointer",
+                      transition: "all 0.25s ease",
+                      height: "100%",
+                      minHeight: 340,
                       display: "flex",
                       flexDirection: "column",
-                      gap: 1.5,
+                      borderRadius: 3,
+                      overflow: "hidden",
+                      border: "1px solid",
+                      borderColor: visuals.border,
+                      background: visuals.background,
+                      boxShadow: visuals.shadow,
+                      "&:hover": {
+                        transform: "translateY(-6px)",
+                        borderColor: visuals.hoverBorder,
+                        boxShadow: visuals.hoverShadow,
+                      },
                     }}
                   >
-                    <Box sx={{ display: "flex", justifyContent: "center" }}>
-                      {token.imageUri ? (
-                        <Box
-                          component="img"
-                          src={token.imageUri}
-                          alt={token.name}
-                          sx={{
-                            width: 84,
-                            height: 84,
-                            borderRadius: "12px",
-                            objectFit: "cover",
-                            backgroundColor: "rgba(255, 255, 255, 0.06)",
-                            border: "2px solid rgba(255, 255, 255, 0.08)",
-                            display: "block",
-                          }}
-                          onError={(e: any) => {
-                            e.target.style.display = "none";
-                            const fallback =
-                              e.target.parentElement?.querySelector(
-                                ".token-fallback",
-                              );
-                            if (fallback) {
-                              (fallback as HTMLElement).style.display = "flex";
-                            }
-                          }}
-                        />
-                      ) : null}
+                    <CardContent
+                      sx={{
+                        flex: 1,
+                        display: "flex",
+                        flexDirection: "column",
+                        p: { xs: 2, md: 2.5 },
+                        gap: 2,
+                      }}
+                    >
+                    <Stack spacing={2} alignItems="center" width="100%">
                       <Box
-                        className="token-fallback"
                         sx={{
-                          width: 84,
-                          height: 84,
-                          borderRadius: "12px",
-                          backgroundColor: "rgba(255, 255, 255, 0.06)",
-                          border: "2px solid rgba(255, 255, 255, 0.08)",
-                          display: token.imageUri ? "none" : "flex",
+                          width: 80,
+                          height: 80,
+                          borderRadius: "16px",
+                          backgroundColor: "rgba(255, 255, 255, 0.05)",
+                          border: "1px solid rgba(255, 255, 255, 0.08)",
+                          display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
-                          fontSize: "30px",
-                          fontWeight: "bold",
-                          color: "text.secondary",
+                          overflow: "hidden",
+                          position: "relative",
                         }}
                       >
-                        {token.symbol.charAt(0)}
+                        {token.imageUri ? (
+                          <Box
+                            component="img"
+                            src={token.imageUri}
+                            alt={token.name}
+                            sx={{
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover",
+                            }}
+                            onError={(e: any) => {
+                              e.currentTarget.style.display = "none";
+                            }}
+                          />
+                        ) : (
+                          <Typography
+                            variant="h4"
+                            sx={{ fontWeight: 700, color: "rgba(255,255,255,0.4)" }}
+                          >
+                            {token.symbol?.charAt(0) ?? "?"}
+                          </Typography>
+                        )}
+                        {token.completed && (
+                          <Chip
+                            label="Graduated"
+                            color="primary"
+                            size="small"
+                            sx={{
+                              position: "absolute",
+                              bottom: -12,
+                              borderRadius: "999px",
+                            }}
+                          />
+                        )}
                       </Box>
-                    </Box>
 
-                    <Stack spacing={0.6} alignItems="center">
-                      <Typography
-                        variant="h6"
-                        noWrap
-                        sx={{ fontWeight: "bold" }}
-                      >
-                        {token.name}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" noWrap>
-                        {token.symbol}
-                      </Typography>
-                      {(token.twitter || token.telegram || token.website) && (
-                        <Stack
-                          direction="row"
-                          spacing={0.75}
-                          justifyContent="center"
+                      <Stack spacing={1} alignItems="center" width="100%">
+                        <Tooltip title={token.name} placement="top" arrow>
+                          <Typography
+                            variant="h6"
+                            sx={{
+                              fontWeight: 700,
+                              maxWidth: "100%",
+                              textAlign: "center",
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              letterSpacing: 0.4,
+                            }}
+                          >
+                            {token.name}
+                          </Typography>
+                        </Tooltip>
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{
+                            fontWeight: 500,
+                            letterSpacing: 0.4,
+                            maxWidth: "100%",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {token.symbol}
+                        </Typography>
+                        <Box
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: 1,
+                            minHeight: 40,
+                            width: "100%",
+                          }}
                         >
                           {token.twitter && (
                             <IconButton
                               size="small"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                window.open(
-                                  token.twitter!,
-                                  "_blank",
-                                  "noopener,noreferrer",
-                                );
+                                window.open(token.twitter!, "_blank", "noopener,noreferrer");
                               }}
                               sx={{
-                                color: "text.secondary",
-                                "&:hover": { color: "#1DA1F2" },
-                                p: 0.4,
+                                width: 32,
+                                height: 32,
+                                backgroundColor: "rgba(255,255,255,0.06)",
+                                color: "#7C8DB5",
+                                borderRadius: "12px",
+                                "&:hover": {
+                                  backgroundColor: "rgba(29,161,242,0.16)",
+                                  color: "#1DA1F2",
+                                },
                               }}
                             >
                               <TwitterIcon fontSize="small" />
@@ -486,16 +835,18 @@ export default function TokensPage() {
                               size="small"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                window.open(
-                                  token.telegram!,
-                                  "_blank",
-                                  "noopener,noreferrer",
-                                );
+                                window.open(token.telegram!, "_blank", "noopener,noreferrer");
                               }}
                               sx={{
-                                color: "text.secondary",
-                                "&:hover": { color: "#0088cc" },
-                                p: 0.4,
+                                width: 32,
+                                height: 32,
+                                backgroundColor: "rgba(255,255,255,0.06)",
+                                color: "#7C8DB5",
+                                borderRadius: "12px",
+                                "&:hover": {
+                                  backgroundColor: "rgba(0,136,204,0.18)",
+                                  color: "#0088cc",
+                                },
                               }}
                             >
                               <TelegramIcon fontSize="small" />
@@ -506,155 +857,114 @@ export default function TokensPage() {
                               size="small"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                window.open(
-                                  token.website!,
-                                  "_blank",
-                                  "noopener,noreferrer",
-                                );
+                                window.open(token.website!, "_blank", "noopener,noreferrer");
                               }}
                               sx={{
-                                color: "text.secondary",
-                                "&:hover": { color: "primary.main" },
-                                p: 0.4,
+                                width: 32,
+                                height: 32,
+                                backgroundColor: "rgba(255,255,255,0.06)",
+                                color: "#7C8DB5",
+                                borderRadius: "12px",
+                                "&:hover": {
+                                  backgroundColor: "rgba(0,255,136,0.16)",
+                                  color: "primary.main",
+                                },
                               }}
                             >
                               <LanguageIcon fontSize="small" />
                             </IconButton>
                           )}
-                        </Stack>
-                      )}
-                    </Stack>
-
-                    <Stack
-                      direction="row"
-                      spacing={1.5}
-                      justifyContent="center"
-                      flexWrap="wrap"
-                    >
-                      <Box sx={{ textAlign: "center" }}>
-                        <Typography variant="caption" color="text.secondary">
-                          Price (per 1M)
-                        </Typography>
-                        <Typography
-                          variant="subtitle2"
-                          sx={{ fontWeight: 600 }}
-                        >
-                          {token.price && token.price.priceUsd != null
-                            ? formatPricePerMillion(
-                                Number(token.price.priceUsd),
-                              )
-                            : "N/A"}
-                        </Typography>
-                        {token.price &&
-                          token.price.priceSol &&
-                          Number(token.price.priceSol) > 0 && (
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              {formatSolPerMillion(
-                                Number(token.price.priceSol),
-                              )}
-                            </Typography>
+                          {!token.twitter && !token.telegram && !token.website && (
+                            <Box sx={{ height: 32 }} />
                           )}
-                      </Box>
-                      <Box sx={{ textAlign: "center" }}>
-                        <Typography variant="caption" color="text.secondary">
-                          Market Cap
-                        </Typography>
-                        <Typography
-                          variant="subtitle2"
-                          sx={{ fontWeight: 600 }}
-                        >
-                          {token.marketCapUsd
-                            ? formatMarketCapUsd(token.marketCapUsd)
-                            : "N/A"}
-                        </Typography>
-                        {token.marketCapSol ? (
-                          <Typography variant="caption" color="text.secondary">
-                            {formatMarketCapSol(token.marketCapSol)}
-                          </Typography>
-                        ) : null}
-                      </Box>
+                        </Box>
+                      </Stack>
                     </Stack>
 
-                    <Stack spacing={0.25} alignItems="center">
-                      <Typography variant="caption" color="text.secondary">
-                        Age: {formatTimeAgo(token.createdAt)} • Last:{" "}
-                        {formatTimeAgo(token.lastTradeTimestamp, "No trades")}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {getKothLabel(token)}
-                      </Typography>
-                    </Stack>
+                    <Divider sx={{ borderColor: "rgba(255,255,255,0.06)" }} />
 
-                    <Grid container spacing={1} columns={12}>
+                    <Grid container spacing={2}>
                       <Grid item xs={6}>
-                        <Stack
-                          spacing={0.25}
-                          alignItems={{ xs: "center", sm: "flex-start" }}
-                        >
+                        {renderUsdMetric(
+                          "Market Cap",
+                          token.marketCapUsd,
+                          token.marketCapSol,
+                          true
+                        )}
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Stack spacing={0.5} alignItems="flex-start">
                           <Typography variant="caption" color="text.secondary">
-                            Buy
+                            Price (per 1M)
                           </Typography>
-                          <Typography variant="body2">
-                            {formatVolume(token.buyVolume)}
-                            {token.buyVolumeSol
-                              ? ` (${formatVolumeSol(token.buyVolumeSol)})`
-                              : ""}
-                          </Typography>
+                          <Tooltip
+                            title={
+                              token.price?.priceSol
+                                ? `${formatSolPerMillion(Number(token.price.priceSol))} (SOL)`
+                                : 'No SOL data'
+                            }
+                            arrow
+                            disableHoverListener={!token.price?.priceSol}
+                          >
+                            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                              {token.price && token.price.priceUsd != null
+                                ? formatPricePerMillion(Number(token.price.priceUsd))
+                                : "N/A"}
+                            </Typography>
+                          </Tooltip>
                         </Stack>
                       </Grid>
                       <Grid item xs={6}>
-                        <Stack
-                          spacing={0.25}
-                          alignItems={{ xs: "center", sm: "flex-start" }}
-                        >
-                          <Typography variant="caption" color="text.secondary">
-                            Sell
-                          </Typography>
-                          <Typography variant="body2">
-                            {formatVolume(token.sellVolume)}
-                            {token.sellVolumeSol
-                              ? ` (${formatVolumeSol(token.sellVolumeSol)})`
-                              : ""}
-                          </Typography>
-                        </Stack>
+                        {renderUsdMetric(
+                          "Buy Volume",
+                          token.buyVolume,
+                          token.buyVolumeSol
+                        )}
                       </Grid>
                       <Grid item xs={6}>
-                        <Stack
-                          spacing={0.25}
-                          alignItems={{ xs: "center", sm: "flex-start" }}
-                        >
-                          <Typography variant="caption" color="text.secondary">
-                            Total Vol
-                          </Typography>
-                          <Typography variant="body2">
-                            {formatVolume(token.totalVolume)}
-                            {token.totalVolumeSol
-                              ? ` (${formatVolumeSol(token.totalVolumeSol)})`
-                              : ""}
-                          </Typography>
-                        </Stack>
+                        {renderUsdMetric(
+                          "Sell Volume",
+                          token.sellVolume,
+                          token.sellVolumeSol
+                        )}
                       </Grid>
                       <Grid item xs={6}>
-                        <Stack
-                          spacing={0.25}
-                          alignItems={{ xs: "center", sm: "flex-start" }}
-                        >
+                        {renderUsdMetric(
+                          "Total Volume",
+                          token.totalVolume,
+                          token.totalVolumeSol
+                        )}
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Stack spacing={0.5} alignItems="flex-start">
                           <Typography variant="caption" color="text.secondary">
-                            Traders
+                            Unique Traders
                           </Typography>
-                          <Typography variant="body2">
+                          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
                             {token.uniqueTraders}
                           </Typography>
                         </Stack>
                       </Grid>
                     </Grid>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
+
+                    <Divider sx={{ borderColor: "rgba(255,255,255,0.06)" }} />
+
+                    <Stack spacing={0.5} alignItems="flex-start">
+                      <Typography variant="caption" color="text.secondary">
+                        Created {formatTimeAgo(token.createdAt)}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Last activity {formatTimeAgo(token.lastTradeTimestamp, "No trades")}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {getKothLabel(token)}
+                      </Typography>
+                    </Stack>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              );
+            })}
           </Grid>
 
           {totalPages > 1 && (
@@ -669,6 +979,146 @@ export default function TokensPage() {
           )}
         </>
       )}
+
+      <Dialog
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        fullWidth
+        maxWidth="sm"
+        PaperProps={{
+          sx: {
+            backgroundColor: "#08090B",
+            color: "inherit",
+            borderRadius: 3,
+            border: "1px solid rgba(255,255,255,0.08)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            pr: 1,
+            pb: 1,
+          }}
+        >
+          <Stack spacing={0.5}>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>
+              Token Feed Settings
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Control which tokens appear in the feed by adjusting market cap, trader counts,
+              trade sizes, and token age.
+            </Typography>
+          </Stack>
+          <IconButton
+            aria-label="Close settings"
+            onClick={() => setSettingsOpen(false)}
+            sx={{ color: "text.secondary" }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+
+        <DialogContent dividers sx={{ px: 3 }}>
+          <Stack spacing={3}>
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                Market Cap Range
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                {formatRangeLabel(filters.marketCap, formatVolume, MARKET_CAP_MAX)}
+              </Typography>
+              <Slider
+                value={filters.marketCap}
+                min={MARKET_CAP_MIN}
+                max={MARKET_CAP_MAX}
+                step={1000}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => formatVolume(value)}
+                onChange={handleRangeChange("marketCap")}
+              />
+            </Box>
+
+            <Divider sx={{ borderColor: "rgba(255,255,255,0.08)" }} />
+
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                Unique Traders Range
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                {formatRangeLabel(
+                  filters.uniqueTraders,
+                  (value) => value.toLocaleString(),
+                  UNIQUE_TRADERS_MAX
+                )}
+              </Typography>
+              <Slider
+                value={filters.uniqueTraders}
+                min={UNIQUE_TRADERS_MIN}
+                max={UNIQUE_TRADERS_MAX}
+                step={1}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => value.toLocaleString()}
+                onChange={handleRangeChange("uniqueTraders")}
+              />
+            </Box>
+
+            <Divider sx={{ borderColor: "rgba(255,255,255,0.08)" }} />
+
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                Trade Amount Range (SOL)
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                {formatRangeLabel(filters.tradeAmount, formatVolumeSol, TRADE_AMOUNT_MAX)}
+              </Typography>
+              <Slider
+                value={filters.tradeAmount}
+                min={TRADE_AMOUNT_MIN}
+                max={TRADE_AMOUNT_MAX}
+                step={0.1}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => `${value.toFixed(1)} SOL`}
+                onChange={handleRangeChange("tradeAmount")}
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+                Only count traders whose individual trades fall within this SOL range.
+              </Typography>
+            </Box>
+
+            <Divider sx={{ borderColor: "rgba(255,255,255,0.08)" }} />
+
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                Token Age Range
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                {formatRangeLabel(filters.tokenAge, formatAge, TOKEN_AGE_MAX_HOURS)}
+              </Typography>
+              <Slider
+                value={filters.tokenAge}
+                min={TOKEN_AGE_MIN_HOURS}
+                max={TOKEN_AGE_MAX_HOURS}
+                step={1}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => formatAge(Number(value))}
+                onChange={handleRangeChange("tokenAge")}
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+                Filter tokens based on how long ago they were created. Maximum range covers the last 7 days.
+              </Typography>
+            </Box>
+          </Stack>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button variant="contained" onClick={() => setSettingsOpen(false)} sx={{ textTransform: "none" }}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 }
