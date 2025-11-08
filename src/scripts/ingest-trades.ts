@@ -51,6 +51,8 @@ const NATS_CONNECT_PAYLOAD = {
 const SUBJECTS = ['unifiedTradeEvent.processed']
 
 interface TokenMetadata {
+  name?: string
+  symbol?: string
   image?: string
   description?: string
   twitter?: string
@@ -335,7 +337,7 @@ async function persistPreparedTrade(ctx: PreparedTradeContext): Promise<void> {
             return null
           }
         })(),
-        raw: trade,
+        raw: trade as Prisma.InputJsonValue,
       },
     })
   } catch (error) {

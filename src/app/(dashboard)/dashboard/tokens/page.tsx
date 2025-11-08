@@ -31,9 +31,13 @@ import LanguageIcon from "@mui/icons-material/Language";
 import { useRouter } from "next/navigation";
 import IconButton from "@mui/material/IconButton";
 
-const TIMEFRAME_OPTIONS = ['1h', '6h', '24h', '7d', '30d', 'all'] as const;
+const TIMEFRAME_OPTIONS = ['1m', '5m', '15m', '30m', '1h', '6h', '24h', '7d', '30d', 'all'] as const;
 type TimeframeOption = (typeof TIMEFRAME_OPTIONS)[number];
 const TIMEFRAME_LABELS: Record<TimeframeOption, string> = {
+  '1m': '1 minute',
+  '5m': '5 minutes',
+  '15m': '15 minutes',
+  '30m': '30 minutes',
   '1h': '1 hour',
   '6h': '6 hours',
   '24h': '24 hours',

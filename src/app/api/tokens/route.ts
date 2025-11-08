@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { Prisma } from '@prisma/client'
 import { Decimal } from '@prisma/client/runtime/library'
 import { matchOpenOrdersForToken } from '@/lib/orders'
 
@@ -51,119 +52,167 @@ export async function GET(request: NextRequest) {
       ]
     }
 
+    const TOKEN_DECIMALS = new Decimal('1e6')
+
+    const timeframeParam = (searchParams.get('timeframe') || '24h').toLowerCase()
+    const timeframeToSeconds: Record<string, number | null> = {
+      '1m': 60,
+      '5m': 5 * 60,
+      '15m': 15 * 60,
+      '30m': 30 * 60,
+      '1h': 60 * 60,
+      '6h': 6 * 60 * 60,
+      '24h': 24 * 60 * 60,
+      '7d': 7 * 24 * 60 * 60,
+      '30d': 30 * 24 * 60 * 60,
+      all: null,
+    }
+
+    const timeframeSeconds = timeframeToSeconds[timeframeParam] ?? timeframeToSeconds['24h']
+    const nowMs = BigInt(Date.now())
+    const timeframeStartMs = timeframeSeconds ? nowMs - BigInt(timeframeSeconds) * 1000n : undefined
+    const tradeWhere = timeframeStartMs ? { timestamp: { gte: timeframeStartMs } } : undefined
+
+    const tokenWhere = {
+      ...where,
+      ...(timeframeStartMs
+        ? {
+            trades: {
+              some: {
+                timestamp: { gte: timeframeStartMs },
+              },
+            },
+          }
+        : {}),
+    }
+
+    const orderBy: Prisma.TokenOrderByWithRelationInput =
+      sortBy === 'price'
+        ? { price: { priceSol: 'desc' } }
+        : { price: { lastTradeTimestamp: 'desc' } }
+
     const [tokens, total] = await Promise.all([
       prisma.token.findMany({
-        where,
+        where: tokenWhere,
         include: {
           price: true,
           tokenStat: {
             select: { px: true },
           },
         },
-        orderBy: {
-          createdAt: 'desc',
-        },
+        orderBy,
         skip,
         take: limit,
       }),
-      prisma.token.count({ where }),
+      prisma.token.count({ where: tokenWhere }),
     ])
 
-    const TOKEN_DECIMALS = new Decimal('1e9')
+    const [volumeRows, uniqueTraderRows, latestTradeRows, latestSolPrice] = await Promise.all([
+      prisma.trade.groupBy({
+        by: ['tokenId', 'type'],
+        where: tradeWhere,
+        _sum: {
+          amountSol: true,
+          amountUsd: true,
+        },
+      }),
+      prisma.trade.findMany({
+        where: tradeWhere,
+        distinct: ['tokenId', 'userAddress'],
+        select: { tokenId: true },
+      }),
+      prisma.trade.groupBy({
+        by: ['tokenId'],
+        where: tradeWhere,
+        _max: { timestamp: true },
+      }),
+      prisma.solPrice.findFirst({
+        orderBy: { timestamp: 'desc' },
+      }),
+    ])
+
+    const solPriceUsd = latestSolPrice ? Number(latestSolPrice.priceUsd) : 160
+
+    const volumeMap = new Map<
+      string,
+      {
+        buyVolumeSol: number
+        sellVolumeSol: number
+        buyVolumeUsd: number
+        sellVolumeUsd: number
+      }
+    >()
+
+    for (const row of volumeRows) {
+      const entry =
+        volumeMap.get(row.tokenId) || { buyVolumeSol: 0, sellVolumeSol: 0, buyVolumeUsd: 0, sellVolumeUsd: 0 }
+      const sol = row._sum.amountSol ? Number(row._sum.amountSol) : 0
+      const summedUsd = row._sum.amountUsd ? Number(row._sum.amountUsd) : 0
+      const usd = summedUsd > 0 ? summedUsd : sol * solPriceUsd
+      if (row.type === 1) {
+        entry.buyVolumeSol += sol
+        entry.buyVolumeUsd += usd
+      } else {
+        entry.sellVolumeSol += sol
+        entry.sellVolumeUsd += usd
+      }
+      volumeMap.set(row.tokenId, entry)
+    }
+
+    const uniqueTraderMap = new Map<string, number>()
+    for (const row of uniqueTraderRows) {
+      uniqueTraderMap.set(row.tokenId, (uniqueTraderMap.get(row.tokenId) ?? 0) + 1)
+    }
+
+    const lastTradeMap = new Map<string, number>()
+    for (const row of latestTradeRows) {
+      if (row._max.timestamp) {
+        lastTradeMap.set(row.tokenId, Number(row._max.timestamp))
+      }
+    }
+
+    function normaliseTimestamp(value?: bigint | number | null): number | null {
+      if (value == null) return null
+      const numeric = typeof value === 'number' ? value : Number(value)
+      if (!Number.isFinite(numeric)) return null
+      if (numeric >= 1e15) {
+        return Math.floor(numeric / 1000)
+      }
+      if (numeric <= 1e11 && numeric > 1e8) {
+        return Math.floor(numeric * 1000)
+      }
+      return Math.floor(numeric)
+    }
 
     // Calculate volume and price changes for each token
     const tokensWithStats = await Promise.all(
       tokens.map(async (token) => {
-        // Get all trades for the token (24h volume)
-        // Volume is calculated in SOL for consistency with pump.fun
-        const twentyFourHoursAgo = BigInt(Date.now() - 24 * 60 * 60 * 1000)
-        
-        const allTrades = await prisma.trade.findMany({
-          where: {
-            tokenId: token.id,
-            timestamp: {
-              gte: twentyFourHoursAgo,
-            },
-          },
-        })
-
-        // Also get all trades for unique traders count
-        const allTradesForTraders = await prisma.trade.findMany({
-          where: {
-            tokenId: token.id,
-          },
-          select: {
-            userAddress: true,
-          },
-        })
-
-        let buyVolumeSol = 0
-        let sellVolumeSol = 0
-        let uniqueTraders = new Set<string>()
-
-        // Calculate volume in SOL (more accurate than USD)
-        allTrades.forEach((trade) => {
-          if (trade.type === 1) {
-            // Buy - volume is SOL spent
-            buyVolumeSol += Number(trade.amountSol)
-          } else {
-            // Sell - volume is SOL received
-            sellVolumeSol += Number(trade.amountSol)
-          }
-        })
-
-        // Count unique traders from all trades
-        allTradesForTraders.forEach((trade) => {
-          uniqueTraders.add(trade.userAddress)
-        })
-
-        // Get SOL price for USD conversion (use latest or fallback)
-        let solPriceUsd = 160 // Fallback
-        try {
-          const latestSolPrice = await prisma.solPrice.findFirst({
-            orderBy: {
-              timestamp: 'desc',
-            },
-          })
-          if (latestSolPrice) {
-            solPriceUsd = Number(latestSolPrice.priceUsd)
-          }
-        } catch (error) {
-          console.warn('Failed to fetch SOL price, using fallback')
+        const volumes = volumeMap.get(token.id) ?? {
+          buyVolumeSol: 0,
+          sellVolumeSol: 0,
+          buyVolumeUsd: 0,
+          sellVolumeUsd: 0,
         }
 
-        // Convert SOL volume to USD for display
-        const buyVolume = buyVolumeSol * solPriceUsd
-        const sellVolume = sellVolumeSol * solPriceUsd
+        const buyVolume = volumes.buyVolumeUsd
+        const sellVolume = volumes.sellVolumeUsd
         const totalVolume = buyVolume + sellVolume
         const volumeRatio = totalVolume > 0 ? buyVolume / totalVolume : 0.5
 
-        // Calculate price info - try to get accurate price from latest trade or use stored price
         let priceSol = 0
         let priceUsd = 0
+        let lastTradeTimestamp: number | null = null
+
         if (token.price) {
           priceSol = Number(token.price.priceSol)
           const storedPriceUsd = Number(token.price.priceUsd)
-          
-          // If stored priceUsd is meaningful (> 0.000001), use it
-          // Otherwise calculate from priceSol
-          if (storedPriceUsd > 0.000001) {
-            priceUsd = storedPriceUsd
-          } else if (priceSol > 0) {
-            // Calculate USD from SOL price using current SOL/USD rate
-            priceUsd = priceSol * solPriceUsd
-          }
-          
-          // If priceUsd is still extremely small, try to get from latest trade's market cap
-          if (priceUsd < 0.000000001 && token.totalSupply) {
-            // Get the most recent trade with market cap info if available
-            const latestTrade = await prisma.trade.findFirst({
-              where: { tokenId: token.id },
-              orderBy: { timestamp: 'desc' },
-            })
-            // Note: We don't store market cap in trades, so this is a fallback
-            // The real fix would be to ensure market cap is used during ingestion
-          }
+          priceUsd = storedPriceUsd > 0 ? storedPriceUsd : priceSol * solPriceUsd
+          lastTradeTimestamp = normaliseTimestamp(token.price.lastTradeTimestamp)
+        }
+
+        if (!lastTradeTimestamp) {
+          const latest = lastTradeMap.get(token.id)
+          lastTradeTimestamp = latest ? normaliseTimestamp(latest) : null
         }
 
         if (priceSol > 0) {
@@ -187,13 +236,14 @@ export async function GET(request: NextRequest) {
         if (totalSupplyTokens > 0) {
           if (priceUsd > 0) {
             marketCapUsd = priceUsd * totalSupplyTokens
-            marketCapSol = marketCapUsd / solPriceUsd
           }
           if (priceSol > 0) {
             marketCapSol = priceSol * totalSupplyTokens
             if (marketCapUsd === 0 && solPriceUsd > 0) {
               marketCapUsd = marketCapSol * solPriceUsd
             }
+          } else if (marketCapUsd > 0 && solPriceUsd > 0) {
+            marketCapSol = marketCapUsd / solPriceUsd
           }
         }
 
@@ -206,17 +256,17 @@ export async function GET(request: NextRequest) {
           twitter: token.twitter,
           telegram: token.telegram,
           website: token.website,
-          createdAt: Number(token.createdAt),
-          kingOfTheHillTimestamp: token.kingOfTheHillTimestamp ? Number(token.kingOfTheHillTimestamp) : null,
+          createdAt: normaliseTimestamp(token.createdAt),
+          kingOfTheHillTimestamp: normaliseTimestamp(token.kingOfTheHillTimestamp),
           completed: token.completed,
           price: token.price
             ? {
                 priceSol,
                 priceUsd,
-                lastTradeTimestamp: token.price.lastTradeTimestamp ? Number(token.price.lastTradeTimestamp) : null,
+                lastTradeTimestamp,
               }
             : null,
-          lastTradeTimestamp: token.price?.lastTradeTimestamp ? Number(token.price.lastTradeTimestamp) : null,
+          lastTradeTimestamp,
           totalSupplyTokens,
           marketCapUsd,
           marketCapSol,
@@ -224,10 +274,10 @@ export async function GET(request: NextRequest) {
           sellVolume,
           totalVolume,
           volumeRatio,
-          uniqueTraders: uniqueTraders.size,
-          buyVolumeSol,
-          sellVolumeSol,
-          totalVolumeSol: buyVolumeSol + sellVolumeSol,
+          uniqueTraders: uniqueTraderMap.get(token.id) ?? 0,
+          buyVolumeSol: volumes.buyVolumeSol,
+          sellVolumeSol: volumes.sellVolumeSol,
+          totalVolumeSol: volumes.buyVolumeSol + volumes.sellVolumeSol,
         }
       })
     )
