@@ -155,13 +155,31 @@ export async function GET(request: NextRequest) {
       ...(createdAtFilter && mintList.length === 0 ? { createdAt: createdAtFilter } : {}),
     }
 
-    const MAX_FETCH = mintList.length > 0 ? Math.max(mintList.length, 50) : 2000
+    const timeframeScaling = (() => {
+      if (!timeframeSeconds || timeframeSeconds >= 24 * 60 * 60) {
+        return { base: 1200, multiplier: 16, max: 3200 }
+      }
+      if (timeframeSeconds <= 120) {
+        return { base: 300, multiplier: 6, max: 900 }
+      }
+      if (timeframeSeconds <= 600) {
+        return { base: 480, multiplier: 8, max: 1300 }
+      }
+      if (timeframeSeconds <= 1800) {
+        return { base: 640, multiplier: 10, max: 1600 }
+      }
+      if (timeframeSeconds <= 3600) {
+        return { base: 800, multiplier: 12, max: 2000 }
+      }
+      return { base: 1000, multiplier: 14, max: 2600 }
+    })()
+
     const effectiveLimit = mintList.length > 0 ? mintList.length : limit
-    const fetchMultiple = mintList.length > 0 ? 1 : Math.max(page + 3, 8)
-    const fetchLimit = Math.min(
-      MAX_FETCH,
-      mintList.length > 0 ? Math.max(mintList.length, 100) : Math.max(effectiveLimit * fetchMultiple, 400)
-    )
+    const fetchMultiple = mintList.length > 0 ? 1 : Math.max(page + 2, timeframeScaling.multiplier)
+    const desiredFetch = mintList.length > 0
+      ? Math.max(effectiveLimit, timeframeScaling.base)
+      : Math.max(effectiveLimit * fetchMultiple, timeframeScaling.base)
+    const fetchLimit = Math.min(desiredFetch, timeframeScaling.max)
 
     let tokens = await prisma.token.findMany({
       where: tokenWhere,
