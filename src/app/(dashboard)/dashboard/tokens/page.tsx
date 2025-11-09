@@ -29,6 +29,10 @@ import {
   LinearProgress,
 } from "@mui/material";
 import Select, { SelectChangeEvent } from "@mui/material/Select";
+import { ElementType } from "react";
+import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
+import UpdateIcon from "@mui/icons-material/Update";
+import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import SearchIcon from "@mui/icons-material/Search";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import TrendingDownIcon from "@mui/icons-material/TrendingDown";
@@ -1150,15 +1154,45 @@ const formatAge = (hours: number) => {
               const graduationProgress = getGraduationProgress(token, solPriceUsd);
               const graduationTargetLabel =
                 solPriceUsd > 0 ? formatVolume(solPriceUsd * BONDING_CURVE_TARGET_SOL) : "N/A";
-              const createdLabel = `Created ${formatTimeAgo(token.createdAt)}`;
-              const lastActivityLabel = `Last activity ${formatTimeAgo(token.lastTradeTimestamp, "No trades")}`;
-              const graduationLabel =
+              const createdAgo = formatTimeAgo(token.createdAt);
+              const lastActivityAgo = formatTimeAgo(token.lastTradeTimestamp, "No trades");
+              const graduatedAgo =
                 token.completed && token.kingOfTheHillTimestamp
-                  ? `Graduated ${formatTimeAgo(token.kingOfTheHillTimestamp, "just now")}`
+                  ? formatTimeAgo(token.kingOfTheHillTimestamp, "just now")
                   : token.completed
-                    ? "Graduated"
+                    ? "Completed"
                     : null;
               const hasSocials = token.twitter || token.telegram || token.website;
+              const timelineItems: Array<{
+                key: string;
+                label: string;
+                value: string;
+                icon: ElementType;
+                accent?: boolean;
+              }> = [
+                {
+                  key: "created",
+                  label: "Created",
+                  value: createdAgo,
+                  icon: CalendarTodayIcon,
+                },
+                {
+                  key: "last",
+                  label: "Last Activity",
+                  value: lastActivityAgo,
+                  icon: UpdateIcon,
+                },
+              ];
+              if (graduatedAgo) {
+                timelineItems.push({
+                  key: "graduated",
+                  label: "Graduated",
+                  value: graduatedAgo,
+                  icon: EmojiEventsIcon,
+                  accent: true,
+                });
+              }
+              const timelineColSize = timelineItems.length === 3 ? 4 : 6;
               return (
                 <Grid item xs={12} sm={6} md={4} lg={3} key={token.id}>
                   <Card
@@ -1169,7 +1203,7 @@ const formatAge = (hours: number) => {
                       cursor: "pointer",
                       transition: "all 0.25s ease",
                       height: "100%",
-                      minHeight: 360,
+                      minHeight: 330,
                       display: "flex",
                       flexDirection: "column",
                       borderRadius: 3,
@@ -1190,8 +1224,8 @@ const formatAge = (hours: number) => {
                         flex: 1,
                         display: "flex",
                         flexDirection: "column",
-                        p: { xs: 2.5, md: 3 },
-                        gap: 2.5,
+                        p: { xs: 2.25, md: 2.75 },
+                        gap: 2,
                       }}
                     >
                     <Box
@@ -1401,122 +1435,108 @@ const formatAge = (hours: number) => {
                       </Grid>
                     </Grid>
 
-                    <Box sx={{ width: "100%" }}>
-                      {token.completed ? (
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ fontWeight: 600, display: "block", textAlign: "center" }}
-                        >
-                          {token.kingOfTheHillTimestamp
-                            ? `Graduated ${formatTimeAgo(token.kingOfTheHillTimestamp, "just now")}`
-                            : "Graduated"}
-                        </Typography>
-                      ) : (
-                        <Stack spacing={0.75}>
-                          <Box
-                            sx={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                            }}
-                          >
-                            <Typography variant="caption" color="text.secondary">
-                              Bonding Curve Progress
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-                              {graduationProgress.toFixed(1)}%
-                            </Typography>
-                          </Box>
-                          <LinearProgress
-                            variant="determinate"
-                            value={graduationProgress}
-                            sx={{
-                              height: 8,
-                              borderRadius: "999px",
-                              backgroundColor: "rgba(255,255,255,0.08)",
-                              "& .MuiLinearProgress-bar": {
-                                borderRadius: "999px",
-                                background:
-                                  graduationProgress >= 100
-                                    ? "linear-gradient(90deg, #31F28C, #5CFAE3)"
-                                    : "linear-gradient(90deg, #17C671, #31F28C)",
-                              },
-                            }}
-                          />
-                          <Box
-                            sx={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              width: "100%",
-                            }}
-                          >
-                            <Typography variant="caption" color="text.secondary">
-                              {token.marketCapUsd !== undefined && token.marketCapUsd > 0
-                                ? `Market Cap: ${formatVolume(token.marketCapUsd)}`
-                                : "Market cap data unavailable"}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-                              Target: {graduationTargetLabel}
-                            </Typography>
-                          </Box>
+                    {!token.completed && (
+                      <Stack
+                        spacing={0.9}
+                        sx={{
+                          px: 1.5,
+                          py: 1.25,
+                          borderRadius: 2,
+                          backgroundColor: "rgba(255,255,255,0.035)",
+                          border: "1px solid rgba(255,255,255,0.06)",
+                        }}
+                      >
+                        <Stack direction="row" alignItems="center" justifyContent="space-between">
+                          <Typography variant="caption" color="text.secondary">
+                            Bonding Curve Progress
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                            {graduationProgress.toFixed(1)}%
+                          </Typography>
                         </Stack>
-                      )}
-                    </Box>
+                        <LinearProgress
+                          variant="determinate"
+                          value={graduationProgress}
+                          sx={{
+                            height: 8,
+                            borderRadius: "999px",
+                            backgroundColor: "rgba(255,255,255,0.08)",
+                            "& .MuiLinearProgress-bar": {
+                              borderRadius: "999px",
+                              background:
+                                graduationProgress >= 100
+                                  ? "linear-gradient(90deg, #31F28C, #5CFAE3)"
+                                  : "linear-gradient(90deg, #17C671, #31F28C)",
+                            },
+                          }}
+                        />
+                        <Stack direction="row" justifyContent="space-between" alignItems="center">
+                          <Typography variant="caption" color="text.secondary">
+                            {token.marketCapUsd !== undefined && token.marketCapUsd > 0
+                              ? `Market Cap: ${formatVolume(token.marketCapUsd)}`
+                              : "Market cap data unavailable"}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                            Target: {graduationTargetLabel}
+                          </Typography>
+                        </Stack>
+                      </Stack>
+                    )}
 
                     <Divider sx={{ borderColor: "rgba(255,255,255,0.06)" }} />
 
-                    <Stack
-                      direction="row"
-                      spacing={1.25}
-                      sx={{
-                        px: 1.5,
-                        py: 1,
-                        borderRadius: 2,
-                        backgroundColor: "rgba(255,255,255,0.035)",
-                        border: "1px solid rgba(255,255,255,0.06)",
-                      }}
-                    >
-                      <Box sx={{ flex: 1 }}>
-                        <Typography variant="overline" sx={{ letterSpacing: 0.6, fontSize: 11 }}>
-                          Created
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {formatTimeAgo(token.createdAt)}
-                        </Typography>
-                      </Box>
-                      <Divider orientation="vertical" flexItem sx={{ borderColor: "rgba(255,255,255,0.08)" }} />
-                      <Box sx={{ flex: 1 }}>
-                        <Typography variant="overline" sx={{ letterSpacing: 0.6, fontSize: 11 }}>
-                          Last Activity
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {formatTimeAgo(token.lastTradeTimestamp, "No trades")}
-                        </Typography>
-                      </Box>
-                    </Stack>
-
-                    {graduationLabel && (
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 0.5,
-                          px: 1.5,
-                          py: 0.6,
-                          borderRadius: 999,
-                          backgroundColor: "rgba(49,242,140,0.12)",
-                          border: "1px solid rgba(49,242,140,0.24)",
-                          fontWeight: 600,
-                          letterSpacing: 0.4,
-                          color: "#31F28C",
-                        }}
-                      >
-                        {graduationLabel}
-                      </Typography>
-                    )}
+                    <Grid container spacing={1.2}>
+                      {timelineItems.map((item) => {
+                        const IconComponent = item.icon;
+                        return (
+                          <Grid item xs={timelineColSize} key={`${token.id}-${item.key}`}>
+                            <Box
+                              sx={{
+                                height: "100%",
+                                p: 1.25,
+                                borderRadius: 2,
+                                backgroundColor: item.accent ? "rgba(49,242,140,0.1)" : "rgba(255,255,255,0.035)",
+                                border: `1px solid ${
+                                  item.accent ? "rgba(49,242,140,0.3)" : "rgba(255,255,255,0.06)"
+                                }`,
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: 0.6,
+                              }}
+                            >
+                              <Stack direction="row" spacing={1} alignItems="center">
+                                <Box
+                                  sx={{
+                                    width: 28,
+                                    height: 28,
+                                    borderRadius: "50%",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    backgroundColor: item.accent
+                                      ? "rgba(49,242,140,0.18)"
+                                      : "rgba(255,255,255,0.07)",
+                                  }}
+                                >
+                                  <IconComponent
+                                    sx={{
+                                      fontSize: 16,
+                                      color: item.accent ? "#31F28C" : "rgba(255,255,255,0.72)",
+                                    }}
+                                  />
+                                </Box>
+                                <Typography variant="subtitle2" sx={{ fontWeight: 600, letterSpacing: 0.3 }}>
+                                  {item.label}
+                                </Typography>
+                              </Stack>
+                              <Typography variant="caption" color="text.secondary">
+                                {item.value}
+                              </Typography>
+                            </Box>
+                          </Grid>
+                        );
+                      })}
+                    </Grid>
                     </CardContent>
                   </Card>
                 </Grid>
