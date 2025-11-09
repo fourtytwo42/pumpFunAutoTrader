@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/db'
-import { ensureTokensMetadata } from '@/lib/pump/metadata-service'
+import { getTokenDetails } from '@/lib/pump-api'
 
 interface RouteParams {
   params: {
@@ -11,32 +10,27 @@ interface RouteParams {
 export async function GET(_request: Request, { params }: RouteParams) {
   const mintAddress = decodeURIComponent(params.mintAddress)
 
-  const token = await prisma.token.findUnique({
-    where: { mintAddress },
-    include: { price: true },
-  })
+  try {
+    const details = await getTokenDetails(mintAddress)
+    if (!details) {
+      return NextResponse.json({ error: 'Token metadata unavailable' }, { status: 404 })
+    }
 
-  if (!token) {
-    return NextResponse.json({ error: 'Token not found' }, { status: 404 })
+    return NextResponse.json({
+      mintAddress,
+      name: details.name || null,
+      symbol: details.symbol || null,
+      imageUri: details.imageUri || null,
+      twitter: details.twitter || null,
+      telegram: details.telegram || null,
+      website: details.website || null,
+    })
+  } catch (error) {
+    console.warn(
+      `[metadata-route] Failed to fetch metadata for ${mintAddress}:`,
+      (error as Error).message
+    )
+    return NextResponse.json({ error: 'Metadata fetch failed' }, { status: 502 })
   }
-
-  await ensureTokensMetadata(prisma, [token])
-
-  const refreshed = await prisma.token.findUnique({
-    where: { mintAddress },
-    select: {
-      name: true,
-      symbol: true,
-      imageUri: true,
-      twitter: true,
-      telegram: true,
-      website: true,
-    },
-  })
-
-  return NextResponse.json({
-    mintAddress,
-    ...refreshed,
-  })
 }
 

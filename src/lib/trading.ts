@@ -1,7 +1,6 @@
 import type { UserSession } from '@prisma/client'
 import { Decimal } from '@prisma/client/runtime/library'
 import { prisma } from './db'
-import { ensureTokensMetadata } from './pump/metadata-service'
 import { advanceSimulationSession } from './simulation'
 import { getLatestSolPrice } from './metrics'
 
@@ -61,9 +60,6 @@ export async function getUserPortfolio(userId: string) {
     if (entry.token) {
       tokenMap.set(entry.token.id, entry.token)
     }
-  }
-  if (tokenMap.size > 0) {
-    await ensureTokensMetadata(prisma, Array.from(tokenMap.values()))
   }
 
   return portfolios.map((p) => ({

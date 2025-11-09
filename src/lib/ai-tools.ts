@@ -9,7 +9,6 @@ import { parsePaginationParams, parseDateRange, parseTimeSeriesParams } from './
 import { getUserBalance, getUserPortfolio } from './trading'
 import { submitBuyOrder, submitSellOrder } from './orders'
 import { prisma } from './db'
-import { ensureTokensMetadata } from './pump/metadata-service'
 import { Decimal } from '@prisma/client/runtime/library'
 
 // ========== Tool Definition Types ==========
@@ -184,7 +183,6 @@ After finding interesting tokens, use get_token_details for bonding curve status
         take: limit * 3, // Get more than needed for filtering
       })
 
-      await ensureTokensMetadata(prisma, tokensWithActivity)
 
       // Calculate stats for each token
       const tokensWithStats = tokensWithActivity
@@ -726,7 +724,6 @@ After finding interesting tokens, use get_token_details for bonding curve status
         }
       }
       if (tokenMap.size > 0) {
-        await ensureTokensMetadata(prisma, Array.from(tokenMap.values()))
       }
 
       return {
@@ -770,7 +767,6 @@ After finding interesting tokens, use get_token_details for bonding curve status
     execute: async (args, userId) => {
       const token = await prisma.token.findUnique({ where: { mintAddress: args.mintAddress } })
       if (!token) throw new Error('Token not found')
-      await ensureTokensMetadata(prisma, [token])
 
       const timeSeries = parseTimeSeriesParams({
         before: args.before,
@@ -920,7 +916,6 @@ After finding interesting tokens, use get_token_details for bonding curve status
         include: { price: true },
       })
       if (!token) throw new Error('Token not found')
-      await ensureTokensMetadata(prisma, [token])
 
       const [position, trades] = await Promise.all([
         prisma.userPortfolio.findUnique({
