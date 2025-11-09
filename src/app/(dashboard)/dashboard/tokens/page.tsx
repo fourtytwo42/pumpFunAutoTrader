@@ -1169,7 +1169,6 @@ const formatAge = (hours: number) => {
                 label: string;
                 value: string;
                 icon: ElementType;
-                accent?: boolean;
               }> = [
                 {
                   key: "created",
@@ -1184,16 +1183,7 @@ const formatAge = (hours: number) => {
                   icon: UpdateIcon,
                 },
               ];
-              if (graduatedAgo) {
-                timelineItems.push({
-                  key: "graduated",
-                  label: "Graduated",
-                  value: graduatedAgo,
-                  icon: EmojiEventsIcon,
-                  accent: true,
-                });
-              }
-              const timelineColSize = timelineItems.length === 3 ? 4 : 6;
+              const timelineColSize = timelineItems.length >= 2 ? 6 : 12;
               return (
                 <Grid item xs={12} sm={6} md={4} lg={3} key={token.id}>
                   <Card
@@ -1453,20 +1443,28 @@ const formatAge = (hours: number) => {
                         px: 1.5,
                         py: 1.25,
                         borderRadius: 2,
-                        backgroundColor: "rgba(255,255,255,0.035)",
+                        backgroundColor: token.completed ? "rgba(49,242,140,0.1)" : "rgba(255,255,255,0.035)",
                         border: token.completed
                           ? "1px solid rgba(49,242,140,0.24)"
                           : "1px solid rgba(255,255,255,0.06)",
                       }}
                     >
-                      <Stack direction="row" alignItems="center" justifyContent="space-between">
-                        <Typography
-                          variant="caption"
-                          color={token.completed ? "#31F28C" : "text.secondary"}
-                          sx={{ fontWeight: 600 }}
-                        >
-                          {token.completed ? "Graduated" : "Bonding Curve Progress"}
-                        </Typography>
+                      <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1.5}>
+                        <Stack direction="row" alignItems="center" spacing={1}>
+                          <EmojiEventsIcon
+                            sx={{
+                              fontSize: 16,
+                              color: token.completed ? "#31F28C" : "rgba(255,255,255,0.65)",
+                            }}
+                          />
+                          <Typography
+                            variant="caption"
+                            color={token.completed ? "#31F28C" : "text.secondary"}
+                            sx={{ fontWeight: 600, letterSpacing: 0.4 }}
+                          >
+                            {token.completed ? "Graduated" : "Bonding Curve"}
+                          </Typography>
+                        </Stack>
                         <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
                           {token.completed ? graduationLabel : `${graduationProgress.toFixed(1)}%`}
                         </Typography>
