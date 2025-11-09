@@ -1162,6 +1162,7 @@ const formatAge = (hours: number) => {
                   : token.completed
                     ? "Completed"
                     : null;
+              const graduationLabel = graduatedAgo ?? "Graduated";
               const hasSocials = token.twitter || token.telegram || token.website;
               const timelineItems: Array<{
                 key: string;
