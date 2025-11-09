@@ -60,13 +60,22 @@ const TRADE_AMOUNT_MIN = 0;
 const TRADE_AMOUNT_MAX = 100;
 const TOKEN_AGE_MIN_HOURS = 0;
 const TOKEN_AGE_MAX_HOURS = 168; // 7 days
-type StatusFilterValue = "all" | "only" | "hide";
-const STATUS_FILTER_OPTIONS: Array<{ value: StatusFilterValue; label: string }> = [
+type GraduatedFilterValue = "all" | "bonding" | "graduated";
+type KothFilterValue = "all" | "only" | "hide";
+
+const GRADUATED_FILTER_OPTIONS: Array<{ value: GraduatedFilterValue; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "bonding", label: "Bonding" },
+  { value: "graduated", label: "Graduated" },
+];
+
+const KOTH_FILTER_OPTIONS: Array<{ value: KothFilterValue; label: string }> = [
   { value: "all", label: "All" },
   { value: "only", label: "Only" },
   { value: "hide", label: "Hide" },
 ];
-const DEFAULT_STATUS_FILTERS: Record<"graduated" | "koth", StatusFilterValue> = {
+
+const DEFAULT_STATUS_FILTERS: { graduated: GraduatedFilterValue; koth: KothFilterValue } = {
   graduated: "all",
   koth: "all",
 };
@@ -294,8 +303,10 @@ const metadataInFlightRef = useRef<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState("marketCap");
   const [timeframe, setTimeframe] = useState<TimeframeOption>('10m');
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
-  const [statusFilters, setStatusFilters] =
-    useState<Record<"graduated" | "koth", StatusFilterValue>>(DEFAULT_STATUS_FILTERS);
+  const [statusFilters, setStatusFilters] = useState<{
+    graduated: GraduatedFilterValue;
+    koth: KothFilterValue;
+  }>(DEFAULT_STATUS_FILTERS);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
@@ -326,16 +337,23 @@ const metadataInFlightRef = useRef<Set<string>>(new Set());
         ),
       });
       const savedStatus = parsed?.statusFilters ?? {};
-      const normalizeStatus = (value: unknown, fallback: StatusFilterValue): StatusFilterValue => {
-        if (typeof value !== "string") return fallback;
+      const normalizeGraduated = (value: unknown): GraduatedFilterValue => {
+        if (typeof value !== "string") return DEFAULT_STATUS_FILTERS.graduated;
+        const lower = value.toLowerCase();
+        if (lower === "bonding") return "bonding";
+        if (lower === "graduated") return "graduated";
+        return "all";
+      };
+      const normalizeKoth = (value: unknown): KothFilterValue => {
+        if (typeof value !== "string") return DEFAULT_STATUS_FILTERS.koth;
         const lower = value.toLowerCase();
         if (lower === "only" || lower === "show" || lower === "show_only") return "only";
         if (lower === "hide" || lower === "hide_all") return "hide";
         return "all";
       };
       setStatusFilters({
-        graduated: normalizeStatus(savedStatus.graduated, DEFAULT_STATUS_FILTERS.graduated),
-        koth: normalizeStatus(savedStatus.koth, DEFAULT_STATUS_FILTERS.koth),
+        graduated: normalizeGraduated(savedStatus.graduated),
+        koth: normalizeKoth(savedStatus.koth),
       });
     } catch (error) {
       console.warn("Failed to parse saved token feed filters:", error);
@@ -358,13 +376,19 @@ const metadataInFlightRef = useRef<Set<string>>(new Set());
     setPage(1);
   };
 
-  const handleStatusFilterChange = useCallback(
-    (key: "graduated" | "koth") => (event: SelectChangeEvent<StatusFilterValue>) => {
-      const value = event.target.value as StatusFilterValue;
-      setStatusFilters((prev) => {
-        const next = { ...prev, [key]: value };
-        return next;
-      });
+  const handleGraduatedFilterChange = useCallback(
+    (event: SelectChangeEvent<GraduatedFilterValue>) => {
+      const value = event.target.value as GraduatedFilterValue;
+      setStatusFilters((prev) => ({ ...prev, graduated: value }));
+      setPage(1);
+    },
+    []
+  );
+
+  const handleKothFilterChange = useCallback(
+    (event: SelectChangeEvent<KothFilterValue>) => {
+      const value = event.target.value as KothFilterValue;
+      setStatusFilters((prev) => ({ ...prev, koth: value }));
       setPage(1);
     },
     []
@@ -769,13 +793,13 @@ const getGraduationProgress = (token: Token) => {
 
 const matchesStatusFilters = (
   token: Token,
-  statusFilters: Record<"graduated" | "koth", StatusFilterValue>
+  statusFilters: { graduated: GraduatedFilterValue; koth: KothFilterValue }
 ) => {
   const isGraduated = !!token.completed;
   const isKoth = token.kingOfTheHillTimestamp != null;
 
-  if (statusFilters.graduated === "only" && !isGraduated) return false;
-  if (statusFilters.graduated === "hide" && isGraduated) return false;
+  if (statusFilters.graduated === "bonding" && isGraduated) return false;
+  if (statusFilters.graduated === "graduated" && !isGraduated) return false;
   if (statusFilters.koth === "only" && !isKoth) return false;
   if (statusFilters.koth === "hide" && isKoth) return false;
 
@@ -1037,9 +1061,9 @@ const formatAge = (hours: number) => {
             <Select
               value={statusFilters.graduated}
               label="Graduated"
-              onChange={handleStatusFilterChange("graduated")}
+              onChange={handleGraduatedFilterChange}
             >
-              {STATUS_FILTER_OPTIONS.map((option) => (
+              {GRADUATED_FILTER_OPTIONS.map((option) => (
                 <MenuItem key={option.value} value={option.value}>
                   {option.label}
                 </MenuItem>
@@ -1048,8 +1072,8 @@ const formatAge = (hours: number) => {
           </FormControl>
           <FormControl size="small" sx={{ minWidth: 140 }}>
             <InputLabel>KOTH</InputLabel>
-            <Select value={statusFilters.koth} label="KOTH" onChange={handleStatusFilterChange("koth")}>
-              {STATUS_FILTER_OPTIONS.map((option) => (
+            <Select value={statusFilters.koth} label="KOTH" onChange={handleKothFilterChange}>
+              {KOTH_FILTER_OPTIONS.map((option) => (
                 <MenuItem key={option.value} value={option.value}>
                   {option.label}
                 </MenuItem>

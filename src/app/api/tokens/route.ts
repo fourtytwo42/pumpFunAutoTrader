@@ -100,8 +100,21 @@ export async function GET(request: NextRequest) {
     const nowMs = BigInt(Date.now())
     const timeframeStartMs = timeframeSeconds ? nowMs - BigInt(timeframeSeconds) * 1000n : undefined
 
-    type StatusFilterValue = 'all' | 'only' | 'hide'
-    const parseStatusFilter = (value: string | null): StatusFilterValue => {
+    type GraduatedFilterValue = 'all' | 'bonding' | 'graduated'
+    type KothFilterValue = 'all' | 'only' | 'hide'
+
+    const parseGraduatedFilter = (value: string | null): GraduatedFilterValue => {
+      switch ((value || '').toLowerCase()) {
+        case 'bonding':
+          return 'bonding'
+        case 'graduated':
+          return 'graduated'
+        default:
+          return 'all'
+      }
+    }
+
+    const parseKothFilter = (value: string | null): KothFilterValue => {
       switch ((value || '').toLowerCase()) {
         case 'only':
         case 'show':
@@ -115,8 +128,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const graduatedFilter = parseStatusFilter(searchParams.get('graduated'))
-    const kothFilter = parseStatusFilter(searchParams.get('koth'))
+    const graduatedFilter = parseGraduatedFilter(searchParams.get('graduated'))
+    const kothFilter = parseKothFilter(searchParams.get('koth'))
     const TOKEN_AGE_MAX_HOURS = 168
     const hoursToMs = (hours: number) => BigInt(Math.round(hours * 60 * 60 * 1000))
 
@@ -441,8 +454,8 @@ export async function GET(request: NextRequest) {
       const isGraduated = token.completed ?? false
       const isKoth = token.kingOfTheHillTimestamp != null
 
-      if (graduatedFilter === 'only' && !isGraduated) return false
-      if (graduatedFilter === 'hide' && isGraduated) return false
+      if (graduatedFilter === 'bonding' && isGraduated) return false
+      if (graduatedFilter === 'graduated' && !isGraduated) return false
       if (kothFilter === 'only' && !isKoth) return false
       if (kothFilter === 'hide' && isKoth) return false
 
