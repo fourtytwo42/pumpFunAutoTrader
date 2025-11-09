@@ -1297,76 +1297,87 @@ const formatAge = (hours: number) => {
                           {token.mintAddress.slice(0, 4)}…{token.mintAddress.slice(-4)}
                         </Typography>
                       </Stack>
-                      {hasSocials && (
-                        <Stack direction="row" spacing={1}>
-                          {token.twitter && (
-                            <IconButton
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.open(token.twitter!, "_blank", "noopener,noreferrer");
-                              }}
-                              sx={{
-                                width: 34,
-                                height: 34,
-                                backgroundColor: "rgba(255,255,255,0.06)",
-                                color: "#7C8DB5",
-                                borderRadius: "12px",
-                                "&:hover": {
-                                  backgroundColor: "rgba(29,161,242,0.16)",
-                                  color: "#1DA1F2",
-                                },
-                              }}
-                            >
-                              <TwitterIcon fontSize="small" />
-                            </IconButton>
-                          )}
-                          {token.telegram && (
-                            <IconButton
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.open(token.telegram!, "_blank", "noopener,noreferrer");
-                              }}
-                              sx={{
-                                width: 34,
-                                height: 34,
-                                backgroundColor: "rgba(255,255,255,0.06)",
-                                color: "#7C8DB5",
-                                borderRadius: "12px",
-                                "&:hover": {
-                                  backgroundColor: "rgba(0,136,204,0.18)",
-                                  color: "#0088cc",
-                                },
-                              }}
-                            >
-                              <TelegramIcon fontSize="small" />
-                            </IconButton>
-                          )}
-                          {token.website && (
-                            <IconButton
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.open(token.website!, "_blank", "noopener,noreferrer");
-                              }}
-                              sx={{
-                                width: 34,
-                                height: 34,
-                                backgroundColor: "rgba(255,255,255,0.06)",
-                                color: "#7C8DB5",
-                                borderRadius: "12px",
-                                "&:hover": {
-                                  backgroundColor: "rgba(0,255,136,0.16)",
-                                  color: "primary.main",
-                                },
-                              }}
-                            >
-                              <LanguageIcon fontSize="small" />
-                            </IconButton>
-                          )}
-                        </Stack>
-                      )}
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{
+                          minHeight: 38,
+                          alignItems: "center",
+                        }}
+                      >
+                        {token.twitter ? (
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.open(token.twitter!, "_blank", "noopener,noreferrer");
+                            }}
+                            sx={{
+                              width: 34,
+                              height: 34,
+                              backgroundColor: "rgba(255,255,255,0.06)",
+                              color: "#7C8DB5",
+                              borderRadius: "12px",
+                              "&:hover": {
+                                backgroundColor: "rgba(29,161,242,0.16)",
+                                color: "#1DA1F2",
+                              },
+                            }}
+                          >
+                            <TwitterIcon fontSize="small" />
+                          </IconButton>
+                        ) : (
+                          <Box sx={{ width: 34, height: 34 }} />
+                        )}
+                        {token.telegram ? (
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.open(token.telegram!, "_blank", "noopener,noreferrer");
+                            }}
+                            sx={{
+                              width: 34,
+                              height: 34,
+                              backgroundColor: "rgba(255,255,255,0.06)",
+                              color: "#7C8DB5",
+                              borderRadius: "12px",
+                              "&:hover": {
+                                backgroundColor: "rgba(0,136,204,0.18)",
+                                color: "#0088cc",
+                              },
+                            }}
+                          >
+                            <TelegramIcon fontSize="small" />
+                          </IconButton>
+                        ) : (
+                          <Box sx={{ width: 34, height: 34 }} />
+                        )}
+                        {token.website ? (
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.open(token.website!, "_blank", "noopener,noreferrer");
+                            }}
+                            sx={{
+                              width: 34,
+                              height: 34,
+                              backgroundColor: "rgba(255,255,255,0.06)",
+                              color: "#7C8DB5",
+                              borderRadius: "12px",
+                              "&:hover": {
+                                backgroundColor: "rgba(0,255,136,0.16)",
+                                color: "primary.main",
+                              },
+                            }}
+                          >
+                            <LanguageIcon fontSize="small" />
+                          </IconButton>
+                        ) : (
+                          <Box sx={{ width: 34, height: 34 }} />
+                        )}
+                      </Stack>
                     </Stack>
 
                     <Divider sx={{ borderColor: "rgba(255,255,255,0.06)" }} />
@@ -1435,53 +1446,79 @@ const formatAge = (hours: number) => {
                       </Grid>
                     </Grid>
 
-                    {!token.completed && (
-                      <Stack
-                        spacing={0.9}
-                        sx={{
-                          px: 1.5,
-                          py: 1.25,
-                          borderRadius: 2,
-                          backgroundColor: "rgba(255,255,255,0.035)",
-                          border: "1px solid rgba(255,255,255,0.06)",
-                        }}
-                      >
-                        <Stack direction="row" alignItems="center" justifyContent="space-between">
-                          <Typography variant="caption" color="text.secondary">
-                            Bonding Curve Progress
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-                            {graduationProgress.toFixed(1)}%
-                          </Typography>
-                        </Stack>
-                        <LinearProgress
-                          variant="determinate"
-                          value={graduationProgress}
-                          sx={{
-                            height: 8,
-                            borderRadius: "999px",
-                            backgroundColor: "rgba(255,255,255,0.08)",
-                            "& .MuiLinearProgress-bar": {
-                              borderRadius: "999px",
-                              background:
-                                graduationProgress >= 100
-                                  ? "linear-gradient(90deg, #31F28C, #5CFAE3)"
-                                  : "linear-gradient(90deg, #17C671, #31F28C)",
-                            },
-                          }}
-                        />
-                        <Stack direction="row" justifyContent="space-between" alignItems="center">
-                          <Typography variant="caption" color="text.secondary">
-                            {token.marketCapUsd !== undefined && token.marketCapUsd > 0
-                              ? `Market Cap: ${formatVolume(token.marketCapUsd)}`
-                              : "Market cap data unavailable"}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-                            Target: {graduationTargetLabel}
-                          </Typography>
-                        </Stack>
+                    <Stack
+                      spacing={0.9}
+                      sx={{
+                        px: 1.5,
+                        py: 1.25,
+                        borderRadius: 2,
+                        backgroundColor: "rgba(255,255,255,0.035)",
+                        border: token.completed
+                          ? "1px solid rgba(49,242,140,0.24)"
+                          : "1px solid rgba(255,255,255,0.06)",
+                      }}
+                    >
+                      <Stack direction="row" alignItems="center" justifyContent="space-between">
+                        <Typography
+                          variant="caption"
+                          color={token.completed ? "#31F28C" : "text.secondary"}
+                          sx={{ fontWeight: 600 }}
+                        >
+                          {token.completed ? "Graduated" : "Bonding Curve Progress"}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                          {token.completed ? graduationLabel : `${graduationProgress.toFixed(1)}%`}
+                        </Typography>
                       </Stack>
-                    )}
+                      {token.completed ? (
+                        <Box
+                          sx={{
+                            px: 1.5,
+                            py: 0.75,
+                            borderRadius: 999,
+                            backgroundColor: "rgba(49,242,140,0.08)",
+                            border: "1px solid rgba(49,242,140,0.16)",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            alignSelf: "flex-start",
+                            color: "#31F28C",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {graduationLabel}
+                        </Box>
+                      ) : (
+                        <>
+                          <LinearProgress
+                            variant="determinate"
+                            value={graduationProgress}
+                            sx={{
+                              height: 8,
+                              borderRadius: "999px",
+                              backgroundColor: "rgba(255,255,255,0.08)",
+                              "& .MuiLinearProgress-bar": {
+                                borderRadius: "999px",
+                                background:
+                                  graduationProgress >= 100
+                                    ? "linear-gradient(90deg, #31F28C, #5CFAE3)"
+                                    : "linear-gradient(90deg, #17C671, #31F28C)",
+                              },
+                            }}
+                          />
+                          <Stack direction="row" justifyContent="space-between" alignItems="center">
+                            <Typography variant="caption" color="text.secondary">
+                              {token.marketCapUsd !== undefined && token.marketCapUsd > 0
+                                ? `Market Cap: ${formatVolume(token.marketCapUsd)}`
+                                : "Market cap data unavailable"}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                              Target: {graduationTargetLabel}
+                            </Typography>
+                          </Stack>
+                        </>
+                      )}
+                    </Stack>
 
                     <Divider sx={{ borderColor: "rgba(255,255,255,0.06)" }} />
 
