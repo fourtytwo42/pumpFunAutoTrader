@@ -53,6 +53,9 @@ const SUBJECTS = ['unifiedTradeEvent.processed']
 const tradeQueue: PumpUnifiedTrade[] = []
 let isProcessingQueue = false
 
+const TRADE_RETENTION_MS = 60 * 60 * 1000 // 1 hour
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
+
 interface PreparedTradeContext {
   trade: PumpUnifiedTrade
   isBuy: boolean
@@ -188,9 +191,9 @@ async function prepareTradeContext(
 async function persistPreparedTrade(ctx: PreparedTradeContext): Promise<void> {
   const { trade } = ctx
 
-  let token
-  try {
-    token = await prisma.token.upsert({
+    let token
+    try {
+      token = await prisma.token.upsert({
       where: { mintAddress: trade.mintAddress },
       update: {
         symbol: ctx.fallbackSymbol,
@@ -202,7 +205,7 @@ async function persistPreparedTrade(ctx: PreparedTradeContext): Promise<void> {
               priceUsd: ctx.priceUsd,
               lastTradeTimestamp: BigInt(ctx.timestampMs),
             },
-            update: {
+        update: {
               priceSol: ctx.priceSol,
               priceUsd: ctx.priceUsd,
               lastTradeTimestamp: BigInt(ctx.timestampMs),
@@ -452,16 +455,48 @@ function connectToFeed() {
 console.log('🚀 Starting unified trade ingestion service...')
 connectToFeed()
 
-process.on('SIGINT', async () => {
-  console.log('\n🛑 Shutting down...')
-  ws?.close()
-  await prisma.$disconnect()
-  process.exit(0)
-})
+async function cleanupOldTrades() {
+  const cutoffMs = Date.now() - TRADE_RETENTION_MS
+  const cutoffBigInt = BigInt(cutoffMs)
+  const cutoffDate = new Date(cutoffMs)
 
-process.on('SIGTERM', async () => {
-  console.log('\n🛑 Shutting down...')
+  try {
+    await prisma.$transaction([
+      prisma.trade.deleteMany({
+        where: {
+          timestamp: {
+            lt: cutoffBigInt,
+          },
+        },
+      }),
+      prisma.tradeTape.deleteMany({
+        where: {
+          ts: {
+            lt: cutoffDate,
+          },
+        },
+      }),
+    ])
+  } catch (error) {
+    console.error('[pump-feed] Failed to cleanup old trades:', (error as Error).message)
+  }
+}
+
+void cleanupOldTrades()
+setInterval(() => {
+  void cleanupOldTrades()
+}, CLEANUP_INTERVAL_MS)
+
+  process.on('SIGINT', async () => {
+    console.log('\n🛑 Shutting down...')
   ws?.close()
-  await prisma.$disconnect()
-  process.exit(0)
+    await prisma.$disconnect()
+    process.exit(0)
+  })
+
+  process.on('SIGTERM', async () => {
+    console.log('\n🛑 Shutting down...')
+  ws?.close()
+    await prisma.$disconnect()
+    process.exit(0)
 })
