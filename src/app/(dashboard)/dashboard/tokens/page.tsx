@@ -271,7 +271,8 @@ interface Token {
 
 export default function TokensPage() {
   const router = useRouter();
-  const metadataCacheRef = useRef<Map<string, boolean>>(new Map());
+const metadataCacheRef = useRef<Map<string, RemoteMetadata>>(new Map());
+const metadataInFlightRef = useRef<Set<string>>(new Set());
   const fetchSeqRef = useRef(0);
   const [tokens, setTokens] = useState<Token[]>([]);
   const [loading, setLoading] = useState(true);
@@ -337,54 +338,81 @@ export default function TokensPage() {
     []
   );
 
-  const hydrateTokenMetadata = useCallback(
-    (tokenList: Token[]) => {
-      if (!Array.isArray(tokenList) || tokenList.length === 0) return;
+const applyMetadataToToken = (token: Token, metadata?: RemoteMetadata | null) => {
+  if (!metadata) return token;
 
-      const tokensToRefresh = tokenList.filter((token) => {
-        if (!token) return false;
-        if (metadataCacheRef.current.has(token.mintAddress)) return false;
-        return shouldHydrateToken(token);
-      });
+  return {
+    ...token,
+    name: metadata.name ?? token.name,
+    symbol: metadata.symbol ?? token.symbol,
+    imageUri: normaliseIpfsUri(metadata.imageUri) ?? token.imageUri,
+    twitter: metadata.twitter ?? token.twitter,
+    telegram: metadata.telegram ?? token.telegram,
+    website: metadata.website ?? token.website,
+  };
+};
 
-      if (tokensToRefresh.length === 0) return;
+const hydrateTokenMetadata = useCallback(
+  (tokenList: Token[]) => {
+    if (!Array.isArray(tokenList) || tokenList.length === 0) return;
 
-      tokensToRefresh.forEach((token) => {
-        metadataCacheRef.current.set(token.mintAddress, true);
+    const tokensToFetch = tokenList.filter((token) => {
+      if (!token) return false;
 
-        (async () => {
-          try {
-            const metadata = await fetchRemoteMetadata(token.mintAddress);
-            if (!metadata) {
-              return;
-            }
+      const cached = metadataCacheRef.current.get(token.mintAddress);
+      if (cached) {
+        setTokens((prev) =>
+          prev.map((existing) =>
+            existing.mintAddress === token.mintAddress
+              ? applyMetadataToToken(existing, cached)
+              : existing
+          )
+        );
+        return false;
+      }
 
-            setTokens((prev) =>
-              prev.map((existing) =>
-                existing.mintAddress === token.mintAddress
-                  ? {
-                      ...existing,
-                      name: metadata.name ?? existing.name,
-                      symbol: metadata.symbol ?? existing.symbol,
-                      imageUri: normaliseIpfsUri(metadata.imageUri) ?? existing.imageUri,
-                      twitter: metadata.twitter ?? existing.twitter,
-                      telegram: metadata.telegram ?? existing.telegram,
-                      website: metadata.website ?? existing.website,
-                    }
-                  : existing
-              )
-            );
-          } catch (error) {
-            console.warn(
-              `[tokens-page] Failed to fetch metadata for ${token.mintAddress}:`,
-              error
-            );
+      if (metadataInFlightRef.current.has(token.mintAddress)) return false;
+      return shouldHydrateToken(token);
+    });
+
+    if (tokensToFetch.length === 0) return;
+
+    tokensToFetch.forEach((token) => {
+      metadataInFlightRef.current.add(token.mintAddress);
+
+      (async () => {
+        try {
+          const metadata = await fetchRemoteMetadata(token.mintAddress);
+          if (!metadata) {
+            return;
           }
-        })();
-      });
-    },
-    []
-  );
+
+          const normalised: RemoteMetadata = {
+            ...metadata,
+            imageUri: normaliseIpfsUri(metadata.imageUri),
+          };
+          metadataCacheRef.current.set(token.mintAddress, normalised);
+
+          setTokens((prev) =>
+            prev.map((existing) =>
+              existing.mintAddress === token.mintAddress
+                ? applyMetadataToToken(existing, normalised)
+                : existing
+            )
+          );
+        } catch (error) {
+          console.warn(
+            `[tokens-page] Failed to fetch metadata for ${token.mintAddress}:`,
+            error
+          );
+        } finally {
+          metadataInFlightRef.current.delete(token.mintAddress);
+        }
+      })();
+    });
+  },
+  []
+);
 
   const fetchTokens = useCallback(
     async (showLoading = true) => {
@@ -464,32 +492,41 @@ export default function TokensPage() {
             .map((mint) => {
               const dbToken = dbTokenMap.get(mint);
               const remote = remoteMap.get(mint);
+
+              const metadata =
+                metadataCacheRef.current.get(mint) ??
+                (remote
+                  ? {
+                      name: remote.name ?? null,
+                      symbol: remote.symbol ?? null,
+                      imageUri: normaliseIpfsUri(remote.imageUri ?? null),
+                      twitter: remote.twitter ?? null,
+                      telegram: remote.telegram ?? null,
+                      website: remote.website ?? null,
+                    }
+                  : null);
+
+              if (metadata) {
+                metadataCacheRef.current.set(mint, metadata);
+              }
+
               if (dbToken) {
-                return {
-                  ...dbToken,
-                  name: remote?.name ?? dbToken.name,
-                  symbol: remote?.symbol ?? dbToken.symbol,
-                  imageUri:
-                    normaliseIpfsUri(remote?.imageUri ?? undefined) ?? dbToken.imageUri,
-                  twitter: remote?.twitter ?? dbToken.twitter,
-                  telegram: remote?.telegram ?? dbToken.telegram,
-                  website: remote?.website ?? dbToken.website,
-                };
+                return applyMetadataToToken(dbToken, metadata);
               }
 
               if (!remote) {
                 return null;
               }
 
-              return {
+              const baseToken: Token = {
                 id: `search-${mint}`,
                 mintAddress: mint,
-                name: remote.name ?? mint.slice(0, 6),
-                symbol: remote.symbol ?? mint.slice(0, 6).toUpperCase(),
-                imageUri: normaliseIpfsUri(remote.imageUri ?? null),
-                twitter: remote.twitter ?? null,
-                telegram: remote.telegram ?? null,
-                website: remote.website ?? null,
+                name: mint.slice(0, 6),
+                symbol: mint.slice(0, 6).toUpperCase(),
+                imageUri: null,
+                twitter: null,
+                telegram: null,
+                website: null,
                 price: null,
                 createdAt: Number(remote.createdTimestamp ?? Date.now()),
                 lastTradeTimestamp: null,
@@ -506,7 +543,9 @@ export default function TokensPage() {
                 totalSupplyTokens: undefined,
                 marketCapUsd: remote.usdMarketCap ?? undefined,
                 marketCapSol: undefined,
-              } as Token;
+              };
+
+              return applyMetadataToToken(baseToken, metadata);
             })
             .filter((token): token is Token => Boolean(token));
 
@@ -518,8 +557,12 @@ export default function TokensPage() {
         }
 
         if (fetchId === fetchSeqRef.current) {
-          setTokens(tokensResult);
-          hydrateTokenMetadata(tokensResult);
+          const withCachedMetadata = tokensResult.map((token) =>
+            applyMetadataToToken(token, metadataCacheRef.current.get(token.mintAddress) ?? null)
+          );
+
+          setTokens(withCachedMetadata);
+          hydrateTokenMetadata(withCachedMetadata);
         }
       } catch (error) {
         console.error("Error fetching tokens:", error);
