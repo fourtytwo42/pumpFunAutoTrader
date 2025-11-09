@@ -1543,9 +1543,7 @@ const formatAge = (hours: number) => {
                                     display: "flex",
                                     alignItems: "center",
                                     justifyContent: "center",
-                                    backgroundColor: item.accent
-                                      ? "rgba(49,242,140,0.18)"
-                                      : "rgba(255,255,255,0.07)",
+                                    backgroundColor: "rgba(255,255,255,0.07)",
                                   }}
                                 >
                                   <IconComponent
