@@ -1051,18 +1051,6 @@ const formatAge = (hours: number) => {
                             {token.symbol?.charAt(0) ?? "?"}
                           </Typography>
                         )}
-                        {token.completed && (
-                          <Chip
-                            label="Graduated"
-                            color="primary"
-                            size="small"
-                            sx={{
-                              position: "absolute",
-                              bottom: -12,
-                              borderRadius: "999px",
-                            }}
-                          />
-                        )}
                       </Box>
 
                       <Stack spacing={1} alignItems="center" width="100%">
