@@ -137,6 +137,8 @@ export interface PumpSearchToken {
   marketCap?: number
   complete?: boolean
   isLive?: boolean
+  program?: string
+  kingOfTheHillTimestamp?: number | null
 }
 
 export async function searchTokens(
@@ -145,20 +147,22 @@ export async function searchTokens(
     limit?: number
     offset?: number
     includeNsfw?: boolean
-    sort?: string
+    sort?: 'market_cap' | 'created_timestamp' | 'usd_market_cap' | 'last_reply'
     order?: 'ASC' | 'DESC'
   } = {}
 ): Promise<PumpSearchToken[]> {
   const query = term.trim()
   if (!query) return []
 
-  const params = new URLSearchParams()
-  params.set('offset', String(options.offset ?? 0))
-  params.set('limit', String(Math.min(Math.max(options.limit ?? 10, 1), 50)))
-  params.set('sort', options.sort ?? 'market_cap')
-  params.set('includeNsfw', String(options.includeNsfw ?? false))
-  params.set('order', options.order ?? 'DESC')
-  params.set('searchTerm', query)
+  const limit = Math.min(Math.max(options.limit ?? 120, 1), 200)
+  const params = new URLSearchParams({
+    searchTerm: query,
+    offset: String(Math.max(options.offset ?? 0, 0)),
+    limit: String(limit),
+    sort: options.sort ?? 'market_cap',
+    includeNsfw: String(options.includeNsfw ?? false),
+    order: options.order ?? 'DESC',
+  })
 
   const url = `${API_ENDPOINTS.frontend}/coins/search-v2?${params.toString()}`
   const data = await fetchPumpFun<any>(url)
@@ -180,6 +184,10 @@ export async function searchTokens(
     marketCap: token.market_cap ? Number(token.market_cap) : undefined,
     complete: token.complete !== undefined ? Boolean(token.complete) : undefined,
     isLive: token.is_currently_live !== undefined ? Boolean(token.is_currently_live) : undefined,
+    program: token.program || undefined,
+    kingOfTheHillTimestamp: token.king_of_the_hill_timestamp
+      ? Number(token.king_of_the_hill_timestamp)
+      : token.king_of_the_hill_timestamp ?? null,
   }))
 }
 

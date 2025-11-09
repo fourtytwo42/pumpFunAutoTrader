@@ -14,7 +14,6 @@ import {
   CircularProgress,
   Pagination,
   FormControl,
-  Select,
   MenuItem,
   InputLabel,
   Paper,
@@ -29,6 +28,7 @@ import {
   Slider,
   LinearProgress,
 } from "@mui/material";
+import Select, { SelectChangeEvent } from "@mui/material/Select";
 import SearchIcon from "@mui/icons-material/Search";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import TrendingDownIcon from "@mui/icons-material/TrendingDown";
@@ -60,6 +60,16 @@ const TRADE_AMOUNT_MIN = 0;
 const TRADE_AMOUNT_MAX = 100;
 const TOKEN_AGE_MIN_HOURS = 0;
 const TOKEN_AGE_MAX_HOURS = 168; // 7 days
+type StatusFilterValue = "all" | "only" | "hide";
+const STATUS_FILTER_OPTIONS: Array<{ value: StatusFilterValue; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "only", label: "Only" },
+  { value: "hide", label: "Hide" },
+];
+const DEFAULT_STATUS_FILTERS: Record<"graduated" | "koth", StatusFilterValue> = {
+  graduated: "all",
+  koth: "all",
+};
 
 const PUMP_SEARCH_ENDPOINT = "/api/pump/search";
 const TOKEN_METADATA_ENDPOINT = "/api/tokens";
@@ -156,7 +166,7 @@ const fetchRemoteMetadata = async (mintAddress: string): Promise<RemoteMetadata 
   }
 };
 
-const searchPumpTokens = async (term: string, limit = 20): Promise<PumpSearchCoin[]> => {
+const searchPumpTokens = async (term: string, limit = 120): Promise<PumpSearchCoin[]> => {
   const trimmed = term.trim();
   if (!trimmed) return [];
 
@@ -284,6 +294,8 @@ const metadataInFlightRef = useRef<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState("marketCap");
   const [timeframe, setTimeframe] = useState<TimeframeOption>('10m');
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  const [statusFilters, setStatusFilters] =
+    useState<Record<"graduated" | "koth", StatusFilterValue>>(DEFAULT_STATUS_FILTERS);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
@@ -313,6 +325,18 @@ const metadataInFlightRef = useRef<Set<string>>(new Set());
           DEFAULT_FILTERS.tokenAge
         ),
       });
+      const savedStatus = parsed?.statusFilters ?? {};
+      const normalizeStatus = (value: unknown, fallback: StatusFilterValue): StatusFilterValue => {
+        if (typeof value !== "string") return fallback;
+        const lower = value.toLowerCase();
+        if (lower === "only" || lower === "show" || lower === "show_only") return "only";
+        if (lower === "hide" || lower === "hide_all") return "hide";
+        return "all";
+      };
+      setStatusFilters({
+        graduated: normalizeStatus(savedStatus.graduated, DEFAULT_STATUS_FILTERS.graduated),
+        koth: normalizeStatus(savedStatus.koth, DEFAULT_STATUS_FILTERS.koth),
+      });
     } catch (error) {
       console.warn("Failed to parse saved token feed filters:", error);
     }
@@ -320,13 +344,31 @@ const metadataInFlightRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    localStorage.setItem("tokenFeedFilters", JSON.stringify(filters));
-  }, [filters]);
+    localStorage.setItem(
+      "tokenFeedFilters",
+      JSON.stringify({
+        ...filters,
+        statusFilters,
+      })
+    );
+  }, [filters, statusFilters]);
 
   const handleTimeframeChange = (value: TimeframeOption) => {
     setTimeframe(value);
     setPage(1);
   };
+
+  const handleStatusFilterChange = useCallback(
+    (key: "graduated" | "koth") => (event: SelectChangeEvent<StatusFilterValue>) => {
+      const value = event.target.value as StatusFilterValue;
+      setStatusFilters((prev) => {
+        const next = { ...prev, [key]: value };
+        return next;
+      });
+      setPage(1);
+    },
+    []
+  );
 
   const handleRangeChange = useCallback(
     (key: keyof FilterState) => (_event: Event, newValue: number | number[]) => {
@@ -480,6 +522,12 @@ const hydrateTokenMetadata = useCallback(
           }
           appendFilterParams();
         }
+      if (statusFilters.graduated !== "all") {
+        params.set("graduated", statusFilters.graduated);
+      }
+      if (statusFilters.koth !== "all") {
+        params.set("koth", statusFilters.koth);
+      }
 
         const response = await fetch(`/api/tokens?${params.toString()}`);
         const data = await response.json();
@@ -559,9 +607,16 @@ const hydrateTokenMetadata = useCallback(
         }
 
         if (fetchId === fetchSeqRef.current) {
-          const withCachedMetadata = tokensResult.map((token) =>
-            applyMetadataToToken(token, metadataCacheRef.current.get(token.mintAddress) ?? null)
-          );
+          const nowTs = Date.now();
+          const withCachedMetadata = tokensResult
+            .map((token) =>
+              applyMetadataToToken(token, metadataCacheRef.current.get(token.mintAddress) ?? null)
+            )
+            .filter(
+              (tokenEntry) =>
+                matchesStatusFilters(tokenEntry, statusFilters) &&
+                matchesNumericFilters(tokenEntry, filters, nowTs)
+            );
 
           setTokens(withCachedMetadata);
           hydrateTokenMetadata(withCachedMetadata);
@@ -574,7 +629,7 @@ const hydrateTokenMetadata = useCallback(
         }
       }
     },
-    [filters, page, search, sortBy, timeframe, hydrateTokenMetadata]
+    [filters, page, search, sortBy, timeframe, statusFilters, hydrateTokenMetadata]
   );
 
   useEffect(() => {
@@ -693,7 +748,7 @@ const hydrateTokenMetadata = useCallback(
     return `$${(volume / 1000000).toFixed(2)}M`;
   };
 
-  const formatVolumeSol = (volumeSol: number | undefined) => {
+const formatVolumeSol = (volumeSol: number | undefined) => {
     if (!volumeSol || volumeSol === 0) return "0 SOL";
     if (volumeSol < 0.001) return `${volumeSol.toFixed(6)} SOL`;
     if (volumeSol < 1) return `${volumeSol.toFixed(4)} SOL`;
@@ -718,6 +773,48 @@ const getGraduatedLabel = (
 ): string | null => {
   if (!token.completed) return null;
   return token.kingOfTheHillTimestamp ? `Graduated ${formatter(token.kingOfTheHillTimestamp)}` : "Graduated";
+};
+
+const matchesStatusFilters = (
+  token: Token,
+  statusFilters: Record<"graduated" | "koth", StatusFilterValue>
+) => {
+  const isGraduated = !!token.completed;
+  const isKoth = token.kingOfTheHillTimestamp != null;
+
+  if (statusFilters.graduated === "only" && !isGraduated) return false;
+  if (statusFilters.graduated === "hide" && isGraduated) return false;
+  if (statusFilters.koth === "only" && !isKoth) return false;
+  if (statusFilters.koth === "hide" && isKoth) return false;
+
+  return true;
+};
+
+const matchesNumericFilters = (token: Token, filters: FilterState, now = Date.now()) => {
+  const marketCap = token.marketCapUsd ?? 0;
+  const traders = token.uniqueTraders ?? 0;
+  const ageMs = token.createdAt ? now - token.createdAt : undefined;
+
+  if (filters.marketCap[0] > MARKET_CAP_MIN && marketCap < filters.marketCap[0]) return false;
+  if (filters.marketCap[1] < MARKET_CAP_MAX && marketCap > filters.marketCap[1]) return false;
+  if (filters.uniqueTraders[0] > UNIQUE_TRADERS_MIN && traders < filters.uniqueTraders[0]) return false;
+  if (filters.uniqueTraders[1] < UNIQUE_TRADERS_MAX && traders > filters.uniqueTraders[1]) return false;
+  const totalVolumeSol = token.totalVolumeSol ?? 0;
+  if (filters.tradeAmount[0] > TRADE_AMOUNT_MIN && totalVolumeSol < filters.tradeAmount[0]) return false;
+  if (filters.tradeAmount[1] < TRADE_AMOUNT_MAX && totalVolumeSol > filters.tradeAmount[1]) return false;
+
+  const minAgeHours = filters.tokenAge[0];
+  const maxAgeHours = filters.tokenAge[1];
+  if (minAgeHours > TOKEN_AGE_MIN_HOURS) {
+    const minAgeMs = minAgeHours * 60 * 60 * 1000;
+    if (ageMs == null || ageMs < minAgeMs) return false;
+  }
+  if (maxAgeHours < TOKEN_AGE_MAX_HOURS) {
+    const maxAgeMs = maxAgeHours * 60 * 60 * 1000;
+    if (ageMs == null || ageMs > maxAgeMs) return false;
+  }
+
+  return true;
 };
 
 const formatAge = (hours: number) => {
@@ -939,6 +1036,30 @@ const formatAge = (hours: number) => {
               {TIMEFRAME_OPTIONS.map((option) => (
                 <MenuItem key={option} value={option}>
                   {TIMEFRAME_LABELS[option]}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 140 }}>
+            <InputLabel>Graduated</InputLabel>
+            <Select
+              value={statusFilters.graduated}
+              label="Graduated"
+              onChange={handleStatusFilterChange("graduated")}
+            >
+              {STATUS_FILTER_OPTIONS.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 140 }}>
+            <InputLabel>KOTH</InputLabel>
+            <Select value={statusFilters.koth} label="KOTH" onChange={handleStatusFilterChange("koth")}>
+              {STATUS_FILTER_OPTIONS.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
                 </MenuItem>
               ))}
             </Select>

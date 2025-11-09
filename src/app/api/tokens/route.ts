@@ -99,6 +99,24 @@ export async function GET(request: NextRequest) {
 
     const nowMs = BigInt(Date.now())
     const timeframeStartMs = timeframeSeconds ? nowMs - BigInt(timeframeSeconds) * 1000n : undefined
+
+    type StatusFilterValue = 'all' | 'only' | 'hide'
+    const parseStatusFilter = (value: string | null): StatusFilterValue => {
+      switch ((value || '').toLowerCase()) {
+        case 'only':
+        case 'show':
+        case 'show_only':
+          return 'only'
+        case 'hide':
+        case 'hide_all':
+          return 'hide'
+        default:
+          return 'all'
+      }
+    }
+
+    const graduatedFilter = parseStatusFilter(searchParams.get('graduated'))
+    const kothFilter = parseStatusFilter(searchParams.get('koth'))
     const TOKEN_AGE_MAX_HOURS = 168
     const hoursToMs = (hours: number) => BigInt(Math.round(hours * 60 * 60 * 1000))
 
@@ -377,6 +395,9 @@ export async function GET(request: NextRequest) {
           }
         }
 
+        const completed = token.completed ?? false
+        const kingOfTheHillTimestamp = normaliseTimestamp(token.kingOfTheHillTimestamp)
+
         return {
           id: token.id,
           mintAddress: token.mintAddress,
@@ -387,8 +408,8 @@ export async function GET(request: NextRequest) {
           telegram: token.telegram,
           website: token.website,
           createdAt: normaliseTimestamp(token.createdAt),
-          kingOfTheHillTimestamp: normaliseTimestamp(token.kingOfTheHillTimestamp),
-          completed: token.completed,
+          kingOfTheHillTimestamp,
+          completed,
           price: token.price
             ? {
                 priceSol,
@@ -416,7 +437,21 @@ export async function GET(request: NextRequest) {
     const minAgeMs = tokenAgeMinHours !== undefined ? tokenAgeMinHours * 60 * 60 * 1000 : undefined
     const maxAgeMs = tokenAgeMaxHours !== undefined ? tokenAgeMaxHours * 60 * 60 * 1000 : undefined
 
+    const matchesStatusFilters = (token: typeof tokensWithStats[number]) => {
+      const isGraduated = token.completed ?? false
+      const isKoth = token.kingOfTheHillTimestamp != null
+
+      if (graduatedFilter === 'only' && !isGraduated) return false
+      if (graduatedFilter === 'hide' && isGraduated) return false
+      if (kothFilter === 'only' && !isKoth) return false
+      if (kothFilter === 'hide' && isKoth) return false
+
+      return true
+    }
+
     let filteredTokens = tokensWithStats.filter((token) => {
+      if (!matchesStatusFilters(token)) return false
+
       const marketCapValue = token.marketCapUsd ?? 0
       const traderCount = token.uniqueTraders ?? 0
       const createdAtMs = token.createdAt ?? null
