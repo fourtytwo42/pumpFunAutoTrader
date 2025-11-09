@@ -27,6 +27,7 @@ import {
   DialogContent,
   DialogActions,
   Slider,
+  LinearProgress,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
@@ -63,6 +64,7 @@ const TOKEN_AGE_MAX_HOURS = 168; // 7 days
 const PUMP_SEARCH_ENDPOINT = "/api/pump/search";
 const TOKEN_METADATA_ENDPOINT = "/api/tokens";
 const PINATA_IPFS_BASE = "https://pump.mypinata.cloud/ipfs/";
+const GRADUATION_TARGET_USD = 69_000;
 
 type FilterState = {
   marketCap: [number, number];
@@ -699,6 +701,25 @@ const hydrateTokenMetadata = useCallback(
     return `${(volumeSol / 1000).toFixed(2)}K SOL`;
   };
 
+const clampPercentage = (value: number) => Math.min(Math.max(value, 0), 100);
+
+const getGraduationProgress = (token: Token) => {
+  if (token.completed) return 100;
+  const marketCap = token.marketCapUsd ?? 0;
+  if (!Number.isFinite(marketCap) || marketCap <= 0) {
+    return 0;
+  }
+  return clampPercentage((marketCap / GRADUATION_TARGET_USD) * 100);
+};
+
+const getGraduatedLabel = (
+  token: Token,
+  formatter: (timestamp: number | null | undefined) => string
+): string | null => {
+  if (!token.completed) return null;
+  return token.kingOfTheHillTimestamp ? `Graduated ${formatter(token.kingOfTheHillTimestamp)}` : "Graduated";
+};
+
 const formatAge = (hours: number) => {
   if (!Number.isFinite(hours) || hours <= 0) {
     return "0h";
@@ -974,9 +995,10 @@ const formatAge = (hours: number) => {
         <>
           <Grid container spacing={2}>
             {tokens.map((token) => {
-              const visuals = getVolumeVisuals(
-                token.buyVolume,
-                token.sellVolume
+              const visuals = getVolumeVisuals(token.buyVolume, token.sellVolume);
+              const graduationProgress = getGraduationProgress(token);
+              const graduatedLabel = getGraduatedLabel(token, (timestamp) =>
+                formatTimeAgo(timestamp, "just now")
               );
 
               return (
@@ -1232,6 +1254,56 @@ const formatAge = (hours: number) => {
                         </Stack>
                       </Grid>
                     </Grid>
+
+                    <Box sx={{ width: "100%" }}>
+                      {token.completed ? (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ fontWeight: 600, display: "block", textAlign: "center" }}
+                        >
+                          {graduatedLabel}
+                        </Typography>
+                      ) : (
+                        <Stack spacing={0.75}>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                            }}
+                          >
+                            <Typography variant="caption" color="text.secondary">
+                              Bonding Curve Progress
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                              {graduationProgress.toFixed(1)}%
+                            </Typography>
+                          </Box>
+                          <LinearProgress
+                            variant="determinate"
+                            value={graduationProgress}
+                            sx={{
+                              height: 8,
+                              borderRadius: "999px",
+                              backgroundColor: "rgba(255,255,255,0.08)",
+                              "& .MuiLinearProgress-bar": {
+                                borderRadius: "999px",
+                                background:
+                                  graduationProgress >= 100
+                                    ? "linear-gradient(90deg, #31F28C, #5CFAE3)"
+                                    : "linear-gradient(90deg, #17C671, #31F28C)",
+                              },
+                            }}
+                          />
+                          <Typography variant="caption" color="text.secondary">
+                            {token.marketCapUsd !== undefined && token.marketCapUsd > 0
+                              ? `${formatVolume(token.marketCapUsd)} / ${formatVolume(GRADUATION_TARGET_USD)}`
+                              : "Market cap data unavailable"}
+                          </Typography>
+                        </Stack>
+                      )}
+                    </Box>
 
                     <Divider sx={{ borderColor: "rgba(255,255,255,0.06)" }} />
 

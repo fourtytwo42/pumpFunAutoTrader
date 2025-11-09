@@ -155,10 +155,13 @@ export async function GET(request: NextRequest) {
       ...(createdAtFilter && mintList.length === 0 ? { createdAt: createdAtFilter } : {}),
     }
 
+    const MAX_FETCH = mintList.length > 0 ? Math.max(mintList.length, 50) : 2000
     const effectiveLimit = mintList.length > 0 ? mintList.length : limit
-    const fetchMultiple = mintList.length > 0 ? 1 : Math.max(page + 2, 5)
-    const fetchLimit =
-      mintList.length > 0 ? mintList.length : Math.min(500, effectiveLimit * fetchMultiple)
+    const fetchMultiple = mintList.length > 0 ? 1 : Math.max(page + 3, 8)
+    const fetchLimit = Math.min(
+      MAX_FETCH,
+      mintList.length > 0 ? Math.max(mintList.length, 100) : Math.max(effectiveLimit * fetchMultiple, 400)
+    )
 
     let tokens = await prisma.token.findMany({
       where: tokenWhere,
