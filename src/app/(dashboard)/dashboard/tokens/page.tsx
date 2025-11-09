@@ -1149,9 +1149,16 @@ const formatAge = (hours: number) => {
               const solPriceUsd = priceSol > 0 && priceUsd > 0 ? priceUsd / priceSol : 0;
               const graduationProgress = getGraduationProgress(token, solPriceUsd);
               const graduationTargetLabel =
-                solPriceUsd > 0
-                  ? formatVolume(solPriceUsd * BONDING_CURVE_TARGET_SOL)
-                  : "N/A";
+                solPriceUsd > 0 ? formatVolume(solPriceUsd * BONDING_CURVE_TARGET_SOL) : "N/A";
+              const createdLabel = `Created ${formatTimeAgo(token.createdAt)}`;
+              const lastActivityLabel = `Last activity ${formatTimeAgo(token.lastTradeTimestamp, "No trades")}`;
+              const graduationLabel =
+                token.completed && token.kingOfTheHillTimestamp
+                  ? `Graduated ${formatTimeAgo(token.kingOfTheHillTimestamp, "just now")}`
+                  : token.completed
+                    ? "Graduated"
+                    : null;
+              const hasSocials = token.twitter || token.telegram || token.website;
               return (
                 <Grid item xs={12} sm={6} md={4} lg={3} key={token.id}>
                   <Card
@@ -1183,90 +1190,97 @@ const formatAge = (hours: number) => {
                         flex: 1,
                         display: "flex",
                         flexDirection: "column",
-                        p: { xs: 2, md: 2.5 },
-                        gap: 2,
+                        p: { xs: 2.5, md: 3 },
+                        gap: 2.5,
                       }}
                     >
-                    <Stack spacing={2} alignItems="center" width="100%">
-                      <Box
-                        sx={{
-                          width: 80,
-                          height: 80,
-                          borderRadius: "16px",
-                          backgroundColor: "rgba(255, 255, 255, 0.05)",
-                          border: "1px solid rgba(255, 255, 255, 0.08)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          overflow: "hidden",
-                          position: "relative",
-                        }}
-                      >
-                        {token.imageUri ? (
-                          <Box
-                            component="img"
-                            src={token.imageUri}
-                            alt={token.name}
-                            sx={{
-                              width: "100%",
-                              height: "100%",
-                              objectFit: "cover",
-                            }}
-                            onError={(e: any) => {
-                              e.currentTarget.style.display = "none";
-                            }}
-                          />
-                        ) : (
-                          <Typography
-                            variant="h4"
-                            sx={{ fontWeight: 700, color: "rgba(255,255,255,0.4)" }}
-                          >
+                    <Box
+                      sx={{
+                        position: "relative",
+                        borderRadius: 2,
+                        overflow: "hidden",
+                        height: 180,
+                        width: "100%",
+                        background: "rgba(255,255,255,0.04)",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                      }}
+                    >
+                      {token.imageUri ? (
+                        <Box
+                          component="img"
+                          src={token.imageUri}
+                          alt={token.name}
+                          sx={{ width: "100%", height: "100%", objectFit: "cover" }}
+                          onError={(e: any) => {
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
+                      ) : (
+                        <Box
+                          sx={{
+                            height: "100%",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <Typography variant="h3" sx={{ fontWeight: 700, color: "rgba(255,255,255,0.4)" }}>
                             {token.symbol?.charAt(0) ?? "?"}
                           </Typography>
-                        )}
-                      </Box>
-
-                      <Stack spacing={1} alignItems="center" width="100%">
-                        <Tooltip title={token.name} placement="top" arrow>
-                          <Typography
-                            variant="h6"
-                            sx={{
-                              fontWeight: 700,
-                              maxWidth: "100%",
-                              textAlign: "center",
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              letterSpacing: 0.4,
-                            }}
-                          >
-                            {token.name}
-                          </Typography>
-                        </Tooltip>
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
+                        </Box>
+                      )}
+                      {graduationLabel && (
+                        <Chip
+                          label={graduationLabel}
+                          size="small"
+                          color="success"
                           sx={{
-                            fontWeight: 500,
+                            position: "absolute",
+                            top: 12,
+                            right: 12,
+                            backdropFilter: "blur(6px)",
+                            backgroundColor: "rgba(49, 242, 140, 0.16)",
+                            color: "#31F28C",
+                            fontWeight: 600,
+                          }}
+                        />
+                      )}
+                    </Box>
+
+                    <Stack spacing={1.6}>
+                      <Tooltip title={token.name} placement="top" arrow>
+                        <Typography
+                          variant="h6"
+                          sx={{
+                            fontWeight: 700,
                             letterSpacing: 0.4,
+                            lineHeight: 1.2,
                             maxWidth: "100%",
                             whiteSpace: "nowrap",
                             overflow: "hidden",
                             textOverflow: "ellipsis",
                           }}
                         >
-                          {token.symbol}
+                          {token.name}
                         </Typography>
-                        <Box
+                      </Tooltip>
+                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                        <Chip
+                          label={token.symbol}
+                          size="small"
                           sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            gap: 1,
-                            minHeight: 40,
-                            width: "100%",
+                            fontWeight: 600,
+                            letterSpacing: 0.6,
+                            textTransform: "uppercase",
+                            backgroundColor: "rgba(255,255,255,0.06)",
                           }}
-                        >
+                        />
+                        <Typography variant="caption" color="text.secondary">
+                          {token.mintAddress.slice(0, 4)}…{token.mintAddress.slice(-4)}
+                        </Typography>
+                      </Stack>
+                      {hasSocials && (
+                        <Stack direction="row" spacing={1}>
                           {token.twitter && (
                             <IconButton
                               size="small"
@@ -1275,8 +1289,8 @@ const formatAge = (hours: number) => {
                                 window.open(token.twitter!, "_blank", "noopener,noreferrer");
                               }}
                               sx={{
-                                width: 32,
-                                height: 32,
+                                width: 34,
+                                height: 34,
                                 backgroundColor: "rgba(255,255,255,0.06)",
                                 color: "#7C8DB5",
                                 borderRadius: "12px",
@@ -1297,8 +1311,8 @@ const formatAge = (hours: number) => {
                                 window.open(token.telegram!, "_blank", "noopener,noreferrer");
                               }}
                               sx={{
-                                width: 32,
-                                height: 32,
+                                width: 34,
+                                height: 34,
                                 backgroundColor: "rgba(255,255,255,0.06)",
                                 color: "#7C8DB5",
                                 borderRadius: "12px",
@@ -1319,8 +1333,8 @@ const formatAge = (hours: number) => {
                                 window.open(token.website!, "_blank", "noopener,noreferrer");
                               }}
                               sx={{
-                                width: 32,
-                                height: 32,
+                                width: 34,
+                                height: 34,
                                 backgroundColor: "rgba(255,255,255,0.06)",
                                 color: "#7C8DB5",
                                 borderRadius: "12px",
@@ -1333,11 +1347,8 @@ const formatAge = (hours: number) => {
                               <LanguageIcon fontSize="small" />
                             </IconButton>
                           )}
-                          {!token.twitter && !token.telegram && !token.website && (
-                            <Box sx={{ height: 32 }} />
-                          )}
-                        </Box>
-                      </Stack>
+                        </Stack>
+                      )}
                     </Stack>
 
                     <Divider sx={{ borderColor: "rgba(255,255,255,0.06)" }} />
@@ -1472,14 +1483,30 @@ const formatAge = (hours: number) => {
 
                     <Divider sx={{ borderColor: "rgba(255,255,255,0.06)" }} />
 
-                    <Stack spacing={0.5} alignItems="flex-start">
-                      <Typography variant="caption" color="text.secondary">
-                        Created {formatTimeAgo(token.createdAt)}
+                    <Box
+                      sx={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 0.75,
+                        px: 1.5,
+                        py: 1.25,
+                        borderRadius: 2,
+                        backgroundColor: "rgba(255,255,255,0.035)",
+                        border: "1px solid rgba(255,255,255,0.06)",
+                      }}
+                    >
+                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
+                        {createdLabel}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Last activity {formatTimeAgo(token.lastTradeTimestamp, "No trades")}
+                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
+                        {lastActivityLabel}
                       </Typography>
-                    </Stack>
+                      {graduationLabel && (
+                        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                          {graduationLabel}
+                        </Typography>
+                      )}
+                    </Box>
                     </CardContent>
                   </Card>
                 </Grid>
