@@ -83,7 +83,7 @@ const DEFAULT_STATUS_FILTERS: { graduated: GraduatedFilterValue; koth: KothFilte
 const PUMP_SEARCH_ENDPOINT = "/api/pump/search";
 const TOKEN_METADATA_ENDPOINT = "/api/tokens";
 const PINATA_IPFS_BASE = "https://pump.mypinata.cloud/ipfs/";
-const GRADUATION_TARGET_USD = 69_000;
+const BONDING_CURVE_TARGET_SOL = 415;
 
 type FilterState = {
   marketCap: [number, number];
@@ -782,13 +782,14 @@ const formatVolumeSol = (volumeSol: number | undefined) => {
 
 const clampPercentage = (value: number) => Math.min(Math.max(value, 0), 100);
 
-const getGraduationProgress = (token: Token) => {
+const getGraduationProgress = (token: Token, solPriceUsd: number) => {
   if (token.completed) return 100;
   const marketCap = token.marketCapUsd ?? 0;
-  if (!Number.isFinite(marketCap) || marketCap <= 0) {
+  const graduationUsd = solPriceUsd > 0 ? BONDING_CURVE_TARGET_SOL * solPriceUsd : 0;
+  if (!Number.isFinite(marketCap) || marketCap <= 0 || graduationUsd <= 0) {
     return 0;
   }
-  return clampPercentage((marketCap / GRADUATION_TARGET_USD) * 100);
+  return clampPercentage((marketCap / graduationUsd) * 100);
 };
 
 const matchesStatusFilters = (
@@ -1133,7 +1134,7 @@ const formatAge = (hours: number) => {
           <Grid container spacing={2}>
             {tokens.map((token) => {
               const visuals = getVolumeVisuals(token.buyVolume, token.sellVolume);
-              const graduationProgress = getGraduationProgress(token);
+              const graduationProgress = getGraduationProgress(token, solReferencePrice);
               return (
                 <Grid item xs={12} sm={6} md={4} lg={3} key={token.id}>
                   <Card
@@ -1431,11 +1432,23 @@ const formatAge = (hours: number) => {
                               },
                             }}
                           />
-                          <Typography variant="caption" color="text.secondary">
-                            {token.marketCapUsd !== undefined && token.marketCapUsd > 0
-                              ? `${formatVolume(token.marketCapUsd)} / ${formatVolume(GRADUATION_TARGET_USD)}`
-                              : "Market cap data unavailable"}
-                          </Typography>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              width: "100%",
+                            }}
+                          >
+                            <Typography variant="caption" color="text.secondary">
+                              {token.marketCapUsd !== undefined && token.marketCapUsd > 0
+                                ? `Market Cap: ${formatVolume(token.marketCapUsd)}`
+                                : "Market cap data unavailable"}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                              Target: {formatVolume(solReferencePrice * BONDING_CURVE_TARGET_SOL)}
+                            </Typography>
+                          </Box>
                         </Stack>
                       )}
                     </Box>
@@ -1448,9 +1461,6 @@ const formatAge = (hours: number) => {
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         Last activity {formatTimeAgo(token.lastTradeTimestamp, "No trades")}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {getKothLabel(token)}
                       </Typography>
                     </Stack>
                     </CardContent>
