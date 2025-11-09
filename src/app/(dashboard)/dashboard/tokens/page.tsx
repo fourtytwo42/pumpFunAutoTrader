@@ -61,7 +61,7 @@ const TRADE_AMOUNT_MAX = 100;
 const TOKEN_AGE_MIN_HOURS = 0;
 const TOKEN_AGE_MAX_HOURS = 168; // 7 days
 type GraduatedFilterValue = "all" | "bonding" | "graduated";
-type KothFilterValue = "all" | "only" | "hide";
+type KothFilterValue = "all" | "not_koth" | "koth";
 
 const GRADUATED_FILTER_OPTIONS: Array<{ value: GraduatedFilterValue; label: string }> = [
   { value: "all", label: "All" },
@@ -71,8 +71,8 @@ const GRADUATED_FILTER_OPTIONS: Array<{ value: GraduatedFilterValue; label: stri
 
 const KOTH_FILTER_OPTIONS: Array<{ value: KothFilterValue; label: string }> = [
   { value: "all", label: "All" },
-  { value: "only", label: "Only" },
-  { value: "hide", label: "Hide" },
+  { value: "not_koth", label: "Not KOTH" },
+  { value: "koth", label: "KOTH" },
 ];
 
 const DEFAULT_STATUS_FILTERS: { graduated: GraduatedFilterValue; koth: KothFilterValue } = {
@@ -347,8 +347,8 @@ const metadataInFlightRef = useRef<Set<string>>(new Set());
       const normalizeKoth = (value: unknown): KothFilterValue => {
         if (typeof value !== "string") return DEFAULT_STATUS_FILTERS.koth;
         const lower = value.toLowerCase();
-        if (lower === "only" || lower === "show" || lower === "show_only") return "only";
-        if (lower === "hide" || lower === "hide_all") return "hide";
+        if (lower === "koth") return "koth";
+        if (lower === "not_koth" || lower === "notkoth" || lower === "non_koth") return "not_koth";
         return "all";
       };
       setStatusFilters({
@@ -800,8 +800,8 @@ const matchesStatusFilters = (
 
   if (statusFilters.graduated === "bonding" && isGraduated) return false;
   if (statusFilters.graduated === "graduated" && !isGraduated) return false;
-  if (statusFilters.koth === "only" && !isKoth) return false;
-  if (statusFilters.koth === "hide" && isKoth) return false;
+  if (statusFilters.koth === "koth" && !isKoth) return false;
+  if (statusFilters.koth === "not_koth" && isKoth) return false;
 
   return true;
 };

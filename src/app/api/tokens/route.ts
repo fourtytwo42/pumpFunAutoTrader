@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
     const timeframeStartMs = timeframeSeconds ? nowMs - BigInt(timeframeSeconds) * 1000n : undefined
 
     type GraduatedFilterValue = 'all' | 'bonding' | 'graduated'
-    type KothFilterValue = 'all' | 'only' | 'hide'
+    type KothFilterValue = 'all' | 'not_koth' | 'koth'
 
     const parseGraduatedFilter = (value: string | null): GraduatedFilterValue => {
       switch ((value || '').toLowerCase()) {
@@ -116,13 +116,12 @@ export async function GET(request: NextRequest) {
 
     const parseKothFilter = (value: string | null): KothFilterValue => {
       switch ((value || '').toLowerCase()) {
-        case 'only':
-        case 'show':
-        case 'show_only':
-          return 'only'
-        case 'hide':
-        case 'hide_all':
-          return 'hide'
+        case 'koth':
+          return 'koth'
+        case 'not_koth':
+        case 'notkoth':
+        case 'non_koth':
+          return 'not_koth'
         default:
           return 'all'
       }
@@ -456,8 +455,8 @@ export async function GET(request: NextRequest) {
 
       if (graduatedFilter === 'bonding' && isGraduated) return false
       if (graduatedFilter === 'graduated' && !isGraduated) return false
-      if (kothFilter === 'only' && !isKoth) return false
-      if (kothFilter === 'hide' && isKoth) return false
+      if (kothFilter === 'koth' && !isKoth) return false
+      if (kothFilter === 'not_koth' && isKoth) return false
 
       return true
     }
