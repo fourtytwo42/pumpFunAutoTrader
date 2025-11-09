@@ -782,9 +782,19 @@ const formatVolumeSol = (volumeSol: number | undefined) => {
 
 const clampPercentage = (value: number) => Math.min(Math.max(value, 0), 100);
 
-const getGraduationProgress = (token: Token, solPriceUsd: number) => {
+const getGraduationProgress = (token: Token, solPriceUsdOverride?: number) => {
   if (token.completed) return 100;
   const marketCap = token.marketCapUsd ?? 0;
+  const priceSol = token.price?.priceSol ? Number(token.price.priceSol) : 0;
+  const priceUsd = token.price?.priceUsd ? Number(token.price.priceUsd) : 0;
+
+  const derivedSolPriceUsd =
+    priceSol > 0 && priceUsd > 0 ? priceUsd / priceSol : undefined;
+  const solPriceUsd =
+    solPriceUsdOverride && solPriceUsdOverride > 0
+      ? solPriceUsdOverride
+      : derivedSolPriceUsd ?? 0;
+
   const graduationUsd = solPriceUsd > 0 ? BONDING_CURVE_TARGET_SOL * solPriceUsd : 0;
   if (!Number.isFinite(marketCap) || marketCap <= 0 || graduationUsd <= 0) {
     return 0;
@@ -1134,7 +1144,14 @@ const formatAge = (hours: number) => {
           <Grid container spacing={2}>
             {tokens.map((token) => {
               const visuals = getVolumeVisuals(token.buyVolume, token.sellVolume);
-              const graduationProgress = getGraduationProgress(token, solReferencePrice);
+              const priceSol = token.price?.priceSol ? Number(token.price.priceSol) : 0;
+              const priceUsd = token.price?.priceUsd ? Number(token.price.priceUsd) : 0;
+              const solPriceUsd = priceSol > 0 && priceUsd > 0 ? priceUsd / priceSol : 0;
+              const graduationProgress = getGraduationProgress(token, solPriceUsd);
+              const graduationTargetLabel =
+                solPriceUsd > 0
+                  ? formatVolume(solPriceUsd * BONDING_CURVE_TARGET_SOL)
+                  : "N/A";
               return (
                 <Grid item xs={12} sm={6} md={4} lg={3} key={token.id}>
                   <Card
@@ -1446,7 +1463,7 @@ const formatAge = (hours: number) => {
                                 : "Market cap data unavailable"}
                             </Typography>
                             <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-                              Target: {formatVolume(solReferencePrice * BONDING_CURVE_TARGET_SOL)}
+                              Target: {graduationTargetLabel}
                             </Typography>
                           </Box>
                         </Stack>
