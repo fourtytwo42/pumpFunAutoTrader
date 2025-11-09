@@ -1229,22 +1229,6 @@ const formatAge = (hours: number) => {
                           </Typography>
                         </Box>
                       )}
-                      {graduationLabel && (
-                        <Chip
-                          label={graduationLabel}
-                          size="small"
-                          color="success"
-                          sx={{
-                            position: "absolute",
-                            top: 12,
-                            right: 12,
-                            backdropFilter: "blur(6px)",
-                            backgroundColor: "rgba(49, 242, 140, 0.16)",
-                            color: "#31F28C",
-                            fontWeight: 600,
-                          }}
-                        />
-                      )}
                     </Box>
 
                     <Stack spacing={1.6}>
@@ -1514,22 +1498,24 @@ const formatAge = (hours: number) => {
                     </Stack>
 
                     {graduationLabel && (
-                      <Box
+                      <Typography
+                        variant="caption"
                         sx={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 0.5,
                           px: 1.5,
-                          py: 0.75,
-                          borderRadius: 2,
+                          py: 0.6,
+                          borderRadius: 999,
                           backgroundColor: "rgba(49,242,140,0.12)",
                           border: "1px solid rgba(49,242,140,0.24)",
+                          fontWeight: 600,
+                          letterSpacing: 0.4,
+                          color: "#31F28C",
                         }}
                       >
-                        <Typography
-                          variant="caption"
-                          sx={{ fontWeight: 600, letterSpacing: 0.4, color: "#31F28C" }}
-                        >
-                          {graduationLabel}
-                        </Typography>
-                      </Box>
+                        {graduationLabel}
+                      </Typography>
                     )}
                     </CardContent>
                   </Card>
