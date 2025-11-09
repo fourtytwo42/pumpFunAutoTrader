@@ -1169,7 +1169,7 @@ const formatAge = (hours: number) => {
                       cursor: "pointer",
                       transition: "all 0.25s ease",
                       height: "100%",
-                      minHeight: 340,
+                      minHeight: 360,
                       display: "flex",
                       flexDirection: "column",
                       borderRadius: 3,
@@ -1483,30 +1483,54 @@ const formatAge = (hours: number) => {
 
                     <Divider sx={{ borderColor: "rgba(255,255,255,0.06)" }} />
 
-                    <Box
+                    <Stack
+                      direction="row"
+                      spacing={1.25}
                       sx={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 0.75,
                         px: 1.5,
-                        py: 1.25,
+                        py: 1,
                         borderRadius: 2,
                         backgroundColor: "rgba(255,255,255,0.035)",
                         border: "1px solid rgba(255,255,255,0.06)",
                       }}
                     >
-                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
-                        {createdLabel}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
-                        {lastActivityLabel}
-                      </Typography>
-                      {graduationLabel && (
-                        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                      <Box sx={{ flex: 1 }}>
+                        <Typography variant="overline" sx={{ letterSpacing: 0.6, fontSize: 11 }}>
+                          Created
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {formatTimeAgo(token.createdAt)}
+                        </Typography>
+                      </Box>
+                      <Divider orientation="vertical" flexItem sx={{ borderColor: "rgba(255,255,255,0.08)" }} />
+                      <Box sx={{ flex: 1 }}>
+                        <Typography variant="overline" sx={{ letterSpacing: 0.6, fontSize: 11 }}>
+                          Last Activity
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {formatTimeAgo(token.lastTradeTimestamp, "No trades")}
+                        </Typography>
+                      </Box>
+                    </Stack>
+
+                    {graduationLabel && (
+                      <Box
+                        sx={{
+                          px: 1.5,
+                          py: 0.75,
+                          borderRadius: 2,
+                          backgroundColor: "rgba(49,242,140,0.12)",
+                          border: "1px solid rgba(49,242,140,0.24)",
+                        }}
+                      >
+                        <Typography
+                          variant="caption"
+                          sx={{ fontWeight: 600, letterSpacing: 0.4, color: "#31F28C" }}
+                        >
                           {graduationLabel}
                         </Typography>
-                      )}
-                    </Box>
+                      </Box>
+                    )}
                     </CardContent>
                   </Card>
                 </Grid>
