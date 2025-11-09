@@ -1471,25 +1471,7 @@ const formatAge = (hours: number) => {
                           {token.completed ? graduationLabel : `${graduationProgress.toFixed(1)}%`}
                         </Typography>
                       </Stack>
-                      {token.completed ? (
-                        <Box
-                          sx={{
-                            px: 1.5,
-                            py: 0.75,
-                            borderRadius: 999,
-                            backgroundColor: "rgba(49,242,140,0.08)",
-                            border: "1px solid rgba(49,242,140,0.16)",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            alignSelf: "flex-start",
-                            color: "#31F28C",
-                            fontWeight: 600,
-                          }}
-                        >
-                          {graduationLabel}
-                        </Box>
-                      ) : (
+                      {token.completed ? null : (
                         <>
                           <LinearProgress
                             variant="determinate"
@@ -1524,8 +1506,9 @@ const formatAge = (hours: number) => {
                     <Divider sx={{ borderColor: "rgba(255,255,255,0.06)" }} />
 
                     <Grid container spacing={1.2}>
-                      {timelineItems.map((item) => {
+                      {timelineItems.map((item, index) => {
                         const IconComponent = item.icon;
+                        const last = index === timelineItems.length - 1;
                         return (
                           <Grid item xs={timelineColSize} key={`${token.id}-${item.key}`}>
                             <Box
@@ -1533,13 +1516,24 @@ const formatAge = (hours: number) => {
                                 height: "100%",
                                 p: 1.25,
                                 borderRadius: 2,
-                                backgroundColor: item.accent ? "rgba(49,242,140,0.1)" : "rgba(255,255,255,0.035)",
-                                border: `1px solid ${
-                                  item.accent ? "rgba(49,242,140,0.3)" : "rgba(255,255,255,0.06)"
-                                }`,
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: 0.6,
+                                backgroundColor: "rgba(255,255,255,0.035)",
+                                border: "1px solid rgba(255,255,255,0.06)",
+                                position: "relative",
+                                overflow: "hidden",
+                                "&::after": last
+                                  ? undefined
+                                  : {
+                                      content: '""',
+                                      position: "absolute",
+                                      top: "50%",
+                                      right: -16,
+                                      width: 32,
+                                      height: 1,
+                                      background:
+                                        "linear-gradient(90deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 100%)",
+                                      transform: "translateY(-50%)",
+                                      pointerEvents: "none",
+                                    },
                               }}
                             >
                               <Stack direction="row" spacing={1} alignItems="center">
