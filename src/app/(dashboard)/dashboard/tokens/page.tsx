@@ -1365,7 +1365,17 @@ const formatAge = (hours: number) => {
                     </Grid>
 
                     <Box sx={{ width: "100%" }}>
-                      {!token.completed && (
+                      {token.completed ? (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ fontWeight: 600, display: "block", textAlign: "center" }}
+                        >
+                          {token.kingOfTheHillTimestamp
+                            ? `Graduated ${formatTimeAgo(token.kingOfTheHillTimestamp, "just now")}`
+                            : "Graduated"}
+                        </Typography>
+                      ) : (
                         <Stack spacing={0.75}>
                           <Box
                             sx={{
