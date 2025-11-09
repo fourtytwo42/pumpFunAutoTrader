@@ -190,10 +190,14 @@ async function prepareTradeContext(
 
 async function persistPreparedTrade(ctx: PreparedTradeContext): Promise<void> {
   const { trade } = ctx
+  const reachedKoth =
+    (typeof trade.program === 'string' && trade.program.toLowerCase().includes('amm')) ||
+    trade.isBondingCurve === false
+  const kothTimestamp = BigInt(ctx.timestampMs)
 
-    let token
-    try {
-      token = await prisma.token.upsert({
+  let token: { id: string; completed: boolean; kingOfTheHillTimestamp: bigint | null }
+  try {
+    token = await prisma.token.upsert({
       where: { mintAddress: trade.mintAddress },
       update: {
         symbol: ctx.fallbackSymbol,
@@ -205,7 +209,7 @@ async function persistPreparedTrade(ctx: PreparedTradeContext): Promise<void> {
               priceUsd: ctx.priceUsd,
               lastTradeTimestamp: BigInt(ctx.timestampMs),
             },
-        update: {
+            update: {
               priceSol: ctx.priceSol,
               priceUsd: ctx.priceUsd,
               lastTradeTimestamp: BigInt(ctx.timestampMs),
@@ -223,8 +227,8 @@ async function persistPreparedTrade(ctx: PreparedTradeContext): Promise<void> {
         website: null,
         creatorAddress: ctx.creatorAddress,
         createdAt: BigInt(ctx.createdTs),
-        kingOfTheHillTimestamp: null,
-        completed: false,
+        kingOfTheHillTimestamp: reachedKoth ? kothTimestamp : null,
+        completed: reachedKoth,
         totalSupply: TOTAL_SUPPLY_RAW,
         price: {
           create: {
@@ -234,7 +238,7 @@ async function persistPreparedTrade(ctx: PreparedTradeContext): Promise<void> {
           },
         },
       },
-      select: { id: true },
+      select: { id: true, completed: true, kingOfTheHillTimestamp: true },
     })
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -258,10 +262,30 @@ async function persistPreparedTrade(ctx: PreparedTradeContext): Promise<void> {
             },
           },
         },
-        select: { id: true },
+        select: { id: true, completed: true, kingOfTheHillTimestamp: true },
       })
     } else {
       throw error
+    }
+  }
+
+  if (reachedKoth && (!token.completed || !token.kingOfTheHillTimestamp)) {
+    try {
+      const updated = await prisma.token.update({
+        where: { id: token.id },
+        data: {
+          completed: true,
+          ...(token.kingOfTheHillTimestamp ? {} : { kingOfTheHillTimestamp: kothTimestamp }),
+        },
+        select: { completed: true, kingOfTheHillTimestamp: true },
+      })
+      token.completed = updated.completed
+      token.kingOfTheHillTimestamp = updated.kingOfTheHillTimestamp
+    } catch (updateError) {
+      console.warn(
+        `[pump-feed] Failed to mark token ${trade.mintAddress} as KOTH:`,
+        (updateError as Error).message
+      )
     }
   }
 
