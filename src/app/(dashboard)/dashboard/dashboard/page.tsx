@@ -1,25 +1,11 @@
 import { requireAuth } from '@/lib/middleware'
-import {
-  Container,
-  Typography,
-  Box,
-  Grid,
-  Paper,
-  Button,
-  Link,
-  Avatar,
-  Stack,
-  Divider,
-  Chip,
-} from '@mui/material'
-import { TrendingUp } from '@mui/icons-material'
+import { Container, Typography, Box, Grid, Paper, Button, Link, Divider } from '@mui/material'
 import { prisma } from '@/lib/db'
 import { getDashboardSnapshot } from '@/lib/dashboard'
 import { OverviewCards } from './components/OverviewCards'
 import { ActiveOrdersCard } from './components/ActiveOrdersCard'
 import { RecentTradesCard } from './components/RecentTradesCard'
 import { AgentEventFeed } from './components/AgentEventFeed'
-import { formatDistanceToNow } from 'date-fns'
 
 export default async function DashboardPage() {
   const session = await requireAuth()
@@ -170,36 +156,13 @@ export default async function DashboardPage() {
       </Grid>
 
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} lg={8}>
+        <Grid item xs={12}>
           <RecentTradesCard walletId={wallet.id} initialTrades={initialTrades} />
-        </Grid>
-        <Grid item xs={12} lg={4}>
-          <Paper sx={{ p: 3, height: '100%' }}>
-            <Typography variant="h6" gutterBottom>
-              Quick Actions
-            </Typography>
-            <Stack spacing={1.5} sx={{ mt: 2 }}>
-              <Button
-                component={Link}
-                href="/dashboard/tokens"
-                variant="contained"
-                color="primary"
-              >
-                Browse Tokens
-              </Button>
-              <Button component={Link} href="/dashboard/portfolio" variant="outlined">
-                View Portfolio
-              </Button>
-              <Button component={Link} href="/dashboard/wallet" variant="outlined">
-                Wallet Settings
-              </Button>
-            </Stack>
-          </Paper>
         </Grid>
       </Grid>
 
       <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12} md={6} lg={5}>
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
               Market Overview
@@ -249,84 +212,6 @@ export default async function DashboardPage() {
                 </Typography>
               </Box>
             </Box>
-            <Divider sx={{ my: 2 }} />
-            <Button
-              variant="contained"
-              fullWidth
-              component={Link}
-              href="/dashboard/portfolio"
-            >
-              View Full Portfolio
-            </Button>
-          </Paper>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Recent Trades
-            </Typography>
-            {initialTrades.length === 0 ? (
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                No trades recorded yet.
-              </Typography>
-            ) : (
-              <Stack spacing={2} sx={{ mt: 2 }}>
-                {initialTrades.map((trade) => {
-                  const tradeDate = new Date(trade.ts)
-                  const symbol = trade.tokenSymbol ?? trade.tokenMint.slice(0, 4).toUpperCase()
-                  return (
-                    <Box
-                      key={trade.id}
-                      component={Link}
-                      href={`/dashboard/tokens/${trade.tokenMint}`}
-                      sx={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        p: 2,
-                        border: '1px solid',
-                        borderColor: 'divider',
-                        borderRadius: 1,
-                        textDecoration: 'none',
-                        color: 'inherit',
-                        transition: 'box-shadow 0.2s ease',
-                        '&:hover': {
-                          boxShadow: 4,
-                        },
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Avatar>{symbol.slice(0, 2).toUpperCase()}</Avatar>
-                        <Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Chip
-                              label={trade.side.toUpperCase()}
-                              color={trade.side === 'buy' ? 'success' : 'error'}
-                              size="small"
-                            />
-                            <Typography variant="body2" fontWeight="bold">
-                              {trade.tokenName ?? symbol}
-                            </Typography>
-                          </Box>
-                          <Typography variant="caption" color="text.secondary">
-                            {trade.baseAmount.toFixed(2)} @ {trade.priceSol.toFixed(8)} SOL
-                          </Typography>
-                        </Box>
-                      </Box>
-                      <Box sx={{ textAlign: 'right' }}>
-                        <Typography variant="body2" fontWeight="bold">
-                          {trade.quoteSol.toFixed(4)} SOL
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {formatDistanceToNow(tradeDate, { addSuffix: true })}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  )
-                })}
-              </Stack>
-            )}
             <Divider sx={{ my: 2 }} />
             <Button
               variant="contained"

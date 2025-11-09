@@ -767,14 +767,6 @@ const getGraduationProgress = (token: Token) => {
   return clampPercentage((marketCap / GRADUATION_TARGET_USD) * 100);
 };
 
-const getGraduatedLabel = (
-  token: Token,
-  formatter: (timestamp: number | null | undefined) => string
-): string | null => {
-  if (!token.completed) return null;
-  return token.kingOfTheHillTimestamp ? `Graduated ${formatter(token.kingOfTheHillTimestamp)}` : "Graduated";
-};
-
 const matchesStatusFilters = (
   token: Token,
   statusFilters: Record<"graduated" | "koth", StatusFilterValue>
@@ -1118,10 +1110,6 @@ const formatAge = (hours: number) => {
             {tokens.map((token) => {
               const visuals = getVolumeVisuals(token.buyVolume, token.sellVolume);
               const graduationProgress = getGraduationProgress(token);
-              const graduatedLabel = getGraduatedLabel(token, (timestamp) =>
-                formatTimeAgo(timestamp, "just now")
-              );
-
               return (
                 <Grid item xs={12} sm={6} md={4} lg={3} key={token.id}>
                   <Card
@@ -1377,15 +1365,7 @@ const formatAge = (hours: number) => {
                     </Grid>
 
                     <Box sx={{ width: "100%" }}>
-                      {token.completed ? (
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ fontWeight: 600, display: "block", textAlign: "center" }}
-                        >
-                          {graduatedLabel}
-                        </Typography>
-                      ) : (
+                      {!token.completed && (
                         <Stack spacing={0.75}>
                           <Box
                             sx={{
