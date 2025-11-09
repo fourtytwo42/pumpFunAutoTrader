@@ -1551,7 +1551,7 @@ const formatAge = (hours: number) => {
                                   <IconComponent
                                     sx={{
                                       fontSize: 16,
-                                      color: item.accent ? "#31F28C" : "rgba(255,255,255,0.72)",
+                                      color: "rgba(255,255,255,0.72)",
                                     }}
                                   />
                                 </Box>
