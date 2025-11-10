@@ -33,6 +33,7 @@ async function fetchPumpJson<T>(url: string, init: RequestInit = {}): Promise<T 
 }
 
 const TOKEN_DECIMALS_NUMBER = 1_000_000
+const PINATA_GATEWAY = 'https://pump.mypinata.cloud/ipfs/'
 
 function toNumber(value: any): number {
   if (value === null || value === undefined) return 0
@@ -54,6 +55,69 @@ function toTimestamp(value: any): number | null {
   const asNumber = Number(value)
   if (!Number.isFinite(asNumber)) return null
   return asNumber
+}
+
+const normaliseIpfsUri = (uri?: string | null) => {
+  if (!uri || typeof uri !== 'string') return null
+  if (uri.startsWith('ipfs://')) {
+    return `${PINATA_GATEWAY}${uri.replace('ipfs://', '')}`
+  }
+  return uri
+}
+
+const extractString = (value: unknown): string | null => {
+  if (!value) return null
+  if (typeof value === 'string') return value.trim() || null
+  try {
+    return String(value).trim() || null
+  } catch {
+    return null
+  }
+}
+
+const looksLikeMintPrefix = (value: string | null, mint: string) => {
+  if (!value) return true
+  const cleaned = value.replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+  if (!cleaned) return true
+  if (cleaned.length < 3) return false
+  const mintUpper = mint.toUpperCase()
+  return mintUpper.startsWith(cleaned)
+}
+
+const pickTextField = (current: string | null | undefined, mint: string, candidates: Array<unknown>) => {
+  const existing = extractString(current)
+  if (existing && !looksLikeMintPrefix(existing, mint)) {
+    return existing
+  }
+
+  for (const candidate of candidates) {
+    const value = extractString(candidate)
+    if (!value) continue
+    if (looksLikeMintPrefix(value, mint)) continue
+    return value
+  }
+
+  return existing || extractString(candidates.find(Boolean) ?? null)
+}
+
+const pickUrlField = (current: string | null | undefined, candidates: Array<unknown>) => {
+  const options = [current, ...candidates]
+  for (const candidate of options) {
+    const value = extractString(candidate)
+    if (!value) continue
+    return value
+  }
+  return null
+}
+
+const pickSocialField = (current: string | null | undefined, candidates: Array<unknown>) => {
+  const options = [current, ...candidates]
+  for (const candidate of options) {
+    const value = extractString(candidate)
+    if (!value) continue
+    return value
+  }
+  return null
 }
 
 export async function GET(
@@ -288,15 +352,105 @@ export async function GET(
       marketCapUsd = marketCapUsd > 0 ? marketCapUsd : marketCapSol * solPriceUsd
     }
 
+    const metadataExtensions =
+      (metadataData && typeof metadataData === 'object'
+        ? (metadataData.extensions ||
+          metadataData.extension ||
+          metadataData.links ||
+          (metadataData as Record<string, any>).socials ||
+          null)
+        : null) ?? null
+
+    const resolvedName = pickTextField(token.name, token.mintAddress, [
+      coinDetails?.name,
+      coinDetails?.display_name,
+      coinDetails?.coin?.name,
+      coinDetails?.metadata?.name,
+      metadataData?.name,
+      metadataData?.data?.name,
+      metadataExtensions?.name,
+    ])
+
+    const resolvedSymbolRaw = pickTextField(token.symbol, token.mintAddress, [
+      coinDetails?.symbol,
+      coinDetails?.ticker,
+      coinDetails?.coin?.symbol,
+      coinDetails?.metadata?.symbol,
+      metadataData?.symbol,
+      metadataData?.data?.symbol,
+      metadataExtensions?.symbol,
+    ])
+    const resolvedSymbol = resolvedSymbolRaw ? resolvedSymbolRaw.slice(0, 12) : resolvedSymbolRaw
+
+    const resolvedImage = normaliseIpfsUri(
+      pickUrlField(token.imageUri, [
+        coinDetails?.image_uri,
+        coinDetails?.imageUri,
+        coinDetails?.image,
+        coinDetails?.logo,
+        coinDetails?.metadata?.image,
+        coinDetails?.metadata?.imageUri,
+        coinDetails?.metadata?.image_uri,
+        metadataData?.image,
+        metadataData?.image_uri,
+        metadataData?.imageUrl,
+        metadataData?.imageUri,
+        metadataData?.pngUrl,
+        metadataData?.primaryImage,
+        metadataData?.media?.image,
+        metadataExtensions?.image,
+        metadataExtensions?.imageUri,
+        metadataExtensions?.image_url,
+      ])
+    )
+
+    const resolvedTwitter = pickSocialField(token.twitter, [
+      coinDetails?.twitter,
+      coinDetails?.twitter_username,
+      coinDetails?.twitterUsername,
+      coinDetails?.x,
+      coinDetails?.metadata?.twitter,
+      metadataData?.twitter,
+      metadataData?.twitter_username,
+      metadataData?.x,
+      metadataData?.extensions?.twitter,
+      metadataData?.extensions?.twitter_username,
+      metadataExtensions?.twitter,
+      metadataExtensions?.twitter_username,
+      metadataExtensions?.x,
+    ])
+
+    const resolvedTelegram = pickSocialField(token.telegram, [
+      coinDetails?.telegram,
+      coinDetails?.metadata?.telegram,
+      metadataData?.telegram,
+      metadataData?.extensions?.telegram,
+      metadataExtensions?.telegram,
+      metadataExtensions?.telegram_username,
+    ])
+
+    const resolvedWebsite = pickSocialField(token.website, [
+      coinDetails?.website,
+      coinDetails?.metadata?.website,
+      coinDetails?.metadata?.site,
+      metadataData?.website,
+      metadataData?.external_url,
+      metadataData?.externalUrl,
+      metadataData?.extensions?.website,
+      metadataData?.extensions?.site,
+      metadataExtensions?.website,
+      metadataExtensions?.site,
+    ])
+
     const responsePayload = {
       id: token.id,
       mintAddress: token.mintAddress,
-      symbol: token.symbol,
-      name: token.name,
-      imageUri: token.imageUri,
-      twitter: token.twitter,
-      telegram: token.telegram,
-      website: token.website,
+      symbol: resolvedSymbol || token.symbol,
+      name: resolvedName || token.name,
+      imageUri: resolvedImage || token.imageUri,
+      twitter: resolvedTwitter || null,
+      telegram: resolvedTelegram || null,
+      website: resolvedWebsite || null,
       creatorAddress: token.creatorAddress,
       createdAt: Number(token.createdAt),
       kingOfTheHillTimestamp: token.kingOfTheHillTimestamp ? Number(token.kingOfTheHillTimestamp) : null,

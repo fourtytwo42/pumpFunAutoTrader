@@ -34,6 +34,8 @@ export const authOptions: NextAuthOptions = {
         return {
           id: user.id,
           username: user.username,
+          email: user.email,
+          avatarUrl: user.avatarUrl,
           role: user.role as UserRole,
           isAiAgent: user.isAiAgent,
         }
@@ -45,6 +47,8 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id
         token.username = user.username
+        token.email = user.email ?? null
+        token.avatarUrl = user.avatarUrl ?? null
         token.role = user.role
         token.isAiAgent = user.isAiAgent
       }
@@ -54,6 +58,8 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         session.user.id = token.id as string
         session.user.username = token.username as string
+        session.user.email = (token.email as string | null) ?? null
+        session.user.avatarUrl = (token.avatarUrl as string | null) ?? null
         session.user.role = token.role as UserRole
         session.user.isAiAgent = token.isAiAgent as boolean
       }

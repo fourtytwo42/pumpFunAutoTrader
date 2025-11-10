@@ -52,6 +52,7 @@ interface TransactionRequest {
 interface WalletSummary {
   balanceSol: number | null
   balanceUsd: number | null
+  solUsdPrice: number | null
   transactions: WalletTransaction[]
 }
 
@@ -59,6 +60,7 @@ interface WalletContextValue {
   balanceSol: number | null
   balanceDisplay: string
   loading: boolean
+  solUsdPrice: number | null
   transactions: WalletTransaction[]
   openWallet: () => void
   requestApproval: (request: TransactionRequest) => Promise<boolean>
@@ -106,11 +108,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       setSummary({
         balanceSol: typeof data.balanceSol === 'number' ? data.balanceSol : null,
         balanceUsd: typeof data.balanceUsd === 'number' ? data.balanceUsd : null,
+        solUsdPrice: typeof data.solUsdPrice === 'number' ? data.solUsdPrice : null,
         transactions: Array.isArray(data.transactions) ? data.transactions : [],
       })
     } catch (error) {
       console.error('Failed to load wallet summary', error)
-      setSummary({ balanceSol: null, balanceUsd: null, transactions: [] })
+      setSummary({ balanceSol: null, balanceUsd: null, solUsdPrice: null, transactions: [] })
     } finally {
       setLoading(false)
     }
@@ -155,6 +158,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       balanceSol: summary?.balanceSol ?? null,
       balanceDisplay,
       loading,
+      solUsdPrice: summary?.solUsdPrice ?? null,
       transactions: summary?.transactions ?? [],
       openWallet,
       requestApproval,
@@ -192,6 +196,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             {summary?.balanceUsd != null ? (
               <Typography variant="body2" color="text.secondary">
                 ≈ {formatUsd(summary.balanceUsd)}
+              </Typography>
+            ) : null}
+            {summary?.solUsdPrice != null ? (
+              <Typography variant="caption" color="text.secondary">
+                1 SOL ≈ ${summary.solUsdPrice.toFixed(2)}
               </Typography>
             ) : null}
           </Stack>

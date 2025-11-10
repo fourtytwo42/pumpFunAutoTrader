@@ -6,6 +6,8 @@ declare module 'next-auth' {
     user: {
       id: string
       username: string
+      email: string | null
+      avatarUrl: string | null
       role: UserRole
       isAiAgent: boolean
     }
@@ -14,6 +16,8 @@ declare module 'next-auth' {
   interface User {
     id: string
     username: string
+    email?: string | null
+    avatarUrl?: string | null
     role: UserRole
     isAiAgent: boolean
   }
@@ -23,6 +27,8 @@ declare module 'next-auth/jwt' {
   interface JWT {
     id: string
     username: string
+    email: string | null
+    avatarUrl: string | null
     role: UserRole
     isAiAgent: boolean
   }

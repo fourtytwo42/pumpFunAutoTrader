@@ -11,6 +11,7 @@ model User {
   id               String           @id @default(uuid())
   username         String           @unique
   email            String?          @unique
+  avatarUrl        String?          @map("avatar_url")
   passwordHash     String           @map("password_hash")
   role             UserRole         @default(user)
   isActive         Boolean          @default(true) @map("is_active")

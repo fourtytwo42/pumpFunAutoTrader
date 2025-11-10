@@ -27,6 +27,7 @@ import {
   Settings,
   Menu as MenuIcon,
   MenuOpen,
+  ManageAccounts,
 } from '@mui/icons-material'
 import { useState, useEffect } from 'react'
 import { WalletProvider, useWallet } from '@/components/wallet/WalletProvider'
@@ -40,6 +41,7 @@ const menuItems = [
   { text: 'Tokens', icon: <TrendingUp />, path: '/dashboard/tokens' },
   { text: 'Portfolio', icon: <AccountBalanceWallet />, path: '/dashboard/portfolio' },
   { text: 'Faucet', icon: <Science />, path: '/dashboard/faucet' },
+  { text: 'User Settings', icon: <ManageAccounts />, path: '/dashboard/settings' },
 ]
 
 const adminItems = [
@@ -54,7 +56,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(true)
   const drawerWidth = collapsed ? COLLAPSED_DRAWER_WIDTH : EXPANDED_DRAWER_WIDTH
-  const { balanceDisplay, openWallet } = useWallet()
+  const { balanceDisplay, openWallet, solUsdPrice } = useWallet()
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -176,11 +178,43 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
             Pump.fun Mock Trader
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Button color="inherit" variant="outlined" onClick={openWallet} sx={{ borderColor: 'rgba(255,255,255,0.3)' }}>
+            <Button
+              color="inherit"
+              variant="outlined"
+              onClick={openWallet}
+              sx={{ borderColor: 'rgba(255,255,255,0.3)' }}
+            >
               {balanceDisplay}
             </Button>
-            <Typography variant="body2">{session.user.username}</Typography>
-            <Avatar sx={{ width: 32, height: 32 }}>
+            {solUsdPrice != null ? (
+              <Box
+                sx={{
+                  px: 1.5,
+                  py: 0.5,
+                  borderRadius: 1.5,
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  background: 'rgba(255,255,255,0.06)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  fontSize: 13,
+                }}
+              >
+                <Typography component="span" sx={{ fontWeight: 500 }}>
+                  SOL
+                </Typography>
+                <Typography component="span" color="text.primary" sx={{ fontWeight: 600 }}>
+                  ${solUsdPrice.toFixed(2)}
+                </Typography>
+              </Box>
+            ) : null}
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              {session.user.username}
+            </Typography>
+            <Avatar
+              src={session.user.avatarUrl ?? undefined}
+              sx={{ width: 36, height: 36, bgcolor: 'primary.main' }}
+            >
               {session.user.username.charAt(0).toUpperCase()}
             </Avatar>
             <Button color="inherit" onClick={handleLogout} startIcon={<Logout />}>

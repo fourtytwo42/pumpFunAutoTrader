@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   Container,
   Typography,
@@ -43,6 +43,7 @@ import SettingsIcon from "@mui/icons-material/Settings";
 import CloseIcon from "@mui/icons-material/Close";
 import { useRouter } from "next/navigation";
 import IconButton from "@mui/material/IconButton";
+import { useUserPreferences } from "@/components/providers/UserPreferencesProvider";
 
 const TIMEFRAME_OPTIONS = ['1m', '2m', '5m', '10m', '15m', '30m', '60m'] as const;
 type TimeframeOption = (typeof TIMEFRAME_OPTIONS)[number];
@@ -111,6 +112,39 @@ const normaliseIpfsUri = (uri?: string | null) => {
   return uri;
 };
 
+const TOKEN_DECIMALS = 1_000_000;
+const DEFAULT_TOTAL_SUPPLY_RAW = 1_000_000_000 * TOKEN_DECIMALS;
+
+const coerceNumber = (value: unknown): number | undefined => {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const coerceTimestamp = (value: unknown): number | null => {
+  const parsed = coerceNumber(value);
+  return parsed !== undefined ? parsed : null;
+};
+
+const coerceString = (value: unknown): string | undefined => {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? undefined : trimmed;
+};
+
+const pickFirstString = (...values: Array<unknown>): string | undefined => {
+  for (const value of values) {
+    const str = coerceString(value);
+    if (str) {
+      return str;
+    }
+  }
+  return undefined;
+};
+
 const looksLikeMintPrefix = (value: string | null | undefined, mint: string) => {
   if (!value) return true;
   const cleaned = value.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
@@ -140,8 +174,19 @@ type PumpSearchCoin = {
   twitter?: string;
   telegram?: string;
   website?: string;
-  createdTimestamp?: number;
-  usdMarketCap?: number;
+  createdTimestamp?: number | null;
+  kingOfTheHillTimestamp?: number | null;
+  lastReply?: number | null;
+  usdMarketCap?: number | null;
+  marketCap?: number | null;
+  complete?: boolean;
+  program?: string | null;
+  totalSupplyRaw?: number | null;
+  virtualSolReserves?: number | null;
+  virtualTokenReserves?: number | null;
+  bondingCurve?: string | null;
+  associatedBondingCurve?: string | null;
+  isCurrentlyLive?: boolean;
 };
 
 type RemoteMetadata = {
@@ -201,7 +246,68 @@ const searchPumpTokens = async (term: string, limit = 120): Promise<PumpSearchCo
     return [];
   }
 
-  return data.results as PumpSearchCoin[];
+  return data.results
+    .map((raw: any): PumpSearchCoin | null => {
+      const mint = coerceString(raw?.mint);
+      if (!mint) return null;
+
+      const totalSupplyRaw =
+        coerceNumber(raw?.total_supply) ?? coerceNumber(raw?.totalSupply);
+
+      const usdMarketCap =
+        coerceNumber(raw?.usd_market_cap) ?? coerceNumber(raw?.usdMarketCap);
+      const marketCap =
+        coerceNumber(raw?.market_cap) ?? coerceNumber(raw?.marketCap);
+
+      return {
+        mint,
+        name: pickFirstString(raw?.name, raw?.display_name, raw?.coin?.name),
+        symbol: pickFirstString(raw?.symbol, raw?.ticker, raw?.coin?.symbol),
+        imageUri: normaliseIpfsUri(
+          pickFirstString(
+            raw?.image_uri,
+            raw?.imageUri,
+            raw?.image,
+            raw?.logo,
+            raw?.metadata?.image
+          )
+        ) ?? undefined,
+        metadataUri: pickFirstString(raw?.metadata_uri, raw?.metadataUri) ?? undefined,
+        twitter: pickFirstString(
+          raw?.twitter,
+          raw?.twitter_username,
+          raw?.twitterUsername,
+          raw?.metadata?.twitter
+        ) ?? undefined,
+        telegram: pickFirstString(raw?.telegram, raw?.metadata?.telegram) ?? undefined,
+        website: pickFirstString(raw?.website, raw?.metadata?.website) ?? undefined,
+        createdTimestamp:
+          coerceTimestamp(raw?.created_timestamp ?? raw?.createdTimestamp) ?? undefined,
+        kingOfTheHillTimestamp:
+          coerceTimestamp(
+            raw?.king_of_the_hill_timestamp ?? raw?.kingOfTheHillTimestamp
+          ) ?? undefined,
+        lastReply: coerceTimestamp(raw?.last_reply ?? raw?.lastReply) ?? undefined,
+        usdMarketCap: usdMarketCap ?? undefined,
+        marketCap: marketCap ?? undefined,
+        complete: Boolean(raw?.complete),
+        program: pickFirstString(raw?.program)?.toLowerCase() ?? null,
+        totalSupplyRaw: totalSupplyRaw ?? undefined,
+        virtualSolReserves:
+          coerceNumber(raw?.virtual_sol_reserves) ??
+          coerceNumber(raw?.virtualSolReserves) ??
+          undefined,
+        virtualTokenReserves:
+          coerceNumber(raw?.virtual_token_reserves) ??
+          coerceNumber(raw?.virtualTokenReserves) ??
+          undefined,
+        bondingCurve: pickFirstString(raw?.bonding_curve, raw?.bondingCurve) ?? null,
+        associatedBondingCurve:
+          pickFirstString(raw?.associated_bonding_curve, raw?.associatedBondingCurve) ?? null,
+        isCurrentlyLive: Boolean(raw?.is_currently_live ?? raw?.isCurrentlyLive),
+      };
+    })
+    .filter((entry: PumpSearchCoin | null): entry is PumpSearchCoin => Boolean(entry));
 };
 
 const clampValue = (value: number, min: number, max: number) =>
@@ -296,6 +402,28 @@ interface Token {
 
 export default function TokensPage() {
   const router = useRouter();
+  const { preferences } = useUserPreferences();
+  const cardSpacing = useMemo(() => {
+    switch (preferences.displayDensity) {
+      case "compact":
+        return 1.3;
+      case "cozy":
+        return 1.8;
+      default:
+        return 2.4;
+    }
+  }, [preferences.displayDensity]);
+
+  const cardPadding = useMemo(() => {
+    switch (preferences.displayDensity) {
+      case "compact":
+        return { xs: 1.6, md: 2 };
+      case "cozy":
+        return { xs: 2, md: 2.4 };
+      default:
+        return { xs: 2.25, md: 2.75 };
+    }
+  }, [preferences.displayDensity]);
 const metadataCacheRef = useRef<Map<string, RemoteMetadata>>(new Map());
 const metadataInFlightRef = useRef<Set<string>>(new Set());
   const fetchSeqRef = useRef(0);
@@ -596,20 +724,79 @@ const hydrateTokenMetadata = useCallback(
                 return null;
               }
 
+              const totalSupplyRaw =
+                remote.totalSupplyRaw && remote.totalSupplyRaw > 0
+                  ? remote.totalSupplyRaw
+                  : DEFAULT_TOTAL_SUPPLY_RAW;
+              const totalSupplyTokens =
+                totalSupplyRaw && totalSupplyRaw > 0
+                  ? totalSupplyRaw / TOKEN_DECIMALS
+                  : undefined;
+
+              const usdMarketCap =
+                remote.usdMarketCap && remote.usdMarketCap > 0 ? remote.usdMarketCap : undefined;
+              const marketCapSol =
+                remote.marketCap && remote.marketCap > 0 ? remote.marketCap : undefined;
+
+              const solPriceEstimate =
+                marketCapSol && marketCapSol > 0 && usdMarketCap && usdMarketCap > 0
+                  ? usdMarketCap / marketCapSol
+                  : undefined;
+
+              const priceSolValue =
+                totalSupplyTokens && totalSupplyTokens > 0 && marketCapSol
+                  ? marketCapSol / totalSupplyTokens
+                  : undefined;
+
+              const priceUsdValue =
+                totalSupplyTokens && totalSupplyTokens > 0 && usdMarketCap
+                  ? usdMarketCap / totalSupplyTokens
+                  : priceSolValue && solPriceEstimate
+                  ? priceSolValue * solPriceEstimate
+                  : undefined;
+
+              const lastActivityTimestamp =
+                remote.lastReply ??
+                remote.kingOfTheHillTimestamp ??
+                remote.createdTimestamp ??
+                null;
+
+              const program = remote.program ?? null;
+              const remoteCompleted =
+                remote.complete === true ||
+                (typeof program === "string" && program.includes("amm"));
+
+              const kingOfTheHillTimestamp = remoteCompleted
+                ? remote.kingOfTheHillTimestamp ?? null
+                : null;
+
+              const priceObject =
+                (priceSolValue && priceSolValue > 0) || (priceUsdValue && priceUsdValue > 0)
+                  ? {
+                      priceSol:
+                        priceSolValue ??
+                        (priceUsdValue && solPriceEstimate ? priceUsdValue / solPriceEstimate : 0),
+                      priceUsd:
+                        priceUsdValue ??
+                        (priceSolValue && solPriceEstimate ? priceSolValue * solPriceEstimate : 0),
+                      lastTradeTimestamp: lastActivityTimestamp,
+                    }
+                  : null;
+
               const baseToken: Token = {
                 id: `search-${mint}`,
                 mintAddress: mint,
-                name: mint.slice(0, 6),
-                symbol: mint.slice(0, 6).toUpperCase(),
-                imageUri: null,
-                twitter: null,
-                telegram: null,
-                website: null,
-                price: null,
+                name: remote.name ?? mint.slice(0, 6),
+                symbol: remote.symbol ?? mint.slice(0, 6).toUpperCase(),
+                imageUri: remote.imageUri ?? null,
+                twitter: remote.twitter ?? null,
+                telegram: remote.telegram ?? null,
+                website: remote.website ?? null,
+                price: priceObject,
                 createdAt: Number(remote.createdTimestamp ?? Date.now()),
-                lastTradeTimestamp: null,
-                kingOfTheHillTimestamp: null,
-                completed: false,
+                lastTradeTimestamp: lastActivityTimestamp,
+                kingOfTheHillTimestamp: kingOfTheHillTimestamp ?? null,
+                completed: remoteCompleted,
                 buyVolume: 0,
                 sellVolume: 0,
                 totalVolume: 0,
@@ -618,9 +805,15 @@ const hydrateTokenMetadata = useCallback(
                 buyVolumeSol: 0,
                 sellVolumeSol: 0,
                 totalVolumeSol: 0,
-                totalSupplyTokens: undefined,
-                marketCapUsd: remote.usdMarketCap ?? undefined,
-                marketCapSol: undefined,
+                totalSupplyTokens,
+                marketCapUsd:
+                  usdMarketCap ??
+                  (priceUsdValue && totalSupplyTokens ? priceUsdValue * totalSupplyTokens : undefined),
+                marketCapSol:
+                  marketCapSol ??
+                  (priceUsdValue && solPriceEstimate && totalSupplyTokens
+                    ? (priceUsdValue * totalSupplyTokens) / solPriceEstimate
+                    : undefined),
               };
 
               return applyMetadataToToken(baseToken, metadata);
@@ -1145,7 +1338,7 @@ const formatAge = (hours: number) => {
         </Paper>
       ) : (
         <>
-          <Grid container spacing={2}>
+          <Grid container spacing={cardSpacing}>
             {tokens.map((token) => {
               const visuals = getVolumeVisuals(token.buyVolume, token.sellVolume);
               const priceSol = token.price?.priceSol ? Number(token.price.priceSol) : 0;
@@ -1215,8 +1408,8 @@ const formatAge = (hours: number) => {
                         flex: 1,
                         display: "flex",
                         flexDirection: "column",
-                        p: { xs: 2.25, md: 2.75 },
-                        gap: 2,
+                        p: cardPadding,
+                        gap: preferences.displayDensity === "compact" ? 1.5 : 2,
                       }}
                     >
                     <Box
@@ -1504,37 +1697,22 @@ const formatAge = (hours: number) => {
                     <Divider sx={{ borderColor: "rgba(255,255,255,0.06)" }} />
 
                     <Grid container spacing={1.2}>
-                      {timelineItems.map((item, index) => {
+                      {timelineItems.map((item) => {
                         const IconComponent = item.icon;
-                        const last = index === timelineItems.length - 1;
                         return (
                           <Grid item xs={timelineColSize} key={`${token.id}-${item.key}`}>
-                            <Box
+                            <Stack
+                              spacing={0.75}
                               sx={{
                                 height: "100%",
-                                p: 1.25,
+                                p: 1.2,
                                 borderRadius: 2,
-                                backgroundColor: "rgba(255,255,255,0.035)",
+                                background: "linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)",
                                 border: "1px solid rgba(255,255,255,0.06)",
-                                position: "relative",
-                                overflow: "hidden",
-                                "&::after": last
-                                  ? undefined
-                                  : {
-                                      content: '""',
-                                      position: "absolute",
-                                      top: "50%",
-                                      right: -16,
-                                      width: 32,
-                                      height: 1,
-                                      background:
-                                        "linear-gradient(90deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 100%)",
-                                      transform: "translateY(-50%)",
-                                      pointerEvents: "none",
-                                    },
+                                minHeight: 82,
                               }}
                             >
-                              <Stack direction="row" spacing={1} alignItems="center">
+                              <Stack direction="row" spacing={1} alignItems="center" flexWrap="nowrap">
                                 <Box
                                   sx={{
                                     width: 28,
@@ -1544,6 +1722,7 @@ const formatAge = (hours: number) => {
                                     alignItems: "center",
                                     justifyContent: "center",
                                     backgroundColor: "rgba(255,255,255,0.07)",
+                                    flexShrink: 0,
                                   }}
                                 >
                                   <IconComponent
@@ -1553,14 +1732,32 @@ const formatAge = (hours: number) => {
                                     }}
                                   />
                                 </Box>
-                                <Typography variant="subtitle2" sx={{ fontWeight: 600, letterSpacing: 0.3 }}>
+                                <Typography
+                                  variant="subtitle2"
+                                  sx={{
+                                    fontWeight: 600,
+                                    letterSpacing: 0.3,
+                                    whiteSpace: "nowrap",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                  }}
+                                >
                                   {item.label}
                                 </Typography>
                               </Stack>
-                              <Typography variant="caption" color="text.secondary">
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{
+                                  display: "-webkit-box",
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: "vertical",
+                                  overflow: "hidden",
+                                }}
+                              >
                                 {item.value}
                               </Typography>
-                            </Box>
+                            </Stack>
                           </Grid>
                         );
                       })}
