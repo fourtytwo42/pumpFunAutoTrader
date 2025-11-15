@@ -2,6 +2,10 @@ import { Prisma, PrismaClient } from '@prisma/client'
 import { Decimal } from '@prisma/client/runtime/library'
 import WebSocket from 'ws'
 import { decodePumpUnifiedTradePayload, PumpUnifiedTrade } from '@/lib/pump/unified-trade'
+import {
+  cleanupOldTrades,
+  DEFAULT_TRADE_CLEANUP_INTERVAL_MS,
+} from '@/lib/trade-retention'
 
 function enforceConnectionLimit(url?: string): string | undefined {
   if (!url) return url
@@ -53,8 +57,7 @@ const SUBJECTS = ['unifiedTradeEvent.processed']
 const tradeQueue: PumpUnifiedTrade[] = []
 let isProcessingQueue = false
 
-const TRADE_RETENTION_MS = 60 * 60 * 1000 // 1 hour
-const CLEANUP_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
+const CLEANUP_INTERVAL_MS = DEFAULT_TRADE_CLEANUP_INTERVAL_MS
 
 interface PreparedTradeContext {
   trade: PumpUnifiedTrade
@@ -517,36 +520,22 @@ function connectToFeed() {
 console.log('🚀 Starting unified trade ingestion service...')
 connectToFeed()
 
-async function cleanupOldTrades() {
-  const cutoffMs = Date.now() - TRADE_RETENTION_MS
-  const cutoffBigInt = BigInt(cutoffMs)
-  const cutoffDate = new Date(cutoffMs)
-
+async function runTradeCleanup() {
   try {
-    await prisma.$transaction([
-      prisma.trade.deleteMany({
-        where: {
-          timestamp: {
-            lt: cutoffBigInt,
-          },
-        },
-      }),
-      prisma.tradeTape.deleteMany({
-        where: {
-          ts: {
-            lt: cutoffDate,
-          },
-        },
-      }),
-    ])
+    const result = await cleanupOldTrades(prisma)
+    if (result.tradesDeleted > 0 || result.tradeTapeDeleted > 0) {
+      console.log(
+        `[trade-retention] Removed ${result.tradesDeleted} trades and ${result.tradeTapeDeleted} trade tape rows older than 1 hour`
+      )
+    }
   } catch (error) {
-    console.error('[pump-feed] Failed to cleanup old trades:', (error as Error).message)
+    console.error('[trade-retention] Failed to cleanup old trades:', (error as Error).message)
   }
 }
 
-void cleanupOldTrades()
+void runTradeCleanup()
 setInterval(() => {
-  void cleanupOldTrades()
+  void runTradeCleanup()
 }, CLEANUP_INTERVAL_MS)
 
   process.on('SIGINT', async () => {

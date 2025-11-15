@@ -28,10 +28,22 @@ export default async function AdminPage() {
   }
 
   const isAdmin = session.user.role === 'admin'
-  const aiTraders = await listAdminAiTraders()
-  const smtpConfigRecord = await prisma.smtpConfig.findUnique({
-    where: { id: 'primary' },
-  })
+  let aiTraders: Awaited<ReturnType<typeof listAdminAiTraders>>
+  try {
+    aiTraders = await listAdminAiTraders()
+  } catch (error) {
+    console.error('[admin] Failed to list AI traders', error)
+    throw error
+  }
+  let smtpConfigRecord
+  try {
+    smtpConfigRecord = await prisma.smtpConfig.findUnique({
+      where: { id: 'primary' },
+    })
+  } catch (error) {
+    console.error('[admin] Failed to fetch SMTP config', error)
+    throw error
+  }
   const smtpConfig = smtpConfigRecord
     ? {
         host: smtpConfigRecord.host,
